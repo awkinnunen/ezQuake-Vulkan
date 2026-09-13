@@ -755,3 +755,10 @@ paths. The two RTGL1 patches replay to seven attributed paths. The rebuilt packa
 passes 13 boundary tests; all 51 RT shaders pass SPIR-V validation. Publication
 contains source, scripts, profiles and notices; the separate first-test ZIP contains
 no Quake data. User will run the first RTX 3060 image test when the machine is available.
+
+### RT-PACKAGING-001: portable SDK identity
+
+OpenAI Codex, 2026-09-13. The SDK header identity is computed from canonical
+UTF-8/LF content so Git CRLF conversion cannot break package compatibility.
+Runtime binary/shader hashes remain byte-exact. Patch 17 records this correction.
+The ordered host series now contains 17 patches covering the same 78 paths.

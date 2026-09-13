@@ -354,3 +354,10 @@ fixtures, CMake target and harness call-site change. RTGL1 API types retain thei
 upstream MIT attribution. The matrix/primitive helpers are new code implementing
 the host-to-library conversion; they do not reattribute donor rendering or Quake
 model data. Export: `patches/ezquake-16-rt-geometry.patch`.
+
+### RT-PACKAGING-001: portable SDK identity
+
+OpenAI Codex, 2026-09-13. The SDK header identity is computed from canonical
+UTF-8/LF content so Git CRLF conversion cannot break package compatibility.
+Runtime binary/shader hashes remain byte-exact. Patch 17 records this correction.
+The ordered host series now contains 17 patches covering the same 78 paths.

@@ -600,3 +600,15 @@ library paths. All 51 SPIR-V files validate for Vulkan 1.2. The repackaged Relea
 runtime passes all 13 package/API boundary tests. None of these results certifies
 RT pixels or completed host integration. GPU and requested-stage status is tracked
 in RT-IMPLEMENTATION-STATUS.md; no later milestone is marked complete.
+
+### RT-PACKAGING-001: portable SDK identity
+
+OpenAI Codex, 2026-09-13. The SDK header identity is computed from canonical
+UTF-8/LF content so Git CRLF conversion cannot break package compatibility.
+Runtime binary/shader hashes remain byte-exact. Patch 17 records this correction.
+The ordered host series now contains 17 patches covering the same 78 paths.
+
+An isolated LF-only checkout fixture was packaged with the real packaging tool.
+Its runtime passed package/API verification with the CRLF-checkout executable.
+Evidence: `cache/rt-lf-checkout.log`. The final 13 boundary tests and 17-patch
+replay passed again after the identity correction.

@@ -1,5 +1,5 @@
-/* Generated pinned build identity. */
-#define RT_HEADER_SHA256 "535cd9e5fe7be9061bbd725443f3559dc3ade88951b2a61daeae416c9faefdc7"
+/* Generated pinned build identity; SDK header hash uses UTF-8 with LF newlines. */
+#define RT_HEADER_SHA256 "78c8720fe4fa438520a7b45cd4d73b52bd52b0828475385294bb6da391a57128"
 #define RT_SHADER_COUNT 51u
 #define RT_REQUIRED_SHADERS(X) \
  X("CmASVGFGradientAtrous.comp.spv") \

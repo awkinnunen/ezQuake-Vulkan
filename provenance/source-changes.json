@@ -286,5 +286,13 @@
       "src/rt/rt_geometry_test.c"
     ],
     "origin": "OpenAI Codex CPU conversion and instrumented ABI fixtures. RTGL1 data structures retain upstream attribution."
+  },
+  {
+    "id": "RT-PACKAGING-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/rt/rt_build_identity.h"
+    ],
+    "origin": "OpenAI Codex: canonical LF SDK identity shared by the generator and runtime packager, independent of Git checkout newline settings."
   }
 ]

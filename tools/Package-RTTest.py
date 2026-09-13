@@ -48,7 +48,7 @@ for name,source in {
     files['notices/'+name]=target
 manifest=dict(schema=1,extensionVersion=1,rtgl1Commit='9efa82daf963e1192daaf2a8596446656f113cd2',
     adapterPatch='RT-00-device-uuid-and-RT-02-initialization-cleanup',configuration=args.configuration,dlss=False,
-    headerSHA256=hashlib.sha256((host/'src/rt/RTGL1.h').read_bytes()).hexdigest(),
+    headerSHA256=hashlib.sha256((host/'src/rt/RTGL1.h').read_bytes().replace(b'\r\n',b'\n')).hexdigest(),
     waterNormal='Uses the pinned library built-in neutral fallback when WaterNormal_n.ktx2 is absent.',
     files={name:hashlib.sha256((runtime/name).read_bytes()).hexdigest() for name in sorted(files)})
 (runtime/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

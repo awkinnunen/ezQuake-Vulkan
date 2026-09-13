@@ -113,3 +113,7 @@ Keep the original RTGL1 notices when applying the library patch series.
 
 CPU tests can also be built as target `ezquake-rt-cpu-tests` and run with
 `ctest --test-dir build-msvc-x64 -C Release -R rt-geometry-cpu --output-on-failure`.
+
+The SDK identity uses canonical LF newlines. An actual LF-checkout package
+passed verification with the Windows CRLF-checkout build (`cache/rt-lf-checkout.log`).
+The final host source series contains 17 replay-verified patches over 78 paths.
