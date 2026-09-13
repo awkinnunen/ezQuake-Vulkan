@@ -1,0 +1,105 @@
+diff --git a/src/fs.c b/src/fs.c
+--- a/src/fs.c
++++ b/src/fs.c
+@@ -3236,7 +3236,7 @@
+ {
+ 	extern cvar_t fs_savegame_home;
+ 
+-	if (fs_savegame_home.integer) {
++	if (fs_savegame_home.integer && *com_homedir) {
+ 		snprintf(buffer, buffer_size, "%s/%s/save/", com_homedir, com_gamedirfile);
+ 	}
+ 	else {
+diff --git a/src/menu.c b/src/menu.c
+--- a/src/menu.c
++++ b/src/menu.c
+@@ -777,6 +777,10 @@
+ 	Cvar_Set(&teamplay, "0");
+ 	Cvar_Set(&deathmatch, "0");
+ 	Cvar_Set(&coop, "0");
++	Cvar_Set(&fraglimit, "0");
++	Cvar_Set(&timelimit, "0");
++	Cvar_SetByName("samelevel", "0");
++	Cvar_SetByName("pausable", "1");
+ 
+ 	Cvar_Set(&sv_progsname, "spprogs"); // force progsname
+ #ifdef USE_PR2
+@@ -983,10 +987,13 @@
+ }
+ 
+ void M_Menu_Load_f (void) {
++#ifndef WITH_NQPROGS
+ 	vfsfile_t *f;
+ 
+ 	if (!(f = FS_OpenVFS("spprogs.dat", "rb", FS_ANY)))
+ 		return;
++	VFS_CLOSE(f);
++#endif
+ 
+ 	M_EnterMenu (m_load);
+ 	// VFS-FIXME: file_from_gamedir is not set in FS_OpenVFS
+@@ -1302,6 +1309,7 @@
+ 	Cmd_AddCommand ("menu_main", M_Menu_Main_f);
+ #ifndef CLIENTONLY
+ 	Cmd_AddCommand ("menu_singleplayer", M_Menu_SinglePlayer_f);
++	Cmd_AddCommand ("newgame", StartNewGame);
+ 	Cmd_AddCommand ("menu_load", M_Menu_Load_f);
+ 	Cmd_AddCommand ("menu_save", M_Menu_Save_f);
+ #endif
+diff --git a/src/pr2_exec.c b/src/pr2_exec.c
+--- a/src/pr2_exec.c
++++ b/src/pr2_exec.c
+@@ -424,7 +424,9 @@
+ //===========================================================================
+ void PR2_LoadProgs(void)
+ {
+-	sv_vm = VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value );
++	// VMI_NONE explicitly selects the original QuakeC interpreter.
++	sv_vm = sv_progtype.integer == VMI_NONE ? NULL :
++		VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value);
+ 
+ 	if ( sv_vm )
+ 	{
+diff --git a/src/pr_edict.c b/src/pr_edict.c
+--- a/src/pr_edict.c
++++ b/src/pr_edict.c
+@@ -1163,6 +1163,12 @@
+ 		snprintf(name, sizeof(name), "%s.dat", sv_progsname.string);
+ 		progs = (dprograms_t *)FS_LoadHunkFile (name, &filesize);
+ 	}
++#ifdef WITH_NQPROGS
++	// An explicit single-player request must not fall back to multiplayer QC.
++	if (!progs && !strcmp(sv_progsname.string, "spprogs") &&
++		(progs = (dprograms_t *)FS_LoadHunkFile ("progs.dat", &filesize)))
++		pr_nqprogs = true;
++#endif
+ 	if (!progs)
+ 		progs = (dprograms_t *)FS_LoadHunkFile ("qwprogs.dat", &filesize);
+ 	if (!progs)
+diff --git a/src/sv_init.c b/src/sv_init.c
+--- a/src/sv_init.c
++++ b/src/sv_init.c
+@@ -280,7 +280,11 @@
+ 	Host_ClearMemory();
+ 
+ #ifndef SERVERONLY
+-	if (!oldmap[0]) {
++	// The single-player menu has already selected its rules and interpreter.
++	// nQuake's server.cfg selects KTX/deathmatch, so only run it for MP starts.
++	if (!oldmap[0] && !loading_savegame &&
++		!(maxclients.value == 1 && !deathmatch.value && !coop.value &&
++		  !strcmp(sv_progsname.string, "spprogs"))) {
+ 		Cbuf_InsertTextEx(&cbuf_server, "exec server.cfg\n");
+ 		Cbuf_ExecuteEx(&cbuf_server);
+ 	}
+@@ -292,6 +296,10 @@
+ 		Cvar_SetValue(&coop, 0);
+ 		Cvar_SetValue(&teamplay, 0);
+ 		Cvar_SetValue(&maxclients, 1);
++		Cvar_SetValue(&fraglimit, 0);
++		Cvar_SetValue(&timelimit, 0);
++		Cvar_SetByName("samelevel", "0");
++		Cvar_SetByName("pausable", "1");
+ 		Cvar_Set(&sv_progsname, "spprogs"); // force progsname
+ #ifdef USE_PR2
+ 		Cvar_SetValue(&sv_progtype, 0); // force .dat

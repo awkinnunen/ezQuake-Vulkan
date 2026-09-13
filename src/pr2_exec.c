@@ -424,7 +424,9 @@ void PR2_UnLoadProgs(void)
 //===========================================================================
 void PR2_LoadProgs(void)
 {
-	sv_vm = VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value );
+	// VMI_NONE explicitly selects the original QuakeC interpreter.
+	sv_vm = sv_progtype.integer == VMI_NONE ? NULL :
+		VM_Create(VM_GAME, sv_progsname.string, PR2_GameSystemCalls, sv_progtype.value);
 
 	if ( sv_vm )
 	{

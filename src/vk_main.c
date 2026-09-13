@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gl_model.h"
 #include "r_aliasmodel.h"
 #include "r_renderer.h"
+#include "r_texture.h"
 #include "tr_types.h"
 #include "glsl/constants.glsl"
 #include "vk_local.h"
@@ -181,131 +182,88 @@ static const char* VK_DescriptiveString(void)
 	return "Vulkan";
 }
 
-// SCR_Screenshot()/the "screenshot" console command call this synchronously
-// from the event loop, outside any VK_BeginFrame/VK_EndFrame pair -- at that
-// point vk_options.frame.imageIndex still names whichever swapchain image was
-// presented last frame, but per the Vulkan spec that image only belongs to
-// the application between vkAcquireNextImageKHR returning it and the matching
-// vkQueuePresentKHR handing it back to the WSI; once presented, its layout is
-// no longer guaranteed to still be PRESENT_SRC_KHR from the application's
-// point of view; touching it here (which is what this function used to do
-// unconditionally) is a real "image has not been acquired" validation error,
-// not just a benign warning. Acquiring a fresh image, copying out whatever
-// content the compositor already has for it (this is a *read*, so whatever
-// was already displayed last frame is exactly what a screenshot should
-// capture), and presenting it right back unmodified keeps this a read-only
-// operation with no visible effect on the running frame loop, while staying
-// inside the same acquire/present window the spec requires.
+// MAINT-002 (OpenAI Codex): copy the frame we rendered while its acquired
+// image is still owned by the application. Never acquire an unrelated image
+// merely to read it: newly recreated images may have undefined contents/layout.
+void VK_EndFrame(void);
+static struct {
+ VkBuffer buffer;
+ uint32_t width, height;
+ qbool recorded;
+} vk_screenshot;
+
+static void VK_RecordScreenshot(VkCommandBuffer commandBuffer)
+{
+ VkImageMemoryBarrier barrier = { 0 };
+ VkBufferImageCopy region = { 0 };
+ if (!vk_screenshot.buffer || vk_screenshot.recorded ||
+     vk_screenshot.width != vk_options.swapChain.imageSize.width ||
+     vk_screenshot.height != vk_options.swapChain.imageSize.height) return;
+ barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+ barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+ barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+ barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+ barrier.image = vk_options.swapChain.images[vk_options.frame.imageIndex];
+ barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+ barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+ barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+ barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+ vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+  VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+ region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+ region.imageSubresource.layerCount = 1;
+ region.imageExtent.width = vk_screenshot.width;
+ region.imageExtent.height = vk_screenshot.height;
+ region.imageExtent.depth = 1;
+ vkCmdCopyImageToBuffer(commandBuffer, barrier.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  vk_screenshot.buffer, 1, &region);
+ barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+ barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+ barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+ barrier.dstAccessMask = 0;
+ vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+  VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+ vk_screenshot.recorded = true;
+}
+
 static void VK_Screenshot(byte* buffer, size_t size)
 {
-	VkCommandBuffer cmd;
-	VkBuffer stagingBuffer = VK_NULL_HANDLE;
-	VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-	VkImage srcImage;
-	VkImageMemoryBarrier barrier;
-	VkBufferImageCopy region;
-	void* mapped;
-	uint32_t width, height;
-	uint32_t imageIndex;
-	qbool swizzleBGRA;
-	VkResult result;
-	VkSemaphore acquireSemaphore = VK_NULL_HANDLE;
-	VkSemaphoreCreateInfo semaphoreInfo;
-	VkPresentInfoKHR presentInfo;
-
-	memset(buffer, 0, size);
-
-	if (vk_options.logicalDevice == VK_NULL_HANDLE || vk_options.swapChain.handle == VK_NULL_HANDLE || !vk_options.swapChain.images || vk_options.swapChain.imageCount <= 0) {
-		return;
-	}
-
-	width = vk_options.swapChain.imageSize.width;
-	height = vk_options.swapChain.imageSize.height;
-	if (!width || !height || size < (size_t)width * height * 3) {
-		return;
-	}
-
-	// Screenshots are rare/not perf-sensitive: draining the whole device
-	// first means the acquire below can't race an in-flight VK_BeginFrame/
-	// VK_EndFrame pair started from elsewhere (there isn't one on this
-	// thread, but this keeps the function safe to call at any point in the
-	// frame loop, not just between frames).
-	vkDeviceWaitIdle(vk_options.logicalDevice);
-
-	VK_InitialiseStructure(semaphoreInfo);
-	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	if (vkCreateSemaphore(vk_options.logicalDevice, &semaphoreInfo, NULL, &acquireSemaphore) != VK_SUCCESS) {
-		return;
-	}
-
-	result = vkAcquireNextImageKHR(vk_options.logicalDevice, vk_options.swapChain.handle, 1000000000ULL, acquireSemaphore, VK_NULL_HANDLE, &imageIndex);
-	if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-		vkDestroySemaphore(vk_options.logicalDevice, acquireSemaphore, NULL);
-		return;
-	}
-
-	srcImage = vk_options.swapChain.images[imageIndex];
-
-	if (!VK_CreateBufferResource((VkDeviceSize)width * height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingMemory)) {
-		vkDestroySemaphore(vk_options.logicalDevice, acquireSemaphore, NULL);
-		return;
-	}
-
-	cmd = VK_BeginImmediateCommands();
-	if (cmd == VK_NULL_HANDLE) {
-		vkDestroyBuffer(vk_options.logicalDevice, stagingBuffer, NULL);
-		vkFreeMemory(vk_options.logicalDevice, stagingMemory, NULL);
-		vkDestroySemaphore(vk_options.logicalDevice, acquireSemaphore, NULL);
-		return;
-	}
-
-	VK_InitialiseStructure(barrier);
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.image = srcImage;
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.levelCount = 1;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.srcAccessMask = 0;
-	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
-
-	VK_InitialiseStructure(region);
-	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	region.imageSubresource.layerCount = 1;
-	region.imageExtent.width = width;
-	region.imageExtent.height = height;
-	region.imageExtent.depth = 1;
-	vkCmdCopyImageToBuffer(cmd, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer, 1, &region);
-
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	barrier.dstAccessMask = 0;
-	vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
-
-	// Waits on acquireSemaphore -- the copy above must not start on the GPU
-	// until vkAcquireNextImageKHR's own semaphore signal confirms srcImage is
-	// actually ready, even though the CPU-side vkDeviceWaitIdle already ran.
-	VK_EndImmediateCommandsAfter(cmd, acquireSemaphore, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-	// Hand the (unmodified) image straight back to the WSI -- this function
-	// never draws into it, so presenting here is invisible to the user; it's
-	// only needed because vkAcquireNextImageKHR above took ownership of it
-	// and the spec requires every acquired image to eventually be presented
-	// (or the swapchain leaks that slot).
-	VK_InitialiseStructure(presentInfo);
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &vk_options.swapChain.handle;
-	presentInfo.pImageIndices = &imageIndex;
-	vkQueuePresentKHR(vk_options.presentQueue, &presentInfo);
-	vkDestroySemaphore(vk_options.logicalDevice, acquireSemaphore, NULL);
-
+ VkBuffer stagingBuffer = VK_NULL_HANDLE;
+ VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+ uint32_t width = vk_options.swapChain.imageSize.width;
+ uint32_t height = vk_options.swapChain.imageSize.height;
+ void* mapped;
+ qbool swizzleBGRA;
+ memset(buffer, 0, size);
+ if (vk_screenshot.buffer || !vk_options.logicalDevice || !vk_options.swapChain.handle ||
+     !width || !height || size < (size_t)width * height * 3) return;
+ if (!(vk_options.physicalDeviceSurfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
+  Con_Printf("vulkan: this surface does not support screenshot readback\n"); return;
+ }
+ if (!VK_CreateBufferResource((VkDeviceSize)width * height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+     &stagingBuffer, &stagingMemory)) return;
+ vk_screenshot.buffer = stagingBuffer;
+ vk_screenshot.width = width; vk_screenshot.height = height;
+ vk_screenshot.recorded = false;
+ if (vk_options.frame.active) {
+  // Auto-screenshots are requested after HUD drawing, before normal EndFrame.
+  // Finish this frame once; the caller's later EndFrame becomes a no-op.
+  R_FlushImageDraw();
+  VK_EndFrame();
+ } else if (SCR_UpdateScreenPrePlayerView()) {
+  // Console/movie captures need a fresh complete frame. Use normal drawing,
+  // without SCR_CheckAutoScreenshot recursively requesting another capture.
+  renderer.ScreenDrawStart();
+  SCR_UpdateScreenPlayerView(UPDATESCREEN_POSTPROCESS);
+  SCR_UpdateScreenHudOnly();
+  renderer.PostProcessScreen();
+  VID_RenderFrameEnd();
+  R_EndRendering();
+ }
+ if (vk_screenshot.recorded) {
+  // Screenshots are synchronous; ordinary frames allocate/copy/wait nothing.
+  vkDeviceWaitIdle(vk_options.logicalDevice);
 	swizzleBGRA = (vk_options.physicalDeviceSurfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM ||
 		vk_options.physicalDeviceSurfaceFormat.format == VK_FORMAT_B8G8R8A8_SRGB);
 
@@ -338,8 +296,13 @@ static void VK_Screenshot(byte* buffer, size_t size)
 		vkUnmapMemory(vk_options.logicalDevice, stagingMemory);
 	}
 
-	vkDestroyBuffer(vk_options.logicalDevice, stagingBuffer, NULL);
-	vkFreeMemory(vk_options.logicalDevice, stagingMemory, NULL);
+
+ } else {
+  Con_Printf("vulkan: no drawable screenshot frame (minimized, loading or resized)\n");
+ }
+ memset(&vk_screenshot, 0, sizeof(vk_screenshot));
+ vkDestroyBuffer(vk_options.logicalDevice, stagingBuffer, NULL);
+ vkFreeMemory(vk_options.logicalDevice, stagingMemory, NULL);
 }
 
 static size_t VK_ScreenshotWidth(void)
@@ -604,6 +567,7 @@ void VK_BeginFrame(void)
 		}
 	}
 	vk_options.frame.imageInFlightFences[vk_options.frame.imageIndex] = frameFence;
+	VK_CVBeginFrame();
 
 	// Anti-lag / low-latency input marker: as close to the start of the
 	// frame's CPU work as we can get it, before any of the (potentially
@@ -717,7 +681,9 @@ void VK_BeginFrame(void)
 	vk_options.swapChain.postProcessActive = VK_PostProcessActive();
 
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color);
+	// An offscreen image ended the preceding frame as a sampled texture.
+	// Discard it before the new scene instead of assuming PRESENT layout.
+	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color || vk_options.swapChain.postProcessActive);
 	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
 		VK_PostProcessFramebuffer(vk_options.frame.imageIndex) : vk_options.swapChain.framebuffers[vk_options.frame.imageIndex];
 	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
@@ -732,6 +698,7 @@ void VK_BeginFrame(void)
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	vk_options.frame.active = true;
+	vk_options.frame.hudStarted = false;
 }
 
 VkCommandBuffer VK_CurrentCommandBuffer(void)
@@ -740,6 +707,24 @@ VkCommandBuffer VK_CurrentCommandBuffer(void)
 		return VK_NULL_HANDLE;
 	}
 	return vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
+}
+
+static void VK_Begin2DRendering(void)
+{
+ VkCommandBuffer commandBuffer=VK_CurrentCommandBuffer();
+ VkRenderPassBeginInfo pass={0};
+ if(!commandBuffer||vk_options.frame.hudStarted) return;
+ vkCmdEndRenderPass(commandBuffer);
+ if(vk_options.swapChain.postProcessActive) {
+  VK_PostProcessTransitionForSampling(commandBuffer,vk_options.frame.imageIndex);
+  pass.renderPass=VK_PostProcessRenderPass();
+ } else pass.renderPass=VK_HudRenderPass();
+ pass.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+ pass.framebuffer=VK_PostProcessCompositeFramebuffer(vk_options.frame.imageIndex);
+ pass.renderArea.extent=vk_options.swapChain.imageSize;
+ vkCmdBeginRenderPass(commandBuffer,&pass,VK_SUBPASS_CONTENTS_INLINE);
+ if(vk_options.swapChain.postProcessActive) VK_PostProcessComposite(commandBuffer,vk_options.frame.imageIndex);
+ vk_options.frame.hudStarted=true;
 }
 
 void VK_EndFrame(void)
@@ -761,28 +746,10 @@ void VK_EndFrame(void)
 	frameFence = vk_options.frame.inFlightFences[frameIndex];
 
 	commandBuffer = vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
+	VK_Begin2DRendering();
 	vkCmdEndRenderPass(commandBuffer);
+	VK_RecordScreenshot(commandBuffer);
 
-	if (vk_options.swapChain.postProcessActive) {
-		VkFramebuffer compositeFramebuffer = VK_PostProcessCompositeFramebuffer(vk_options.frame.imageIndex);
-
-		if (compositeFramebuffer != VK_NULL_HANDLE) {
-			VkRenderPassBeginInfo compositePassInfo = { 0 };
-
-			VK_PostProcessTransitionForSampling(commandBuffer, vk_options.frame.imageIndex);
-
-			compositePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			compositePassInfo.renderPass = VK_PostProcessRenderPass();
-			compositePassInfo.framebuffer = compositeFramebuffer;
-			compositePassInfo.renderArea.offset.x = 0;
-			compositePassInfo.renderArea.offset.y = 0;
-			compositePassInfo.renderArea.extent = vk_options.swapChain.imageSize;
-
-			vkCmdBeginRenderPass(commandBuffer, &compositePassInfo, VK_SUBPASS_CONTENTS_INLINE);
-			VK_PostProcessComposite(commandBuffer, vk_options.frame.imageIndex);
-			vkCmdEndRenderPass(commandBuffer);
-		}
-	}
 
 	result = vkEndCommandBuffer(commandBuffer);
 	if (result != VK_SUCCESS) {
@@ -1048,6 +1015,14 @@ qbool VK_Initialise(SDL_Window* window)
 		return false;
 	}
 
+	if (vk_options.physicalDeviceProperties.limits.maxPushConstantsSize < VK_WORLD_PUSH_BYTES) {
+		Con_Printf("vulkan: %s supports %u push-constant bytes; world renderer requires %u. Select OpenGL.\n",
+			vk_options.physicalDeviceProperties.deviceName,
+			vk_options.physicalDeviceProperties.limits.maxPushConstantsSize, VK_WORLD_PUSH_BYTES);
+		VK_Shutdown(r_shutdown_full);
+		return false;
+	}
+
 	VK_DetermineMSAASampleCount();
 
 	if (!VK_CreateLogicalDevice(vk_options.instance)) {
@@ -1077,7 +1052,7 @@ qbool VK_Initialise(SDL_Window* window)
 	}
 
 	Con_Printf("Vulkan initialised successfully\n");
-	Con_Printf("vulkan: descriptor indexing (bindless) %s\n", vk_options.supportsDescriptorIndexing ? "supported" : "NOT supported, falling back to per-texture descriptor sets");
+	VK_PrintGfxInfo();
 	return true;
 }
 
@@ -1133,6 +1108,7 @@ void VK_Shutdown(r_shutdown_mode_t mode)
 		VK_WorldResourcesShutdown();
 		VK_AliasModelResourcesShutdown();
 		VK_Sprite3DResourcesShutdown();
+		VK_CVShutdown();
 		VK_TextureShutdown();
 		VK_DestroyImmediateCommandPool();
 		VK_DestroyFrameResources();
@@ -1185,6 +1161,9 @@ void VK_PopulateConfig(void)
 	glConfig.gl_max_size_default = limits->maxImageDimension2D ? (int)limits->maxImageDimension2D : 4096;
 	glConfig.max_texture_depth = limits->maxImageArrayLayers ? (int)limits->maxImageArrayLayers : 1;
 	glConfig.max_3d_texture_size = limits->maxImageDimension3D ? (int)limits->maxImageDimension3D : 1;
+	// Set before shared texture/HUD initialization, including after vid_restart.
+	// Vulkan's 2D texture path accepts NPOT dimensions and floor-halved mip levels.
+	R_SetNonPowerOfTwoSupport(true);
 	glConfig.uniformBufferOffsetAlignment = (int)limits->minUniformBufferOffsetAlignment;
 	glConfig.shaderStorageBufferOffsetAlignment = (int)limits->minStorageBufferOffsetAlignment;
 	glConfig.supported_features =
@@ -1224,7 +1203,7 @@ void VK_PopulateConfig(void)
 #define VK_DrawWaterSurfaces              VK_DrawWaterSurfaces
 #define VK_ScreenDrawStart                VK_NoOperation
 #define VK_EnsureFinished                 VK_NoOperation
-#define VK_Begin2DRendering               VK_NoOperation
+// VK_Begin2DRendering composites the scene before HUD draws.
 #define VK_IsFramebufferEnabled3D         VK_False
 #define VK_RenderView                     VK_RenderView
 #define VK_PreRenderView                  VK_PreRenderView

@@ -1,0 +1,189 @@
+diff --git a/src/cl_main.c b/src/cl_main.c
+--- a/src/cl_main.c
++++ b/src/cl_main.c
+@@ -48,6 +48,7 @@
+ #include "utils.h"
+ #include "qsound.h"
+ #include "menu.h"
++#include "menu_local.h"
+ #include "image.h"
+ #ifndef _WIN32
+ #include <netdb.h>
+@@ -439,6 +440,7 @@
+ 	// Reset safestrafe state on spawn
+ 	memset(&cl.safestrafe, 0, sizeof(cl.safestrafe));
+ 	
++	MLocal_Connected();
+ 	TP_ExecTrigger("f_spawn");
+ }
+ 
+diff --git a/src/menu_local.c b/src/menu_local.c
+--- a/src/menu_local.c
++++ b/src/menu_local.c
+@@ -12,11 +12,15 @@
+ extern cvar_t sv_progtype;
+ extern int menuwidth;
+ #define LOCAL_MAPS 2048
+-#define LOCAL_ROWS 11
++#define LOCAL_ROWS 12
++#define LOCAL_ROW_HEIGHT 9
+ #define MAP_ROWS 12
+ static char maps[LOCAL_MAPS][64];
+ static int map_count, map_index, cursor, bot_skill = 5, mode;
+-static qbool choosing_map;
++static qbool choosing_map, pending_start;
++static int dm_mode = 3, pending_mode, pending_dm;
++static char pending_map[64];
++static const int mode_dm_defaults[] = {3, 3, 1, 5};
+ static menu_window_t window;
+ static char notice[160];
+ static const char *modes[] = { "Free for all", "Duel", "2 on 2", "Clan Arena" };
+@@ -95,23 +99,39 @@
+     Cvar_Set(&sv_progsname, "qwprogs");
+     Cvar_SetValue(&sv_progtype, 1);
+     Cvar_SetValue(&maxclients, 16);
+-    Cvar_SetValue(&deathmatch, 1);
++    Cvar_SetValue(&deathmatch, dm_mode);
+     Cvar_SetValue(&coop, 0);
+     Cvar_SetValue(&teamplay, 0);
+     Cvar_SetByName("spectator", "0");
+     if (!*Cvar_String("team")) Cvar_SetByName("team", "red");
+     Cvar_SetByName("samelevel", "0");
++    pending_start = true;
++    pending_mode = mode;
++    pending_dm = dm_mode;
++    strlcpy(pending_map, maps[map_index], sizeof(pending_map));
+     Cbuf_InsertText(va("map %s\n", maps[map_index]));
+-    strlcpy(notice, "Starting... then apply mode and add bots.", sizeof(notice));
++    strlcpy(notice, "Starting with selected rules...", sizeof(notice));
++}
++
++void MLocal_Connected(void)
++{
++    if (!pending_start) return;
++    pending_start = false;
++    if (!LocalConnected() || strcmp(sv.mapname, pending_map)) return;
++    Cbuf_InsertText(va("cmd %s\ncmd dmm%d\n", mode_commands[pending_mode], pending_dm));
++    strlcpy(notice, "Selected rules sent. Add bots when ready.", sizeof(notice));
+ }
+ 
+ static void Activate(void)
+ {
+     if (cursor == 0) { choosing_map = true; return; }
+     if (cursor == 1) { Start(); return; }
+-    if (cursor == 3) { bot_skill = bot_skill % 20 + 1; return; }
+-    if (cursor == 10) { M_LeaveMenu(m_main); return; }
+-    if (cursor == 9) {
++    if (cursor == 3 && !LocalConnected()) {
++        strlcpy(notice, "Deathmatch applies at next local start.", sizeof(notice)); return;
++    }
++    if (cursor == 4) { bot_skill = bot_skill % 20 + 1; return; }
++    if (cursor == 11) { M_LeaveMenu(m_main); return; }
++    if (cursor == 10) {
+         if (LocalServer()) {
+             Host_EndGame();
+             strlcpy(notice, "Local server stopped.", sizeof(notice));
+@@ -123,12 +143,13 @@
+         return;
+     }
+     switch (cursor) {
+-    case 2: Cbuf_InsertText(va("cmd %s\n", mode_commands[mode])); break;
+-    case 4: Cbuf_InsertText(va("cmd botcmd addbot %d\n", bot_skill)); break;
+-    case 5: Cbuf_InsertText("cmd botcmd removebot\n"); break;
+-    case 6: Cbuf_InsertText("cmd botcmd removeall\n"); break;
+-    case 7: Cbuf_InsertText("cmd ready\n"); M_LeaveMenus(); break;
+-    case 8: M_LeaveMenus(); break;
++    case 2: Cbuf_InsertText(va("cmd %s\ncmd dmm%d\n", mode_commands[mode], dm_mode)); break;
++    case 3: Cbuf_InsertText(va("cmd dmm%d\n", dm_mode)); break;
++    case 5: Cbuf_InsertText(va("cmd botcmd addbot %d\n", bot_skill)); break;
++    case 6: Cbuf_InsertText("cmd botcmd removebot\n"); break;
++    case 7: Cbuf_InsertText("cmd botcmd removeall\n"); break;
++    case 8: Cbuf_InsertText("cmd ready\n"); M_LeaveMenus(); break;
++    case 9: M_LeaveMenus(); break;
+     }
+     strlcpy(notice, "Request sent. KTX reports results in console.", sizeof(notice));
+ }
+@@ -159,25 +180,29 @@
+         if (!strncmp(notice, "Starting...", 11)) strlcpy(notice, "Connected. Apply a mode, then add bots.", sizeof(notice));
+     } else strlcpy(text, LocalServer() ? "Connecting to local server..." : "No local KTX game", sizeof(text));
+     M_PrintWhite(24, 24, text);
+-    window.h = LOCAL_ROWS * 10;
++    window.h = LOCAL_ROWS * LOCAL_ROW_HEIGHT;
+     for (i = 0; i < LOCAL_ROWS; ++i) {
+         switch (i) {
+         case 0: snprintf(text, sizeof(text), "Map: %.27s", map_count ? maps[map_index] : "(none)"); break;
+         case 1: strlcpy(text, com_serveractive ? "Restart on selected map" : "Start local server", sizeof(text)); break;
+         case 2: snprintf(text, sizeof(text), "Apply mode: %s", modes[mode]); break;
+-        case 3: snprintf(text, sizeof(text), "New bot skill: %d / 20", bot_skill); break;
+-        case 4: strlcpy(text, "Add bot", sizeof(text)); break;
+-        case 5: strlcpy(text, "Remove last bot", sizeof(text)); break;
+-        case 6: strlcpy(text, "Remove all bots", sizeof(text)); break;
+-        case 7: strlcpy(text, "Ready / start match", sizeof(text)); break;
+-        case 8: strlcpy(text, "Return to game", sizeof(text)); break;
+-        case 9: strlcpy(text, "Stop local server", sizeof(text)); break;
++        case 3:
++            if (LocalServer()) snprintf(text, sizeof(text), "Deathmatch: %d (live %d)", dm_mode, (int)deathmatch.value);
++            else snprintf(text, sizeof(text), "Deathmatch: %d", dm_mode);
++            break;
++        case 4: snprintf(text, sizeof(text), "New bot skill: %d / 20", bot_skill); break;
++        case 5: strlcpy(text, "Add bot", sizeof(text)); break;
++        case 6: strlcpy(text, "Remove last bot", sizeof(text)); break;
++        case 7: strlcpy(text, "Remove all bots", sizeof(text)); break;
++        case 8: strlcpy(text, "Ready / start match", sizeof(text)); break;
++        case 9: strlcpy(text, "Return to game", sizeof(text)); break;
++        case 10: strlcpy(text, "Stop local server", sizeof(text)); break;
+         default: strlcpy(text, "Back to main menu", sizeof(text)); break;
+         }
+-        M_Print(40, 40 + i * 10, text);
+-    }
+-    M_DrawCharacter(24, 40 + cursor * 10, FLASHINGARROW());
+-    M_PrintWhite(24, 158, "Left/right: mode or skill");
++        M_Print(40, 40 + i * LOCAL_ROW_HEIGHT, text);
++    }
++    M_DrawCharacter(24, 40 + cursor * LOCAL_ROW_HEIGHT, FLASHINGARROW());
++    M_PrintWhite(24, 158, "Left/right: edit  Enter: apply");
+     M_PrintWhite(24, 168, "Bot navigation depends on the map.");
+     /* Two bounded lines fit the original 320x200 menu canvas. */
+     split = min(35, strlen(notice));
+@@ -227,8 +252,12 @@
+     case K_HOME: cursor = 0; break;
+     case K_END: cursor = LOCAL_ROWS - 1; break;
+     case K_LEFTARROW: case K_RIGHTARROW:
+-        if (cursor == 2) mode = (mode + 4 + direction) % 4;
+-        if (cursor == 3) bot_skill = bound(1, bot_skill + direction, 20);
++        if (cursor == 2) {
++            mode = (mode + 4 + direction) % 4;
++            dm_mode = mode_dm_defaults[mode];
++        }
++        if (cursor == 3) dm_mode = (dm_mode - 1 + 5 + direction) % 5 + 1;
++        if (cursor == 4) bot_skill = bound(1, bot_skill + direction, 20);
+         break;
+     case K_ENTER: case K_MOUSE1: Activate(); break;
+     }
+@@ -268,6 +297,7 @@
+     Con_Printf("LOCAL_MENU maps=%d selected=%s row=%d connected=%d bots=%d skill=%d server=%d notice=%s\n",
+         map_count, map_count ? maps[map_index] : "none", cursor, LocalConnected(), bots, bot_skill, com_serveractive, notice);
+     local = LocalServer();
++    Con_Printf("LOCAL_DMM selected=%d live=%d\n", dm_mode, local ? (int)deathmatch.value : 0);
+     /* Info_ValueForKey uses rotating static buffers: copy each result. */
+     strlcpy(server_mode, local ? Info_ValueForKey(svs.info, "mode") : "none", sizeof(server_mode));
+     strlcpy(server_status, local ? Info_ValueForKey(svs.info, "status") : "none", sizeof(server_status));
+@@ -289,6 +319,7 @@
+     Cmd_AddCommand("dev_local_menu", DeveloperCommand);
+ }
+ #else
++void MLocal_Connected(void) {}
+ void MLocal_Init(void) {}
+ void MLocal_Open(void) {}
+ void MLocal_Draw(void) {}
+diff --git a/src/menu_local.h b/src/menu_local.h
+--- a/src/menu_local.h
++++ b/src/menu_local.h
+@@ -2,6 +2,7 @@
+ #ifndef EZQUAKE_MENU_LOCAL_H
+ #define EZQUAKE_MENU_LOCAL_H
+ void MLocal_Init(void);
++void MLocal_Connected(void);
+ void MLocal_Open(void);
+ void MLocal_Draw(void);
+ void MLocal_Key(int key);

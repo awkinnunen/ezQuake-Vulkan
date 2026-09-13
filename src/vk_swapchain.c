@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <SDL3/SDL_vulkan.h>
 
 #include "vk_local.h"
+#include "competitive_visuals.h"
 
 static void VK_DestroySwapChainDepthResources(void)
 {
@@ -235,6 +236,7 @@ void VK_DestroyPostProcessResources(void)
 // a restart.
 qbool VK_PostProcessActive(void)
 {
+	if (CV_Active() || CV_PostActive()) return true;
 	extern cvar_t v_gamma, v_contrast;
 	extern cvar_t vid_framebuffer_fxaa;
 	extern cvar_t vid_software_palette;
@@ -667,7 +669,11 @@ qbool VK_CreateSwapChain(SDL_Window* window, VkInstance instance, VkSurfaceKHR s
 		createInfo.imageExtent.width = width;
 		createInfo.imageExtent.height = height;
 	}
-	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // VK_IMAGE_USAGE_TRANSFER_DST_BIT if pre-processing enabled
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	// Screenshot readback needs transfer-source usage, when the surface supports it.
+	if (vk_options.physicalDeviceSurfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+		createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	}
 	if (VK_PhysicalDeviceGraphicsQueueFamilyIndex() != VK_PhysicalDevicePresentQueueFamilyIndex()) {
 		queueFamilyIndices[0] = VK_PhysicalDeviceGraphicsQueueFamilyIndex();
 		queueFamilyIndices[1] = VK_PhysicalDevicePresentQueueFamilyIndex();

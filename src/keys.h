@@ -277,6 +277,7 @@ void Key_SetBinding (int keynum, const char *binding);
 void Key_Unbind (int keynum);
 void Key_ClearStates (void);
 int	 Key_StringToKeynum (const char *str);
+int Key_StringToKeynumEx(const char *str, qbool physical);
 char *Key_KeynumToString (int keynum);
 void Key_Unbindall_f (void);
 

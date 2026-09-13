@@ -44,6 +44,7 @@ typedef enum {
 	// real gamma/contrast/FXAA, and writes the swapchain image directly --
 	// see VK_PostProcessComposite in vk_draw.c.
 	vk_renderpass_postprocess,
+	vk_renderpass_hud,
 	// World-outline normals prepass (gl_outline & 2): a small, always
 	// single-sample render pass with its own color (normal+linear-depth,
 	// RGBA16F) and depth attachments, entirely separate from the main
@@ -80,7 +81,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	attachments[0].format = vk_options.physicalDeviceSurfaceFormat.format;
 	attachments[0].samples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
 	attachments[0].loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-	attachments[0].storeOp = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Resumed after world normals/AO.
 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	if (msaa) {
@@ -110,7 +111,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	// gl_misc.c, which only gates GL_COLOR_BUFFER_BIT on clear_color and
 	// always ORs in GL_DEPTH_BUFFER_BIT.
 	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Preserve depth across scene subpasses.
 	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -202,7 +203,7 @@ qbool VK_RenderPassCreate(void)
 // sampled descriptor by the pipeline in vk_draw.c, not as a render-pass
 // attachment, so no input-attachment subpass dependency is needed here beyond
 // the usual external one.
-static qbool VK_PostProcessRenderPassCreate(void)
+static qbool VK_PostProcessRenderPassCreate(qbool hud)
 {
 	VkAttachmentDescription colorAttachment;
 	VkAttachmentReference colorAttachmentRef;
@@ -213,11 +214,11 @@ static qbool VK_PostProcessRenderPassCreate(void)
 	VK_InitialiseStructure(colorAttachment);
 	colorAttachment.format = vk_options.physicalDeviceSurfaceFormat.format;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	colorAttachment.loadOp = hud ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	colorAttachment.initialLayout = hud ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 	VK_InitialiseStructure(colorAttachmentRef);
@@ -238,9 +239,9 @@ static qbool VK_PostProcessRenderPassCreate(void)
 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 	dependency.dstSubpass = 0;
 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.srcAccessMask = 0;
+	dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
 	VK_InitialiseStructure(renderPassInfo);
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -251,7 +252,7 @@ static qbool VK_PostProcessRenderPassCreate(void)
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	return vkCreateRenderPass(vk_options.logicalDevice, &renderPassInfo, NULL, &renderPasses[vk_renderpass_postprocess]) == VK_SUCCESS;
+	return vkCreateRenderPass(vk_options.logicalDevice, &renderPassInfo, NULL, &renderPasses[hud ? vk_renderpass_hud : vk_renderpass_postprocess]) == VK_SUCCESS;
 }
 
 // See VK_WorldNormalsFormat above for the color format. Always
@@ -344,9 +345,15 @@ VkRenderPass VK_FrameRenderPass(qbool clear_color)
 VkRenderPass VK_PostProcessRenderPass(void)
 {
 	if (renderPasses[vk_renderpass_postprocess] == VK_NULL_HANDLE) {
-		VK_PostProcessRenderPassCreate();
+		VK_PostProcessRenderPassCreate(false);
 	}
 	return renderPasses[vk_renderpass_postprocess];
+}
+
+VkRenderPass VK_HudRenderPass(void)
+{
+	if (!renderPasses[vk_renderpass_hud]) VK_PostProcessRenderPassCreate(true);
+	return renderPasses[vk_renderpass_hud];
 }
 
 VkRenderPass VK_WorldNormalsRenderPass(void)

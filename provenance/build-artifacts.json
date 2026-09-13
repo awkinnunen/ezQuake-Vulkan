@@ -1,0 +1,12 @@
+[
+  {
+    "Artifact": "ezquake-vulkan\\build-msvc-x64\\Debug\\ezquake.exe",
+    "Bytes": 25089536,
+    "SHA256": "53E212917CA421A09F6574B7BFF7A12C26EBBC7D540DE844297E596DE6A17D12"
+  },
+  {
+    "Artifact": "ezquake-vulkan\\build-msvc-x64\\Release\\ezquake.exe",
+    "Bytes": 11330048,
+    "SHA256": "C9B966A22301FDC50B656771C33AA0676D324086971CCC9F81FDBAF4177BF9F8"
+  }
+]

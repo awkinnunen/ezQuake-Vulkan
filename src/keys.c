@@ -1603,14 +1603,16 @@ void Key_Message (int key, wchar unichar) {
 
 byte Key_CharacterToQuakeCode(char ch);
 
-int Key_StringToKeynum (const char *str)
+/* Explicit mode also permits read-only cfg previews without changing a cvar.
+ * OpenAI Codex, 2026-09-13. */
+int Key_StringToKeynumEx(const char *str, qbool physical)
 {
 	keyname_t *kn;
 
 	if (!str || !str[0])
 		return -1;
 
-	if (!str[1] && !con_bindphysical.value)
+	if (!str[1] && !physical)
 	{
 		int value = Key_CharacterToQuakeCode(str[0]);
 
@@ -1627,6 +1629,11 @@ int Key_StringToKeynum (const char *str)
 	}
 
 	return -1;
+}
+
+int Key_StringToKeynum(const char *str)
+{
+	return Key_StringToKeynumEx(str, con_bindphysical.value != 0);
 }
 
 //FIXME: handle quote special (general escape sequence?)

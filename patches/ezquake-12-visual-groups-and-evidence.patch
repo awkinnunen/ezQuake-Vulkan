@@ -1,0 +1,739 @@
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -6,6 +6,9 @@
+ extern void M_Print_GetPoint(int cx, int cy, int *rx, int *ry, const char *str, qbool red);
+ #include "rulesets.h"
+ #include "competitive_visuals.h"
++#ifndef CLIENTONLY
++#include "server.h"
++#endif
+ #include <ctype.h>
+ #include <math.h>
+ 
+@@ -25,27 +28,102 @@
+  {"r_shadows","Model shadows","Projected shadows; fixed opacity",0,1,1,4},
+  {"gl_detail","Detail overlay","Additional world detail texture",0,1,1,4},
+  {"gl_caustics","Water caustics","Animated underwater decoration",0,1,1,4},
+- {"vid_framebuffer_multisample","MSAA samples","0 off; 2, 4 or 8 samples",0,8,2,5},
+- {"vid_framebuffer_fxaa","FXAA preset","Existing renderer AA setting",0,17,1,5},
+- {"r_rocketTrail","Rocket trail","Existing rocket trail style: 0-9",0,9,1,4},
+- {"r_grenadeTrail","Grenade trail","Existing grenade trail style: 0-3",0,3,1,4},
+- {"r_explosionType","Explosion style","Existing explosion style: 0-7",0,7,1,4},
+- {"cl_muzzleflash","Muzzle flashes","0 off 1 on 2 own weapon off",0,2,1,4},
+- {"r_drawflame","Torch flames","Keep map decoration or simplify",0,1,1,4},
+- {"gl_texturemode","Texture filtering","Cycle nearest through trilinear",0,0,0,5}
++ {"vid_framebuffer_multisample","MSAA samples","Smooth geometry edges. Hardware may limit samples. Use Restart video or F5 to apply.",0,8,2,5},
++ {"vid_framebuffer_fxaa","FXAA preset","Smooth scene edges after rendering. Zero disables FXAA; HUD stays sharp.",0,17,1,5},
++ // Retained in the profile allowlist for compatibility; already in Graphics.
++ {"r_rocketTrail","Rocket trail","Use Graphics > Projectiles",0,9,1,-1},
++ {"r_grenadeTrail","Grenade trail","Use Graphics > Projectiles",0,3,1,-1},
++ {"r_explosionType","Explosion style","Use Graphics > Projectiles",0,7,1,-1},
++ {"cl_muzzleflash","Muzzle flashes","Use Graphics > Player & Weapon Model",0,2,1,-1},
++ {"r_drawflame","Torch flames","Use Graphics > Environment",0,1,1,-1},
++ {"gl_texturemode","Texture filtering","Nearest preserves pixels; trilinear smooths textures and mip transitions.",0,0,0,5}
+ };
+ #define CV_EXT_COUNT (sizeof(existing)/sizeof(existing[0]))
+ #define CV_TOTAL (CV_COUNT + CV_EXT_COUNT)
++#define CV_RESTART_ROW CV_TOTAL
++static qbool videoApplied;
++static int appliedMSAA, actualMSAA;
++void CV_VideoApplied(int requested, int actual) { videoApplied=true; appliedMSAA=requested; actualMSAA=actual; }
++static qbool RestartPending(void) {
++ cvar_t *v=Cvar_Find("vid_framebuffer_multisample");
++ return R_UseVulkan() && videoApplied && v && v->integer!=appliedMSAA;
++}
+ static const char *pages[] = {"Profiles", "World", "Lighting", "Silhouettes", "Effects", "Image"};
+ static char notice[160], profile[32] = "competitive", saved[CV_TOTAL][64];
+-static qbool comparing, editing;
+-static int page, cursor, indices[CV_TOTAL], rows;
++static qbool comparing, editing, general;
++static int page, cursor, indices[CV_TOTAL+16], depths[CV_TOTAL+16], rows;
+ static menu_window_t window;
+ extern cvar_t scr_scaleMenu;
+-extern int menuwidth, menuheight;
++extern int menuwidth, menuheight, m_yofs;
+ static int dragging = -1;
+ #define CV_SLIDER_X 192
+ #define CV_SLIDER_TRAVEL 40
++#define CV_VISIBLE_ROWS 8
++#define EXT(n) (CV_COUNT+(n))
++static const char *groups[]={"World readability","Surface colours","Light response","Cel shading",
++ "Player rim","Outline mode","World edges","Model edges","Edge colours",
++ "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering"};
++typedef struct { int index, page, group, depth; } cv_row_t;
++static const cv_row_t layout[]={
++ {CV_enable,1,0,0},{CV_detail,1,0,1},{CV_contrast,1,0,1},{CV_pattern,1,0,1},{CV_distance,1,0,1},{CV_saturation,1,0,1},
++ {CV_tint,1,1,0},{CV_floor,1,1,1},{CV_wall,1,1,1},
++ {CV_light,2,2,0},{CV_lightmix,2,2,1},{CV_worldlight,2,2,1},{CV_modellight,2,2,1},
++ {CV_shadow,2,2,1},{CV_midtone,2,2,1},{CV_highlight,2,2,1},{CV_warmth,2,2,1},
++ {CV_bands,2,3,1},{CV_softness,2,3,1},
++ {CV_rim,3,4,0},{CV_rimwidth,3,4,1},{CV_rimup,3,4,1},{CV_rimteam,3,4,1},
++ {EXT(0),3,5,0},
++ {CV_edgestrength,3,6,1},{CV_edgewidth,3,6,1},{EXT(2),3,6,1},
++ {EXT(1),3,7,1},{CV_modelopacity,3,7,1},{EXT(3),3,7,1},
++ {CV_edgepalette,3,8,0},{CV_worldedge,3,8,1},{CV_teamedge,3,8,1},{CV_enemyedge,3,8,1},
++ {CV_bloom,4,9,0},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
++ {CV_ao,4,10,0},{CV_aoradius,4,10,1},{EXT(4),4,10,0},
++ {EXT(5),4,11,0},{EXT(6),4,11,0},
++ {CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
++ {EXT(7),5,13,0},{EXT(8),5,13,0},{EXT(14),5,13,0},{CV_RESTART_ROW,5,13,0}
++};
++static cvar_t *Var(int index);
++static float ExistingValue(const char *name) { cvar_t *v=Cvar_Find(name); return v?v->value:0; }
++static const char *Unavailable(int index) {
++ int outline=(int)ExistingValue("gl_outline");
++ qbool world=(outline&2)!=0, model=(outline&1)!=0;
++ model_t playerModel={0};
++ playerModel.modhint=MOD_PLAYER;
++ if(index==CV_RESTART_ROW) return RestartPending()?NULL:"No video restart is pending.";
++ if(index<CV_COUNT && !R_UseVulkan()) return "Requires the Vulkan renderer.";
++ if(index<CV_bloom && index!=CV_enable && !CV_Active()) return "Enable Competitive Visuals first.";
++ if((index>=CV_rim && index<=CV_rimteam) && RuleSets_DisallowModelOutline(&playerModel)) return "Player styling blocked by ruleset.";
++ if((index==CV_floor||index==CV_wall) && CV_Value(CV_tint)<=0) return "Increase Surface tint first.";
++ if((index==CV_pattern||index==CV_distance) && CV_Value(CV_detail)>=.999 && fabsf(CV_Value(CV_contrast)-1)<=.001)
++  return "Reduce Fine detail or contrast.";
++ if(index>=CV_lightmix && index<=CV_warmth) {
++  if(CV_Value(CV_light)<.5) return "Select Gradient or Soft Cel first.";
++  if(index!=CV_lightmix && CV_Value(CV_lightmix)<=0) return "Increase Style blend first.";
++  if(index!=CV_lightmix && index!=CV_worldlight && index!=CV_modellight &&
++     !CV_Value(CV_worldlight) && !CV_Value(CV_modellight)) return "Enable World or Model lighting.";
++  if((index==CV_bands||index==CV_softness) && CV_Value(CV_light)<1.5) return "Select Soft Cel to use cel bands.";
++ }
++ if(index>=CV_rimwidth && index<=CV_rimteam && CV_Value(CV_rim)<=0) return "Increase Player rim first.";
++ if(index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
++ if(index==CV_aoradius && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
++ if(index==CV_edgewidth||index==CV_edgestrength||index==CV_worldedge||index==EXT(2)) {
++  if(!world) return "Enable World or Both outlines.";
++  if(!RuleSets_AllowEdgeOutline()) return "World edges blocked by ruleset.";
++  if(index!=CV_edgestrength && CV_Active() && CV_Value(CV_edgestrength)<=0) return "Increase World edge opacity first.";
++ }
++ if(index==CV_modelopacity||index==CV_teamedge||index==CV_enemyedge||index==EXT(1)||index==EXT(3)) {
++  if(!model) return "Enable Models or Both outlines.";
++  if(RuleSets_DisallowModelOutline(&playerModel)) return "Model outlines blocked by ruleset.";
++  if(index!=EXT(1) && ExistingValue("gl_outline_scale_model")<=0) return "Increase Model edge width first.";
++ }
++ if(index==CV_edgepalette && !world && !model) return "Enable an Outline mode first.";
++ if((index==CV_worldedge||index==CV_teamedge||index==CV_enemyedge) && !CV_Value(CV_edgepalette)) return "Enable Use edge palette first.";
++ if(index==EXT(3) && CV_Active() && CV_Value(CV_edgepalette)) return "Disable Use edge palette first.";
++ return NULL;
++}
++static void GreyText(int x,int y,const char *text) {
++ char coloured[128]; snprintf(coloured,sizeof(coloured),"&c777%s&r",text);
++ Draw_ColoredString(x+((menuwidth-320)>>1),y+m_yofs,coloured,0,false);
++}
+ 
+ static void Bounds(int index, float *lo, float *hi, float *step) {
+  if(index<CV_COUNT) { *lo=opts[index].lo; *hi=opts[index].hi; *step=opts[index].step; }
+@@ -55,6 +133,7 @@
+  float lo,hi,step; Bounds(index,&lo,&hi,&step); return lo==0 && hi==1 && step==1;
+ }
+ static qbool Slider(int index) {
++ if(index==CV_RESTART_ROW) return false;
+  if(Toggle(index)) return false;
+  if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap;
+  return existing[index-CV_COUNT].step>0 && existing[index-CV_COUNT].step<1;
+@@ -63,21 +142,31 @@
+  // Shared model-shadow admission uses integer, not an opacity value.
+  return !strcmp(v->name,"r_shadows") ? v->integer!=0 : v->value!=0;
+ }
+-static void DrawControl(int index, int y) {
++static void DrawControl(int index, int depth, int y) {
++ if(index==CV_RESTART_ROW) {
++  if(RestartPending()) M_Print(24,y,"Restart video (F5)"); else GreyText(24,y,"Restart video (F5)");
++  return;
++ }
+  cvar_t *v=index<CV_COUNT?&vars[index]:Cvar_Find(existing[index-CV_COUNT].name);
+  char label[24], value[32]; float lo,hi,step;
+- snprintf(label,sizeof(label),"%.20s",index<CV_COUNT?opts[index].label:existing[index-CV_COUNT].label);
+- M_Print(24,y,label);
++ qbool disabled=Unavailable(index)!=NULL;
++ snprintf(label,sizeof(label),"%s%.*s",depth?"  ":"",depth?18:20,index<CV_COUNT?opts[index].label:existing[index-CV_COUNT].label);
++ if(disabled) GreyText(24,y,label); else M_Print(24,y,label);
+  if(!v) return;
+  if(Slider(index)) {
+   int i; float fraction;
+   Bounds(index,&lo,&hi,&step);
+   fraction=isfinite(v->value)?bound(0,(v->value-lo)/(hi-lo),1):0;
+-  M_DrawCharacter(CV_SLIDER_X-8,y,128);
+-  for(i=0;i<6;++i) M_DrawCharacter(CV_SLIDER_X+i*8,y,129);
+-  M_DrawCharacter(CV_SLIDER_X+48,y,130);
+-  M_DrawCharacter(CV_SLIDER_X+CV_SLIDER_TRAVEL*fraction,y,131);
+-  snprintf(value,sizeof(value),"%6.3g",v->value); M_PrintWhite(256,y,value);
++  if(disabled) {
++   char track[]="[------]"; track[1+(int)(fraction*5)]='|'; GreyText(CV_SLIDER_X-8,y,track);
++  } else {
++   M_DrawCharacter(CV_SLIDER_X-8,y,128);
++   for(i=0;i<6;++i) M_DrawCharacter(CV_SLIDER_X+i*8,y,129);
++   M_DrawCharacter(CV_SLIDER_X+48,y,130);
++   M_DrawCharacter(CV_SLIDER_X+CV_SLIDER_TRAVEL*fraction,y,131);
++  }
++  snprintf(value,sizeof(value),"%6.3g",v->value);
++  if(disabled) GreyText(256,y,value); else M_PrintWhite(256,y,value);
+  } else {
+   const char *choice=NULL;
+   if(Toggle(index)) choice=SwitchedOn(v)?"On":"Off";
+@@ -93,7 +182,8 @@
+    else if(!strcmp(v->string,"GL_NEAREST_MIPMAP_LINEAR")) choice="Nearest blend";
+    else choice="Trilinear";
+   }
+-  snprintf(value,sizeof(value),"%13.13s",choice?choice:v->string); M_PrintWhite(200,y,value);
++  snprintf(value,sizeof(value),"%13.13s",choice?choice:v->string);
++  if(disabled) GreyText(200,y,value); else M_PrintWhite(200,y,value);
+  }
+ }
+ 
+@@ -102,6 +192,10 @@
+  return isfinite(value) ? bound(opts[id].lo, value, opts[id].hi) : (float)atof(opts[id].def);
+ }
+ qbool CV_Active(void) { return CV_Value(CV_enable) != 0 && R_UseVulkan(); }
++qbool CV_PostActive(void) {
++ return R_UseVulkan() && (CV_Value(CV_bloom)>0 || CV_Value(CV_sharpen)>0 ||
++  CV_Value(CV_tonemap)>0 || fabsf(CV_Value(CV_exposure)-1)>.0001);
++}
+ qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked) {
+  return player && !weapon && !blocked && !(effects & (EF_RED | EF_GREEN | EF_BLUE));
+ }
+@@ -117,6 +211,13 @@
+  out->world[0]=out->world[2]=out->world[3]=1;
+  out->post[0]=1;
+  out->modelview[0]=out->modelview[5]=out->modelview[10]=out->modelview[15]=1;
++ // General image effects are independent of the competitive style switch.
++ if(R_UseVulkan()) {
++  out->post[0]=CV_Value(CV_exposure); out->post[1]=CV_Value(CV_tonemap);
++  out->post[2]=CV_Value(CV_bloom); out->post[3]=CV_Value(CV_bloomthreshold);
++  out->post2[0]=CV_Value(CV_bloomradius); out->post2[1]=CV_Value(CV_ao);
++  out->post2[2]=CV_Value(CV_aoradius); out->post2[3]=CV_Value(CV_sharpen);
++ }
+  if (!CV_Active()) return;
+  out->world[0]=CV_Value(CV_detail); out->world[1]=CV_Value(CV_pattern);
+  out->world[2]=CV_Value(CV_contrast); out->world[3]=CV_Value(CV_saturation);
+@@ -128,10 +229,6 @@
+  out->levels[2]=CV_Value(CV_highlight); out->levels[3]=CV_Value(CV_bands);
+  out->shape[0]=CV_Value(CV_softness); out->shape[1]=CV_Value(CV_warmth);
+  out->rim[1]=CV_Value(CV_rimwidth); out->rim[2]=CV_Value(CV_rimup);
+- out->post[0]=CV_Value(CV_exposure); out->post[1]=CV_Value(CV_tonemap);
+- out->post[2]=CV_Value(CV_bloom); out->post[3]=CV_Value(CV_bloomthreshold);
+- out->post2[0]=CV_Value(CV_bloomradius); out->post2[1]=CV_Value(CV_ao);
+- out->post2[2]=CV_Value(CV_aoradius); out->post2[3]=CV_Value(CV_sharpen);
+ }
+ void CV_PlayerParams(cv_params_t *out, entity_t *ent, int effects, int render_effects, const float *modelview) {
+  int i; float tint;
+@@ -152,23 +249,23 @@
+  int i;
+  for(i=0;i<CV_TOTAL;++i) {
+   cvar_t *v=Var(i); int optionPage=i<CV_COUNT?opts[i].page:existing[i-CV_COUNT].page;
+-  if(v && (which<0||optionPage==which)) Cvar_Set(v,v->defaultvalue);
++  if(v && (which==-1||optionPage==which||(which==-2&&optionPage>=1&&optionPage<=3))) Cvar_Set(v,v->defaultvalue);
+  }
+ }
+ static void Preset(int n) {
+  if(comparing) Restore();
+- Reset(-1);
++ Reset(-2);
+  if(n) {
+   Cvar_SetValue(&vars[CV_enable],1); Cvar_SetValue(&vars[CV_detail],.35);
+   Cvar_SetValue(&vars[CV_contrast],.8); Cvar_SetValue(&vars[CV_saturation],.85);
+   Cvar_SetValue(&vars[CV_light],n==2?2:1); Cvar_SetValue(&vars[CV_lightmix],n==2?.6:.3);
+   Cvar_SetValue(&vars[CV_rim],.06);
+  }
+- snprintf(notice,sizeof(notice),"Applied %s. Bloom is off.",n==0?"Original":n==1?"Clean":"Soft Cel");
++ snprintf(notice,sizeof(notice),"Applied %s competitive style.",n==0?"Original":n==1?"Clean":"Soft Cel");
+ }
+ static void Compare(void) {
+  if(comparing) { Restore(); strlcpy(notice,"Restored your visual settings.",sizeof(notice)); }
+- else { Snapshot(); Reset(-1); comparing=true; strlcpy(notice,"Original comparison. F6 restores.",sizeof(notice)); }
++ else { Snapshot(); Reset(-2); comparing=true; strlcpy(notice,"Original comparison. F6 restores.",sizeof(notice)); }
+ }
+ static qbool ValidName(const char *s) {
+  size_t n=strlen(s); if(!n||n>=sizeof(profile)) return false;
+@@ -200,8 +297,10 @@
+    } else {
+     number=strtod(value,&end);
+     if(*end||!isfinite(number)) { valid=false; break; }
+-    if(i<CV_COUNT && (number<opts[i].lo||number>opts[i].hi)) { valid=false; break; }
+-    if(i>=CV_COUNT && (number<existing[i-CV_COUNT].lo||number>existing[i-CV_COUNT].hi)) { valid=false; break; }
++    // Validate at the same float precision used by cvars and renderer bounds.
++    // Otherwise decimal endpoints such as 0.2 compare below their float minimum.
++    if(i<CV_COUNT && ((float)number<opts[i].lo||(float)number>opts[i].hi)) { valid=false; break; }
++    if(i>=CV_COUNT && ((float)number<existing[i-CV_COUNT].lo||(float)number>existing[i-CV_COUNT].hi)) { valid=false; break; }
+    }
+    strlcpy(pending[i],value,sizeof(pending[i])); seen[i]=true;
+   }
+@@ -216,24 +315,60 @@
+  Con_Printf("CV_PROFILE %s %s: %s\n",load?"load":"save",name,notice);
+ }
+ static void BuildRows(void) {
+- int i; rows=0;
++ int i,lastGroup=-1; rows=0;
+  if(!page) { rows=8; return; }
+- for(i=0;i<CV_COUNT;++i) if(opts[i].page==page) indices[rows++]=i;
+- for(i=0;i<CV_EXT_COUNT;++i) if(existing[i].page==page&&Var(CV_COUNT+i)) indices[rows++]=CV_COUNT+i;
++ for(i=0;i<sizeof(layout)/sizeof(layout[0]);++i) if(layout[i].page==page && (layout[i].index==CV_RESTART_ROW||Var(layout[i].index))) {
++  if(lastGroup!=layout[i].group) { lastGroup=layout[i].group; indices[rows++]=-lastGroup-1; }
++  indices[rows]=layout[i].index; depths[rows++]=layout[i].depth;
++ }
+  cursor=bound(0,cursor,max(0,rows-1));
+-}
+-void CV_Open(void) { dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
++ while(cursor<rows-1 && indices[cursor]<0) ++cursor;
++}
++static int ViewEnd(int first) {
++ int end=min(rows,first+CV_VISIBLE_ROWS);
++ // Keep section titles with their first control across viewport boundaries.
++ if(page && end<rows && indices[end-1]<0) --end;
++ return end;
++}
++static int ViewFirst(void) {
++ int first=0;
++ while(cursor>=ViewEnd(first)) first=ViewEnd(first);
++ return first;
++}
++void CV_Open(void) { general=false; page=0; cursor=0; dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
++void CV_OpenEffects(void) { general=true; page=4; cursor=0; dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
++static const char *Help(int index) {
++ if(index==CV_RESTART_ROW) return "Apply pending graphics changes by restarting video. The game stays loaded.";
++ return index<CV_COUNT?opts[index].help:existing[index-CV_COUNT].help;
++}
++static const char *profileHelp[]={
++ "Restore the original competitive look. General image effects are preserved.",
++ "Reduce fine world detail. Keep broad patterns and original light structure.",
++ "Apply softly blended cel lighting and a small player rim.",
++ "Name for saving/loading all visual settings. Letters, digits, - and _ only.",
++ "Save competitive and general visual settings together. Keys are excluded.",
++ "Load the named visual profile. Invalid files leave your settings unchanged.",
++ "Compare with the original competitive look. Press F6 again to restore.",
++ "Reset competitive controls. General image effects are preserved."
++};
++static void DrawHelp(const char *text) {
++ int line;
++ for(line=0;line<3 && *text;++line) {
++  char part[37]; size_t n=min(strlen(text),36), cut=n;
++  if(text[n] && text[n]!=' ') { while(cut && text[cut]!=' ') --cut; if(cut) n=cut; }
++  memcpy(part,text,n); part[n]=0; M_PrintWhite(16,146+line*10,part);
++  text+=n; while(*text==' ') ++text;
++ }
++}
+ void CV_Draw(void) {
+- int i,first; char line[80];
+- M_PrintWhite(64,8,"COMPETITIVE VISUALS");
+- snprintf(line,sizeof(line),"< %s >  %d/6",pages[page],page+1); M_PrintWhite(80,24,line);
+- if(page!=3) M_PrintWhite(16,36,R_UseVulkan()?(comparing?"Original comparison active":"Vulkan: live visual controls"):"New style needs Vulkan; others work");
+- if(page==3) {
+-  snprintf(line,sizeof(line),"Rules: %.12s  world edges: %s",Rulesets_Ruleset(),RuleSets_AllowEdgeOutline()?"yes":"blocked");
+-  M_PrintWhite(16,36,line);
+- }
+- BuildRows(); first=(cursor/10)*10;
+- for(i=first;i<min(rows,first+10);++i) {
++ int i,first,end; char line[80];
++ M_PrintWhite(64,8,general?"VISUAL EFFECTS":"COMPETITIVE VISUALS");
++ snprintf(line,sizeof(line),"< %s >  %d/%d",pages[page],general?page-3:page+1,general?2:4); M_PrintWhite(80,24,line);
++ BuildRows(); first=ViewFirst(); end=ViewEnd(first);
++ if(notice[0]) snprintf(line,sizeof(line),"%d-%d/%d  %.24s",first+1,end,rows,notice);
++ else snprintf(line,sizeof(line),"%s  rows %d-%d/%d",R_UseVulkan()?"Vulkan":"OpenGL",first+1,end,rows);
++ M_PrintWhite(16,36,line);
++ for(i=first;i<end;++i) {
+   int y=52+(i-first)*10;
+   if(!page) {
+    const char *labels[]={"Original preset","Clean preset","Soft Cel preset",NULL,"Save visual profile","Load visual profile","Compare original (F6)","Reset visual style"};
+@@ -242,14 +377,23 @@
+    line[0]=0;
+   }
+   if(i==first) M_Print_GetPoint(24,y,&window.x,&window.y,line,false); else if(!page) M_Print(24,y,line);
+-  if(page) DrawControl(indices[i],y);
+- }
+- window.w=280; window.h=min(rows-first,10)*10;
++  if(page) {
++   if(indices[i]<0) M_PrintWhite(24,y,(char *)groups[-indices[i]-1]);
++   else DrawControl(indices[i],depths[i],y);
++  }
++ }
++ window.w=280; window.h=(end-first)*10;
+  M_DrawCharacter(16,52+(cursor-first)*10,FLASHINGARROW());
+- snprintf(line,sizeof(line),"PgUp/PgDn: page   rows %d-%d/%d",first+1,min(rows,first+10),rows); M_PrintWhite(16,158,line);
+- M_PrintWhite(16,168,"F6: compare  F7: reset page");
+- if(page) { int index=indices[cursor]; snprintf(line,sizeof(line),"%.36s",index<CV_COUNT?opts[index].help:existing[index-CV_COUNT].help); M_PrintWhite(16,180,line); }
+- if(notice[0]) { snprintf(line,sizeof(line),"%.36s",notice); M_PrintWhite(16,190,line); }
++ if(RestartPending()) M_Print(16,136,"Video restart required - F5 applies");
++ DrawHelp(page?Help(indices[cursor]):profileHelp[cursor]);
++ if(page) {
++  const char *why=Unavailable(indices[cursor]);
++  if(why) { snprintf(line,sizeof(line),"%.36s",why); GreyText(16,180,line); }
++  else if(indices[cursor]==EXT(7) && R_UseVulkan()) {
++   snprintf(line,sizeof(line),"Active MSAA: %dx%s",actualMSAA,RestartPending()?"; change pending":""); M_PrintWhite(16,180,line);
++  }
++ }
++ M_PrintWhite(16,190,general?"PgUp/Dn: page  F7: reset page":"PgUp/Dn: page  F6: compare  F7: reset");
+ }
+ void CV_Key(int key) {
+  int index,direction=key==K_LEFTARROW?-1:1; cvar_t *v;
+@@ -262,23 +406,34 @@
+   return;
+  }
+  BuildRows();
++ if(key==K_F5) { if(RestartPending()) Cbuf_InsertText("vid_restart\n"); return; }
+  if(key==K_ESCAPE||key==K_MOUSE2) { M_LeaveMenu(m_options); return; }
+- if(key==K_F6) { Compare(); return; }
+- if(key==K_F7) { if(comparing) Restore(); Reset(page?page:-1); strlcpy(notice,"Restored default visual settings.",sizeof(notice)); return; }
+- if(key==K_PGUP||key==K_PGDN||key==K_TAB) { notice[0]=0; page=(page+(key==K_PGUP?5:1))%6; cursor=0; return; }
+- if(key==K_UPARROW||key==K_MWHEELUP) { cursor=(cursor+rows-1)%rows; return; }
+- if(key==K_DOWNARROW||key==K_MWHEELDOWN) { cursor=(cursor+1)%rows; return; }
+- if(key==K_HOME) { cursor=0; return; } if(key==K_END) { cursor=rows-1; return; }
++ if(key==K_F6) { if(!general) Compare(); return; }
++ if(key==K_F7) { if(comparing) Restore(); Reset(page?page:-2); strlcpy(notice,"Restored default visual settings.",sizeof(notice)); return; }
++ if(key==K_PGUP||key==K_PGDN||key==K_TAB) {
++  int count=general?2:4, base=general?4:0;
++  notice[0]=0; page=base+(page-base+(key==K_PGUP?count-1:1))%count; cursor=0; BuildRows(); return;
++ }
++ if(key==K_UPARROW||key==K_MWHEELUP||key==K_DOWNARROW||key==K_MWHEELDOWN) {
++  int step=(key==K_UPARROW||key==K_MWHEELUP)?-1:1;
++  do { cursor=(cursor+rows+step)%rows; } while(page && indices[cursor]<0); return;
++ }
++ if(key==K_HOME) { cursor=0; BuildRows(); return; } if(key==K_END) { cursor=rows-1; return; }
+  if(key!=K_ENTER&&key!=K_MOUSE1&&key!=K_LEFTARROW&&key!=K_RIGHTARROW) return;
+  if(!page) {
+   if(cursor<3) Preset(cursor);
+   else if(cursor==3) editing=true;
+   else if(cursor==4||cursor==5) Profile(cursor==5,profile);
+   else if(cursor==6) Compare();
+-  else { if(comparing) Restore(); Reset(-1); }
++  else { if(comparing) Restore(); Reset(-2); }
+   return;
+  }
+- if(comparing) Restore(); index=indices[cursor]; v=Var(index); if(!v) return;
++ index=indices[cursor];
++ if(index==CV_RESTART_ROW) { CV_Key(K_F5); return; }
++ if(Unavailable(index) && !comparing) return;
++ if(comparing) Restore();
++ if(Unavailable(index)) return;
++ v=Var(index); if(!v) return;
+  if(index<CV_COUNT) {
+   float value=CV_Value(index);
+   if((key==K_ENTER||key==K_MOUSE1)&&opts[index].lo==0&&opts[index].hi==1&&opts[index].step==1) value=1-value;
+@@ -306,12 +461,14 @@
+  double track=window.x+CV_SLIDER_X-24;
+  if(ms->button_up==2) { CV_Key(K_MOUSE2); return true; }
+  if(editing) return true;
+- BuildRows(); first=(cursor/10)*10; selected=cursor-first;
+- inside=M_Mouse_Select(&window,ms,min(rows-first,10),&selected);
++ BuildRows(); first=ViewFirst(); selected=cursor-first;
++ inside=M_Mouse_Select(&window,ms,ViewEnd(first)-first,&selected);
++ if(inside && page && indices[first+selected]<0) inside=false;
+  if(dragging<0 && inside) cursor=first+selected;
+- if(dragging<0 && inside && page && Slider(indices[cursor]) &&
++ if(dragging<0 && inside && page && !Unavailable(indices[cursor]) && Slider(indices[cursor]) &&
+     x>=track-8 && x<=track+CV_SLIDER_TRAVEL+16 && ms->button_down==1) dragging=indices[cursor];
+  if(dragging>=0) {
++  if(Unavailable(dragging)) { dragging=-1; return true; }
+   if(ms->buttons[1] || ms->button_down==1 || ms->button_up==1) {
+    float lo,hi,step,value;
+    Bounds(dragging,&lo,&hi,&step);
+@@ -337,15 +494,72 @@
+  else if(!strcmp(action,"compare")) Compare();
+  else Con_Printf("cv preset original|clean|cel; cv save|load <name>; cv compare\n");
+ }
++// Opt-in local screenshot fixture. No effect without both -dev and -visual-tests.
++static qbool photoActive;
++static double photoTime;
++static vec3_t photoOrigin, photoAngles;
++static qbool PhotoAllowed(void) {
++#ifndef CLIENTONLY
++ const netadr_t *address=&cls.netchan.remote_address;
++ return IsDeveloperMode() && COM_FindParm("-visual-tests") && sv.state==ss_active &&
++  cls.state==ca_active && r_refdef2.allow_cheats &&
++  (address->type==NA_LOOPBACK || (address->type==NA_IP && address->ip[0]==127));
++#else
++ return false;
++#endif
++}
++void CV_TestView(void) {
++ if(!photoActive || !PhotoAllowed()) return;
++ cl.time=photoTime; r_refdef2.time=photoTime;
++ VectorCopy(photoOrigin,r_refdef.vieworg); VectorCopy(photoAngles,r_refdef.viewangles);
++}
++static void PhotoCommand(void) {
++#ifndef CLIENTONLY
++ const char *action=Cmd_Argv(2); int i;
++ if(!PhotoAllowed()) { Con_Printf("CV_PHOTO rejected: requires opt-in local cheat-enabled test server.\n"); return; }
++ if(!strcmp(action,"freeze")) {
++  VectorCopy(r_refdef.vieworg,photoOrigin); VectorCopy(r_refdef.viewangles,photoAngles);
++  photoTime=cl.time; if(!sv.paused) SV_TogglePause(NULL,1); cl.paused|=PAUSED_SERVER; photoActive=true;
++ } else if(!strcmp(action,"camera") && Cmd_Argc()==9) {
++  for(i=0;i<3;++i) { photoOrigin[i]=(float)atof(Cmd_Argv(3+i)); photoAngles[i]=(float)atof(Cmd_Argv(6+i)); }
++ } else if(!strcmp(action,"actors") && photoActive) {
++  vec3_t forward,right;
++  model_t *player=cl.model_precache[cl_modelindices[mi_player]], *ordinary=NULL;
++  if(!player || cl.num_statics+3>=MAX_STATIC_ENTITIES) return;
++  for(i=1;i<MAX_MODELS;++i) if(cl.model_precache[i] && strstr(cl.model_precache[i]->name,"backpack")) { ordinary=cl.model_precache[i]; break; }
++  AngleVectors(photoAngles,forward,right,NULL);
++  for(i=0;i<3;++i) {
++   entity_t *ent;
++   if(i==2 && !ordinary) continue;
++   ent=&cl_static_entities[cl.num_statics++]; memset(ent,0,sizeof(*ent));
++   ent->entity_id=cl.num_statics; ent->model=i<2?player:ordinary; ent->colormap=vid.colormap;
++   VectorMA(photoOrigin,80,forward,ent->origin); VectorMA(ent->origin,(i-1)*30,right,ent->origin);
++   ent->origin[2]=photoOrigin[2]-22; ent->angles[1]=photoAngles[1]+135;
++   if(i<2) {
++    int slot=MAX_CLIENTS-1-i;
++    cl.players[slot]=cl.players[cl.playernum]; cl.players[slot].teammate=i==0;
++    cl.players[slot].topcolor=i?13:4; cl.players[slot].bottomcolor=3;
++    ent->scoreboard=&cl.players[slot]; ent->renderfx=RF_PLAYERMODEL;
++   }
++   R_AddEfrags(ent);
++  }
++ }
++ Con_Printf("CV_PHOTO active=%d origin=%g,%g,%g angles=%g,%g,%g statics=%d time=%g\n",photoActive,
++  photoOrigin[0],photoOrigin[1],photoOrigin[2],photoAngles[0],photoAngles[1],photoAngles[2],cl.num_statics,cl.time);
++#endif
++}
+ static void Developer(void) {
+  if(!developer.value) return;
++ if(!strcmp(Cmd_Argv(1),"photo")) { PhotoCommand(); return; }
+  if(!strcmp(Cmd_Argv(1),"checkpoint")) { cbuf_main.runAwayLoop=cbuf_main.waitCount=0; return; }
+  if(!strcmp(Cmd_Argv(1),"key")) CV_Key(Key_StringToKeynum(Cmd_Argv(2)));
+- if(!strcmp(Cmd_Argv(1),"page")) { page=bound(0,atoi(Cmd_Argv(2)),5);cursor=0;BuildRows(); }
++ if(!strcmp(Cmd_Argv(1),"page")) { page=bound(0,atoi(Cmd_Argv(2)),5);general=page>=4;cursor=0;BuildRows(); }
+  if(!strcmp(Cmd_Argv(1),"select")) {
+   int i;
+   for(i=0;i<CV_TOTAL;++i) if(Var(i)&&!strcmp(Var(i)->name,Cmd_Argv(2))) {
+-   int row; page=i<CV_COUNT?opts[i].page:existing[i-CV_COUNT].page; BuildRows();
++   int row,target=i<CV_COUNT?opts[i].page:existing[i-CV_COUNT].page;
++   if(target<0) { Con_Printf("CV_MOVED %s: %s\n",Var(i)->name,Help(i)); return; }
++   page=target; general=page>=4; BuildRows();
+    for(row=0;row<rows;++row) if(indices[row]==i) cursor=row;
+    break;
+   }
+@@ -353,15 +567,23 @@
+  if(!strcmp(Cmd_Argv(1),"mouse")) {
+   mouse_state_t ms={0};
+   ms.x=(window.x+CV_SLIDER_X-24+atof(Cmd_Argv(3))*CV_SLIDER_TRAVEL)*(scr_scaleMenu.value?(double)vid.width/menuwidth:1);
+-  ms.y=(window.y+(cursor%10)*10+4)*(scr_scaleMenu.value?(double)vid.height/menuheight:1);
++  ms.y=(window.y+(cursor-ViewFirst())*10+4)*(scr_scaleMenu.value?(double)vid.height/menuheight:1);
+   ms.button_down=!strcmp(Cmd_Argv(2),"down")?1:0;
+   ms.button_up=!strcmp(Cmd_Argv(2),"up")?1:0;
+   ms.buttons[1]=!ms.button_up; CV_Mouse(&ms);
+  }
+  Con_Printf("CV_STATE page=%d rows=%d active=%d compare=%d rim=%g bloom=%g\n",page,rows,CV_Active(),comparing,CV_Value(CV_rim),CV_Value(CV_bloom));
++ if(page) Con_Printf("CV_HELP %s enabled=%d: %s | %s\n",indices[cursor]==CV_RESTART_ROW?"restart_video":Var(indices[cursor])->name,!Unavailable(indices[cursor]),Help(indices[cursor]),Unavailable(indices[cursor])?Unavailable(indices[cursor]):"Ready");
++ else Con_Printf("CV_HELP profile%d: %s\n",cursor,profileHelp[cursor]);
++ if(!strcmp(Cmd_Argv(1),"params")) {
++  cv_params_t params; CV_Params(&params);
++  Con_Printf("CV_PARAMS style=%d post=%d bloom=%g exposure=%g light=%g ao=%g\n",CV_Active(),CV_PostActive(),params.post[2],params.post[0],params.light[0],params.post2[1]);
++ }
++ Con_Printf("CV_VIDEO pending=%d requested=%g applied=%d actual=%d\n",RestartPending(),ExistingValue("vid_framebuffer_multisample"),appliedMSAA,actualMSAA);
+ }
+ void CV_Init(void) {
+  int i; for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
+  Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
++ Cmd_AddCommand("menu_visual_effects",CV_OpenEffects);
+  if(IsDeveloperMode()) Cmd_AddCommand("dev_competitive",Developer);
+ }
+diff --git a/src/competitive_visuals.h b/src/competitive_visuals.h
+--- a/src/competitive_visuals.h
++++ b/src/competitive_visuals.h
+@@ -4,44 +4,44 @@
+ #include "menu.h"
+ /* One registry drives cvars, bounded shader values, menu and visual-only profiles. */
+ #define CV_OPTIONS(X) \
+- X(enable,"Enabled","0",0,1,1,1,"Enable the Vulkan visual style") \
+- X(detail,"Fine detail","1",0,1,.05,1,"Keep large patterns, reduce grain") \
+- X(pattern,"Pattern scale","2",0,5,.25,1,"Mip levels used for broad patterns") \
+- X(contrast,"Texture contrast","1",.2,1.5,.05,1,"Contrast around each broad pattern") \
+- X(saturation,"Saturation","1",0,1.5,.05,1,"World colour saturation") \
+- X(distance,"Distance smoothing","0",0,2,.1,1,"Gradual extra smoothing at distance") \
+- X(floor,"Floor colour","3",0,13,1,1,"Original Quake palette colour") \
+- X(wall,"Wall colour","2",0,13,1,1,"Original Quake palette colour") \
+- X(tint,"Surface tint","0",0,1,.05,1,"Blend floor/wall material colours") \
+- X(light,"Light response","0",0,2,1,2,"0 original  1 gradient  2 soft cel") \
+- X(lightmix,"Style blend","0",0,1,.05,2,"Blend styled and original lighting") \
+- X(worldlight,"World lighting","1",0,1,1,2,"Apply response to baked lighting") \
+- X(modellight,"Model lighting","1",0,1,1,2,"Apply response to ordinary models") \
+- X(shadow,"Shadow level","0.2",0,.7,.025,2,"Styled shadow brightness") \
+- X(midtone,"Midtone level","0.55",.1,1,.025,2,"Styled midtone brightness") \
+- X(highlight,"Highlight level","1",.5,1.5,.025,2,"Styled highlight brightness") \
+- X(bands,"Cel bands","4",2,8,1,2,"Number of lighting bands") \
+- X(softness,"Band softness","0.3",.05,1,.05,2,"Smooth transitions between bands") \
+- X(warmth,"Warm / cool","0",-.2,.2,.025,2,"Subtle light and shadow hue shift") \
+- X(rim,"Player rim","0",0,.2,.01,3,"Surface light; disabled on powerups") \
+- X(rimwidth,"Rim width","3",1,8,.25,3,"Higher values narrow the rim") \
+- X(rimup,"Upward bias","0.65",0,1,.05,3,"Favour upward facing surface normals") \
+- X(rimteam,"Team tint","0.15",0,.3,.025,3,"Very slight player shirt colour") \
+- X(edgewidth,"World edge width","1",.5,3,.1,3,"Screen-space world line width") \
+- X(edgestrength,"World edge opacity","1",0,1,.05,3,"Blend world lines into the scene") \
+- X(modelopacity,"Model edge opacity","1",0,1,.05,3,"Blend existing model outlines") \
+- X(edgepalette,"Use edge palette","0",0,1,1,3,"Override existing outline colours") \
+- X(worldedge,"World edge colour","0",0,13,1,3,"Quake palette colour for geometry") \
+- X(teamedge,"Friend edge colour","3",0,13,1,3,"Friendly player outline colour") \
+- X(enemyedge,"Enemy edge colour","0",0,13,1,3,"Enemy and other model outlines") \
+- X(bloom,"Bloom strength","0",0,.15,.005,4,"Zero disables bloom; HUD excluded") \
+- X(bloomthreshold,"Bloom threshold","0.9",.5,2,.05,4,"Only bright scene pixels contribute") \
+- X(bloomradius,"Bloom radius","2",.5,5,.25,4,"Small glow radius in screen pixels") \
+- X(ao,"World AO strength","0",0,.4,.025,4,"Restrained world contact shading") \
+- X(aoradius,"World AO radius","12",2,32,1,4,"World-space contact sample radius") \
+- X(exposure,"Exposure","1",.5,2,.05,5,"Manual scene exposure; HUD excluded") \
+- X(tonemap,"Tone curve","0",0,2,1,5,"0 original  1 soft shoulder  2 filmic") \
+- X(sharpen,"Scene sharpness","0",0,.5,.025,5,"Restrained scene-only sharpening")
++ X(enable,"Enabled","0",0,1,1,1,"Enable world readability, styled lighting and silhouettes. General effects stay independent.") \
++ X(detail,"Fine detail","1",0,1,.05,1,"Reduce fine texture grain while retaining broad patterns. One keeps original fine detail.") \
++ X(pattern,"Pattern scale","2",0,5,.25,1,"Choose how broad the retained texture patterns are. Higher values use coarser mip levels.") \
++ X(contrast,"Texture contrast","1",.2,1.5,.05,1,"Adjust fine-detail contrast relative to the broad texture pattern.") \
++ X(saturation,"Saturation","1",0,1.5,.05,1,"Control world colour saturation. Zero is grey; one preserves original saturation.") \
++ X(distance,"Distance smoothing","0",0,2,.1,1,"Gradually smooth distant texture detail to reduce visual noise.") \
++ X(floor,"Floor colour","3",0,13,1,1,"Choose the Quake palette colour blended into floors by Surface tint.") \
++ X(wall,"Wall colour","2",0,13,1,1,"Choose the Quake palette colour blended into walls by Surface tint.") \
++ X(tint,"Surface tint","0",0,1,.05,1,"Blend floor and wall colours into textures. Zero preserves original material colours.") \
++ X(light,"Light response","0",0,2,1,2,"Original lighting, smooth Gradient, or Soft Cel with adjustable lighting bands.") \
++ X(lightmix,"Style blend","0",0,1,.05,2,"Blend the selected lighting style with original lighting. Zero removes the style.") \
++ X(worldlight,"World lighting","1",0,1,1,2,"Apply the selected response to world lighting, including baked lightmaps.") \
++ X(modellight,"Model lighting","1",0,1,1,2,"Apply the response to ordinary models. Server rules can restrict player styling.") \
++ X(shadow,"Shadow level","0.2",0,.7,.025,2,"Set the brightness of the styled lighting shadow region. This is not a cast-shadow control.") \
++ X(midtone,"Midtone level","0.55",.1,1,.025,2,"Set the brightness of the styled lighting middle region.") \
++ X(highlight,"Highlight level","1",.5,1.5,.025,2,"Set the brightness of the styled lighting highlight region.") \
++ X(bands,"Cel bands","4",2,8,1,2,"Set the number of Soft Cel lighting bands. Gradient mode does not use bands.") \
++ X(softness,"Band softness","0.3",.05,1,.05,2,"Smooth transitions between Soft Cel lighting bands.") \
++ X(warmth,"Warm / cool","0",-.2,.2,.025,2,"Shift styled highlights and shadows toward warm or cool colours.") \
++ X(rim,"Player rim","0",0,.2,.01,3,"Light visible player surfaces near the silhouette. Suppressed on powerups and by rulesets.") \
++ X(rimwidth,"Rim width","3",1,8,.25,3,"Shape the player rim. Higher values produce a narrower rim.") \
++ X(rimup,"Upward bias","0.65",0,1,.05,3,"Emphasize upward-facing player surfaces and reduce the rim on undersides.") \
++ X(rimteam,"Team tint","0.15",0,.3,.025,3,"Blend a subtle shirt-colour tint into the player rim.") \
++ X(edgewidth,"World edge width","1",.5,3,.1,3,"Control screen-space world line width when world outlines are enabled.") \
++ X(edgestrength,"World edge opacity","1",0,1,.05,3,"Control world outline opacity. Zero makes world lines invisible.") \
++ X(modelopacity,"Model edge opacity","1",0,1,.05,3,"Control model outline opacity. Requires model outlines and nonzero model edge width.") \
++ X(edgepalette,"Use edge palette","0",0,1,1,3,"Replace outline colours with the world, friend and enemy palette choices below.") \
++ X(worldedge,"World edge colour","0",0,13,1,3,"Set the palette colour used for world geometry outlines.") \
++ X(teamedge,"Friend edge colour","3",0,13,1,3,"Set the palette colour used for friendly player outlines.") \
++ X(enemyedge,"Enemy edge colour","0",0,13,1,3,"Set the palette colour used for enemy players and other model outlines.") \
++ X(bloom,"Bloom strength","0",0,.15,.005,4,"Add a glow around bright scene pixels. Zero disables bloom. The HUD is excluded.") \
++ X(bloomthreshold,"Bloom threshold","0.9",.5,2,.05,4,"Set the brightness required for pixels to contribute to bloom.") \
++ X(bloomradius,"Bloom radius","2",.5,5,.25,4,"Set the small glow radius in screen pixels. Requires nonzero Bloom strength.") \
++ X(ao,"World AO strength","0",0,.4,.025,4,"Darken world surface contacts using depth and normals. Zero disables contact shading.") \
++ X(aoradius,"World AO radius","12",2,32,1,4,"Set the world-space contact shading sample radius. Requires nonzero World AO strength.") \
++ X(exposure,"Exposure","1",.5,2,.05,5,"Adjust scene exposure before the HUD. One preserves the original exposure.") \
++ X(tonemap,"Tone curve","0",0,2,1,5,"Original response, a soft highlight shoulder, or a filmic tone curve. HUD is excluded.") \
++ X(sharpen,"Scene sharpness","0",0,.5,.025,5,"Sharpen scene detail after rendering. Zero disables sharpening. HUD is excluded.")
+ #define CV_ENUM(id,label,def,lo,hi,step,page,help) CV_##id,
+ typedef enum { CV_OPTIONS(CV_ENUM) CV_COUNT } cv_id;
+ #undef CV_ENUM
+@@ -49,11 +49,15 @@
+ void CV_Init(void);
+ float CV_Value(cv_id id);
+ qbool CV_Active(void);
++qbool CV_PostActive(void);
++void CV_VideoApplied(int requested, int actual);
++void CV_TestView(void);
+ qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked);
+ void CV_Params(cv_params_t *out);
+ void CV_EdgeColor(float *out, int kind);
+ void CV_PlayerParams(cv_params_t *out, entity_t *ent, int effects, int render_effects, const float *modelview);
+ void CV_Open(void);
++void CV_OpenEffects(void);
+ void CV_Draw(void);
+ void CV_Key(int key);
+ qbool CV_Mouse(const mouse_state_t *ms);
+diff --git a/src/menu_options.c b/src/menu_options.c
+--- a/src/menu_options.c
++++ b/src/menu_options.c
+@@ -976,6 +976,7 @@
+ // GRAPHICS TAB
+ setting settfps_arr[] = {
+ 	ADDSET_ACTION("Competitive Visuals", CV_Open, "World detail, lighting, silhouettes and visual profiles."),
++	ADDSET_ACTION("Visual Effects", CV_OpenEffects, "Bloom, ambient shading and scene image quality."),
+ 	ADDSET_BOOL		("Advanced Options", menu_advanced),
+ 	
+ 	ADDSET_SEPARATOR("Presets"),
+@@ -1014,7 +1015,6 @@
+ 	ADDSET_ADVANCED_SECTION(),
+ 	ADDSET_NUMBER	("Weapon Shift", r_viewmodeloffset, -10, 10, 1),
+ 	ADDSET_NAMED	("Weapon Muzzleflashes", cl_muzzleflash, muzzleflashes_enum),
+-	ADDSET_NAMED	("Outline", gl_outline, outline_enum),
+ 	ADDSET_BASIC_SECTION(),
+ 	
+ 	ADDSET_SEPARATOR("Environment"),
+@@ -1050,9 +1050,6 @@
+ 	ADDSET_BASIC_SECTION(),
+ 
+ 	ADDSET_SEPARATOR("Lighting"),
+-#ifdef RENDERER_OPTION_CLASSIC_OPENGL
+-	ADDSET_BOOL		("GL Bloom", r_bloom),
+-#endif
+ 	ADDSET_NAMED	("Powerup Glow", r_powerupglow, powerupglow_enum),
+ 	ADDSET_NUMBER	("Damage Flash", v_damagecshift, 0, 1, 0.1),
+ 	ADDSET_ADVANCED_SECTION(),
+diff --git a/src/r_rmain.c b/src/r_rmain.c
+--- a/src/r_rmain.c
++++ b/src/r_rmain.c
+@@ -383,6 +383,8 @@
+ {
+ 	vec3_t testorigin;
+ 	mleaf_t	*leaf;
++	extern void CV_TestView(void);
++	CV_TestView();
+ 
+ 	R_AnimateLight ();
+ 
+diff --git a/src/vk_draw.c b/src/vk_draw.c
+--- a/src/vk_draw.c
++++ b/src/vk_draw.c
+@@ -773,7 +773,7 @@
+ qbool VK_WorldOutlineActive(void)
+ {
+ 	extern qbool R_DrawWorldOutlines(void);
+-	return R_DrawWorldOutlines() || (CV_Active() && CV_Value(CV_ao) > 0);
++	return R_DrawWorldOutlines() || CV_Value(CV_ao) > 0;
+ }
+ 
+ static qbool VK_WorldOutlineCreatePipeline(void)
+@@ -1020,7 +1020,7 @@
+ 		return;
+ 	}
+ 
+-	push.aoStrength = CV_Active() ? CV_Value(CV_ao) : 0;
++	push.aoStrength = CV_Value(CV_ao);
+ 	push.aoRadius = CV_Value(CV_aoradius);
+ 	push.edges = R_DrawWorldOutlines() ? 1 : 0;
+  push.edgeOpacity = CV_Active() ? CV_Value(CV_edgestrength) : 1;
+diff --git a/src/vk_physical_devices.c b/src/vk_physical_devices.c
+--- a/src/vk_physical_devices.c
++++ b/src/vk_physical_devices.c
+@@ -469,6 +469,7 @@
+ void VK_DetermineMSAASampleCount(void)
+ {
+ 	extern cvar_t vid_framebuffer_multisample;
++	extern void CV_VideoApplied(int requested, int actual);
+ 	VkSampleCountFlags supported;
+ 	int requestedInt;
+ 	VkSampleCountFlagBits candidate;
+@@ -476,6 +477,7 @@
+ 	vk_options.msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+ 
+ 	if (vid_framebuffer_multisample.integer <= 1) {
++		CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
+ 		return;
+ 	}
+ 
+@@ -496,11 +498,13 @@
+ 			if (vk_options.msaaSamples != requestedInt) {
+ 				Con_Printf("vulkan: %dx multisampling requested, device supports up to %dx\n", requestedInt, (int)vk_options.msaaSamples);
+ 			}
++			CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
+ 			return;
+ 		}
+ 	}
+ 
+ 	Con_Printf("vulkan: device doesn't support multisampling, vid_framebuffer_multisample disabled\n");
++	CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
+ }
+ 
+ uint32_t VK_PhysicalDeviceGraphicsQueueFamilyIndex(void)
+diff --git a/src/vk_swapchain.c b/src/vk_swapchain.c
+--- a/src/vk_swapchain.c
++++ b/src/vk_swapchain.c
+@@ -236,7 +236,7 @@
+ // a restart.
+ qbool VK_PostProcessActive(void)
+ {
+-	if (CV_Active()) return true;
++	if (CV_Active() || CV_PostActive()) return true;
+ 	extern cvar_t v_gamma, v_contrast;
+ 	extern cvar_t vid_framebuffer_fxaa;
+ 	extern cvar_t vid_software_palette;

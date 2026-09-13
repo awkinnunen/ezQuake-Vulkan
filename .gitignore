@@ -21,3 +21,9 @@ src/.msversion.h
 CR*.md
 EZQUAKE_HUD_*.md
 TRACKER_*.md
+
+# Runtime test profiles may contain private installed data.
+/cache/
+
+# Retain the ordered source patches despite the inherited executable-name glob.
+!/patches/*.patch

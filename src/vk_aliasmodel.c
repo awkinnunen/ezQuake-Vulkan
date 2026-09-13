@@ -13,6 +13,7 @@ of the License, or (at your option) any later version.
 #include "quakedef.h"
 
 #include <stdarg.h>
+#include <stddef.h>
 
 #include "gl_model.h"
 #include "r_aliasmodel.h"
@@ -23,6 +24,7 @@ of the License, or (at your option) any later version.
 #include "rulesets.h"
 #include "tr_types.h"
 #include "vk_local.h"
+#include "competitive_visuals.h"
 
 extern const unsigned char vk_alias_model_vert_spv[];
 extern const unsigned int vk_alias_model_vert_spv_len;
@@ -65,6 +67,7 @@ typedef struct vk_alias_draw_s {
 	int blendMode;
 	qbool postscene;
 	qbool player;
+	cv_params_t cv;
 } vk_alias_draw_t;
 
 typedef struct vk_alias_push_s {
@@ -81,12 +84,23 @@ typedef struct vk_alias_push_s {
 	float textureIndex;
 } vk_alias_push_t;
 
-// aliasPipelineLayout is built against the bindless texture array
-// (VK_TextureBindlessDescriptorSetLayout) when the device supports descriptor
-// indexing, falling back to the legacy per-texture layout otherwise --
-// aliasUsingBindless records which one so VK_RenderAliasModels knows whether
-// to bind the one global set + push the texture index, or bind a fresh
-// per-draw descriptor set like before.
+// C/GLSL ABI contract; SPIR-V member offsets are also checked by Test-Vulkan.ps1.
+typedef char vk_alias_push_t_size_check[(sizeof(vk_alias_push_t) == 128) ? 1 : -1];
+typedef char vk_alias_push_t_mvp_check[(offsetof(vk_alias_push_t, mvp) == 0) ? 1 : -1];
+typedef char vk_alias_push_t_color_check[(offsetof(vk_alias_push_t, color) == 64) ? 1 : -1];
+typedef char vk_alias_push_t_altColor_check[(offsetof(vk_alias_push_t, altColor) == 80) ? 1 : -1];
+typedef char vk_alias_push_t_lerp_check[(offsetof(vk_alias_push_t, lerp) == 96) ? 1 : -1];
+typedef char vk_alias_push_t_textured_check[(offsetof(vk_alias_push_t, textured) == 100) ? 1 : -1];
+typedef char vk_alias_push_t_weapon_check[(offsetof(vk_alias_push_t, weapon) == 104) ? 1 : -1];
+typedef char vk_alias_push_t_mode_check[(offsetof(vk_alias_push_t, mode) == 108) ? 1 : -1];
+typedef char vk_alias_push_t_minLumaMix_check[(offsetof(vk_alias_push_t, minLumaMix) == 112) ? 1 : -1];
+typedef char vk_alias_push_t_scrollS_check[(offsetof(vk_alias_push_t, scrollS) == 116) ? 1 : -1];
+typedef char vk_alias_push_t_scrollT_check[(offsetof(vk_alias_push_t, scrollT) == 120) ? 1 : -1];
+typedef char vk_alias_push_t_textureIndex_check[(offsetof(vk_alias_push_t, textureIndex) == 124) ? 1 : -1];
+
+
+// Alias shaders require the bindless texture array. Initialization checks its
+// features and descriptor limits; a per-texture alias fallback is not implemented.
 static VkPipelineLayout aliasPipelineLayout;
 static qbool aliasUsingBindless;
 static VkPipeline aliasOpaquePipeline;
@@ -192,6 +206,7 @@ static qbool VK_AliasCreatePipeline(int blendMode)
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 	VkDescriptorSetLayout descriptorSetLayout;
+	VkDescriptorSetLayout cvLayouts[2];
 	VkPipeline* pipeline =
 		blendMode == VK_ALIAS_BLEND_SHADOW ? &aliasShadowPipeline :
 		blendMode == VK_ALIAS_BLEND_ADDITIVE ? &aliasAdditivePipeline :
@@ -342,11 +357,12 @@ static qbool VK_AliasCreatePipeline(int blendMode)
 
 		VK_InitialiseStructure(pipelineLayoutInfo);
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+		pipelineLayoutInfo.setLayoutCount = 2;
+		cvLayouts[0] = descriptorSetLayout; cvLayouts[1] = VK_CVLayout();
+		pipelineLayoutInfo.pSetLayouts = cvLayouts;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &aliasPipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &aliasPipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -498,6 +514,10 @@ static void VK_AliasQueueOutlineDraw(entity_t* ent, model_t* model, int firstVer
 	}
 
 	VK_AliasOutlineColor(ent, outlineColor);
+ if (CV_Active()) {
+  outlineColor[3] *= CV_Value(CV_modelopacity);
+  if (CV_Value(CV_edgepalette)) CV_EdgeColor(outlineColor,ent->scoreboard && ent->scoreboard->teammate ? 1 : 2);
+ }
 	outlineParams[0] = ent->outlineScale * RuleSets_ModelOutlineScale();
 	if (outlineParams[0] <= 0) {
 		return;
@@ -558,11 +578,19 @@ static void VK_AliasQueuePreparedDraw(
 	R_MultiplyMatrix(modelView, R_ProjectionMatrix(), mvp);
 
 	draw = &aliasDraws[aliasDrawCount++];
+	CV_PlayerParams(&draw->cv, ent, ent->effects, render_effects, modelView);
 	draw->firstVertex = (uint32_t)firstVertex;
 	draw->vertexCount = (uint32_t)vertexCount;
 	memcpy(draw->mvp, mvp, sizeof(draw->mvp));
 	memcpy(draw->color, color, sizeof(draw->color));
 	memcpy(draw->altColor, altColor ? altColor : emptyAltColor, sizeof(draw->altColor));
+	if (mode == VK_ALIAS_MODE_NORMAL) {
+		// altColor is unused by the normal fragment pass. Reuse its lanes so
+		// lighting stays within the existing 128-byte push-constant ABI.
+		draw->altColor[0] = ent->ambientlight;
+		draw->altColor[1] = ent->shadelight;
+		draw->altColor[2] = ent->angles[YAW] * M_PI / 180.0;
+	}
 	draw->lerp = bound(0.0f, lerpfrac, 1.0f);
 	draw->textured = textureReady ? 1.0f : 0.0f;
 	draw->weapon = (render_effects & RF_WEAPONMODEL) ? 1.0f : 0.0f;
@@ -620,7 +648,6 @@ void VK_AliasQueueDraw(entity_t* ent, model_t* model, int firstVertex, int verte
 	float color[4];
 	float shellColor1[4];
 	float shellColor2[4];
-	float light;
 	qbool invalidate_texture;
 
 	if (!ent || !model || vertexCount <= 0) {
@@ -636,11 +663,6 @@ void VK_AliasQueueDraw(entity_t* ent, model_t* model, int firstVertex, int verte
 	if (invalidate_texture) {
 		R_TextureReferenceInvalidate(texture);
 	}
-
-	light = ent->full_light ? 1.0f : bound(0.125f, (ent->ambientlight + ent->shadelight) / 256.0f, 1.0f);
-	color[0] *= light;
-	color[1] *= light;
-	color[2] *= light;
 
 	VK_AliasQueuePreparedDraw(
 		ent,
@@ -859,6 +881,7 @@ void VK_RenderAliasModels(qbool postscene)
 				lastPipeline = pipeline;
 			}
 		}
+		VK_CVBind(commandBuffer, aliasPipelineLayout, 1, &draw->cv);
 		vkCmdPushConstants(commandBuffer, aliasPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 		vkCmdDraw(commandBuffer, draw->vertexCount, 1, draw->firstVertex, 0);
 		++submitted;

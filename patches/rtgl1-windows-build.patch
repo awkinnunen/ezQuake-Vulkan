@@ -1,0 +1,48 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9adbe74..dbbcda8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.15)
+ project(RayTracedGL1 CXX C)
+ 
+ set(CMAKE_CXX_STANDARD 20)
++string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE)
+ 
+ # Vulkan
+ message(STATUS "Adding Vulkan. VulkanSDK: $ENV{VULKAN_SDK}")
+diff --git a/Source/Shaders/CmPrepareFinal.comp b/Source/Shaders/CmPrepareFinal.comp
+index 068f49e..0e87cbe 100644
+--- a/Source/Shaders/CmPrepareFinal.comp
++++ b/Source/Shaders/CmPrepareFinal.comp
+@@ -37,7 +37,7 @@ layout(local_size_x = COMPUTE_COMPOSE_GROUP_SIZE_X, local_size_y = COMPUTE_COMPO
+ 
+ #define A_GLSL 1
+ #define A_GPU 1
+-#include "ffx_a.h"
++#include "LPM/ffx_a.h"
+ layout(set = DESC_SET_LPM_PARAMS, binding = BINDING_LPM_PARAMS) readonly uniform LpmParams_BT
+ {
+     AU4 g_lpmParams[24];
+diff --git a/Source/Shaders/ShaderCommonGLSLFunc.h b/Source/Shaders/ShaderCommonGLSLFunc.h
+index ee788dc..7f1f479 100644
+--- a/Source/Shaders/ShaderCommonGLSLFunc.h
++++ b/Source/Shaders/ShaderCommonGLSLFunc.h
+@@ -69,10 +69,7 @@ layout(
+     binding = BINDING_TEXTURES)
+     uniform sampler2D globalTextures[];
+ 
+-sampler2D getTexture(uint textureIndex)
+-{
+-    return globalTextures[nonuniformEXT(textureIndex)];
+-}
++#define getTexture(textureIndex) globalTextures[nonuniformEXT(textureIndex)]
+ 
+ vec4 getTextureSample(uint textureIndex, const vec2 texCoord)
+ {
+@@ -594,4 +591,4 @@ vec3 getRayDirAY( vec2 inUV )
+     const float AY = 1.0 / globalUniform.renderHeight;
+     return getRayDir( inUV + vec2( 0, AY ) );
+ }
+-#endif // DESC_SET_GLOBAL_UNIFORM
+\ No newline at end of file
++#endif // DESC_SET_GLOBAL_UNIFORM

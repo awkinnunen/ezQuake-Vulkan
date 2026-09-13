@@ -13,6 +13,7 @@ of the License, or (at your option) any later version.
 #include "quakedef.h"
 
 #include <stdarg.h>
+#include <stddef.h>
 
 #include "gl_model.h"
 #include "r_aliasmodel.h"
@@ -90,6 +91,9 @@ typedef struct vk_world_draw_s {
 	int overlayMode;
 } vk_world_draw_t;
 
+// 128-byte shared world ABI. Tint cvars are already RGB bytes, so packing
+// them loses no precision; independent boolean/mode values use shared flags.
+#include "vulkan_shaders/vk_world_flags.h"
 typedef struct vk_world_push_s {
 	float mvp[16];
 	float color[4];
@@ -99,55 +103,27 @@ typedef struct vk_world_push_s {
 	float surfaceType;
 	float useSkyTexture;
 	float fastTurb;
-	float detailEnabled;
-	float textureless;
-	// 1.0 tells vk_world_flat.frag to paint surfaceType==0 (normal wall/floor)
-	// surfaces with pushConstants.color -- the real r_wallcolor/r_floorcolor
-	// value computed by VK_WorldFlatColorForSurface -- instead of the
-	// per-vertex baked texture-average color it otherwise falls back to for
-	// surfaces whose real texture just isn't ready yet on Vulkan.
-	float drawflatColor;
-	// Textured/lightmapped-pipeline equivalent of GLC/GLM's applyColorTinting():
-	// r_drawflat_mode 1 (tinted) multiplies the real texture by these colors,
-	// mode 2 (bright) replaces it with a luminance-preserving recolor, gated
-	// per-fragment by the EZQ_SURFACE_IS_FLOOR bit carried in vbo_world_vert_t's
-	// flags field (see the new location-3/4 "inFlags" vertex attribute in
-	// vk_world_textured.vert/vk_world_lightmapped.vert). Unlike vk_world_flat's
-	// drawflatColor (mode 0, whole surface replaced with a solid fill, routed
-	// through a completely separate pipeline), this keeps the real texture
-	// visible -- matching GLC/GLM, where tinted/bright surfaces never leave the
-	// normal textured draw path.
-	float floorColor[4];
-	float wallColor[4];
-	// 0 = off, 1 = tinted, 2 = bright -- mirrors r_drawflat_mode.integer.
-	float drawflatMode;
-	// Independently gate floor vs wall tinting, matching GLC/GLM's
-	// DRAW_FLATFLOORS/DRAW_FLATWALLS (r_drawflat 1 = both, 2 = floors only,
-	// 3 = walls only) -- these are NOT gated by drawflatMode/r_drawflat_mode,
-	// only by r_drawflat itself, same as the GLSL side.
-	float tintFloors;
-	float tintWalls;
-	// vk_world_flat.vert/.frag end their matching GLSL struct with a trailing
-	// vec3, which the std430-style push-constant layout rules align to 16
-	// bytes -- bumping that shader's real compiled block to 140 bytes even
-	// though every *other* field here is a plain scalar/array with no such
-	// jump. Padded to the next 16-byte multiple so this one shared C struct
-	// covers all 5 world pipelines that reuse it; validation correctly flags
-	// an undersized block for world_flat otherwise. 176 bytes total, above the
-	// Vulkan-guaranteed minimum of 128 but comfortably within the 256 typical
-	// desktop AMD/NVIDIA/Intel drivers expose -- same portability caveat as
-	// the rest of this struct (desktop-only branch; do not carry to Android).
-	// This trailing slot used to be pure padding; the textured/lightmapped/
-	// alpha_textured shaders never read a drawflatColor-shaped field here, so
-	// it's repurposed as causticsEnabled (GLC/GLM's gl_caustics, applied only
-	// to EZQ_SURFACE_UNDERWATER fragments) without growing the struct.
-	float causticsEnabled;
+	uint32_t floorColor;
+	uint32_t wallColor;
+	uint32_t flags;
 } vk_world_push_t;
+
+typedef char vk_world_push_size_check[(sizeof(vk_world_push_t) == VK_WORLD_PUSH_BYTES) ? 1 : -1];
+typedef char vk_world_push_mvp_check[(offsetof(vk_world_push_t, mvp) == 0) ? 1 : -1];
+typedef char vk_world_push_color_check[(offsetof(vk_world_push_t, color) == 64) ? 1 : -1];
+typedef char vk_world_push_cameraPosition_check[(offsetof(vk_world_push_t, cameraPosition) == 80) ? 1 : -1];
+typedef char vk_world_push_time_check[(offsetof(vk_world_push_t, time) == 96) ? 1 : -1];
+typedef char vk_world_push_alpha_check[(offsetof(vk_world_push_t, alpha) == 100) ? 1 : -1];
+typedef char vk_world_push_surfaceType_check[(offsetof(vk_world_push_t, surfaceType) == 104) ? 1 : -1];
+typedef char vk_world_push_useSkyTexture_check[(offsetof(vk_world_push_t, useSkyTexture) == 108) ? 1 : -1];
+typedef char vk_world_push_fastTurb_check[(offsetof(vk_world_push_t, fastTurb) == 112) ? 1 : -1];
+typedef char vk_world_push_floorColor_check[(offsetof(vk_world_push_t, floorColor) == 116) ? 1 : -1];
+typedef char vk_world_push_wallColor_check[(offsetof(vk_world_push_t, wallColor) == 120) ? 1 : -1];
+typedef char vk_world_push_flags_check[(offsetof(vk_world_push_t, flags) == 124) ? 1 : -1];
 
 // Must match the push_constant block in vk_world_normals.vert /
 // vk_world_normals.frag exactly. mat4 + vec4 + 2 floats = 88 bytes, well
-// inside the 128-byte guaranteed minimum (unlike vk_world_push_t, which is
-// desktop-only at 176) -- this one is portable as-is.
+// inside the 128-byte guaranteed minimum.
 typedef struct vk_world_normals_push_s {
 	float mvp[16];
 	float cameraPosition[4];
@@ -715,7 +691,7 @@ static qbool VK_WorldCreateFlatPipeline(void)
 	VkPipelineDynamicStateCreateInfo dynamicState;
 	VkPushConstantRange pushConstantRange;
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-	VkDescriptorSetLayout setLayouts[2];
+	VkDescriptorSetLayout setLayouts[5];
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 
 	if (worldFlatPipeline != VK_NULL_HANDLE) {
@@ -838,6 +814,8 @@ static qbool VK_WorldCreateFlatPipeline(void)
 
 	setLayouts[0] = worldFlatSkyDescriptorSetLayout;
 	setLayouts[1] = VK_TextureDescriptorSetLayout();
+	setLayouts[2] = setLayouts[3] = setLayouts[1];
+	setLayouts[4] = VK_CVLayout();
 	if (setLayouts[1] == VK_NULL_HANDLE) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
@@ -846,11 +824,11 @@ static qbool VK_WorldCreateFlatPipeline(void)
 
 	VK_InitialiseStructure(pipelineLayoutInfo);
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 2;
+	pipelineLayoutInfo.setLayoutCount = 5;
 	pipelineLayoutInfo.pSetLayouts = setLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldFlatPipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldFlatPipelineLayout) != VK_SUCCESS) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 		return false;
@@ -902,7 +880,7 @@ static qbool VK_WorldCreateTexturedPipeline(void)
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkDescriptorSetLayout descriptorSetLayouts[3];
+	VkDescriptorSetLayout descriptorSetLayouts[5];
 
 	if (worldTexturedPipeline != VK_NULL_HANDLE) {
 		return true;
@@ -915,6 +893,8 @@ static qbool VK_WorldCreateTexturedPipeline(void)
 	descriptorSetLayouts[0] = descriptorSetLayout;
 	descriptorSetLayouts[1] = descriptorSetLayout;
 	descriptorSetLayouts[2] = descriptorSetLayout;
+	descriptorSetLayouts[3] = descriptorSetLayout;
+	descriptorSetLayouts[4] = VK_CVLayout();
 
 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_textured_vert_spv, vk_world_textured_vert_spv_len);
 	fragShaderModule = VK_WorldCreateShaderModule(vk_world_textured_frag_spv, vk_world_textured_frag_spv_len);
@@ -1038,7 +1018,7 @@ static qbool VK_WorldCreateTexturedPipeline(void)
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldTexturedPipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldTexturedPipelineLayout) != VK_SUCCESS) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 		return false;
@@ -1243,7 +1223,7 @@ static qbool VK_WorldCreateOverlayPipeline(qbool luma)
 		pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOverlayPipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOverlayPipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -1296,7 +1276,7 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkDescriptorSetLayout descriptorSetLayouts[3];
+	VkDescriptorSetLayout descriptorSetLayouts[5];
 
 	if (worldAlphaTexturedPipeline != VK_NULL_HANDLE) {
 		return true;
@@ -1309,6 +1289,8 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
 	descriptorSetLayouts[0] = descriptorSetLayout;
 	descriptorSetLayouts[1] = descriptorSetLayout;
 	descriptorSetLayouts[2] = descriptorSetLayout;
+	descriptorSetLayouts[3] = descriptorSetLayout;
+	descriptorSetLayouts[4] = VK_CVLayout();
 
 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_alpha_textured_vert_spv, vk_world_alpha_textured_vert_spv_len);
 	fragShaderModule = VK_WorldCreateShaderModule(vk_world_alpha_textured_frag_spv, vk_world_alpha_textured_frag_spv_len);
@@ -1438,7 +1420,7 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldAlphaTexturedPipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldAlphaTexturedPipelineLayout) != VK_SUCCESS) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 		return false;
@@ -1490,7 +1472,7 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 	VkDescriptorSetLayout descriptorSetLayout;
-	VkDescriptorSetLayout descriptorSetLayouts[4];
+	VkDescriptorSetLayout descriptorSetLayouts[5];
 
 	if (worldLightmappedPipeline != VK_NULL_HANDLE) {
 		return true;
@@ -1503,6 +1485,8 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
 	descriptorSetLayouts[0] = descriptorSetLayout;
 	descriptorSetLayouts[1] = descriptorSetLayout;
 	descriptorSetLayouts[2] = descriptorSetLayout;
+	descriptorSetLayouts[3] = descriptorSetLayout;
+	descriptorSetLayouts[4] = VK_CVLayout();
 	descriptorSetLayouts[3] = descriptorSetLayout;
 
 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_lightmapped_vert_spv, vk_world_lightmapped_vert_spv_len);
@@ -1633,7 +1617,7 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldLightmappedPipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldLightmappedPipelineLayout) != VK_SUCCESS) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 		return false;
@@ -1810,7 +1794,7 @@ static qbool VK_WorldCreateNormalsPipeline(void)
 		pipelineLayoutInfo.setLayoutCount = 0;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldNormalsPipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldNormalsPipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -2530,14 +2514,14 @@ void VK_RenderView(void)
 			push.surfaceType = worldDraws[i].surfaceType;
 			push.useSkyTexture = VK_WORLD_SKY_MODE_NONE;
 			push.fastTurb = (worldDraws[i].surfaceType > 0.5f && worldDraws[i].surfaceType < 5.5f && r_fastturb.integer) ? 1.0f : 0.0f;
-			push.detailEnabled = (worldDraws[i].detail && VK_WorldDetailTextureReady()) ? 1.0f : 0.0f;
-			push.causticsEnabled = (worldDraws[i].caustics && VK_WorldCausticsTextureReady()) ? 1.0f : 0.0f;
+			push.flags |= ((worldDraws[i].detail && VK_WorldDetailTextureReady())) ? VK_WORLD_DETAIL : 0u;
+			push.flags |= ((worldDraws[i].caustics && VK_WorldCausticsTextureReady())) ? VK_WORLD_CAUSTICS : 0u;
 			// Matches Modern OpenGL's DRAW_TEXTURELESS: keep the normal
 			// lit/lightmapped pipeline (so depth shading, outlines, detail
 			// textures etc. are unaffected), just force the diffuse texture
 			// sample to a single fixed texel in the fragment shader instead
 			// of the surface's real UVs.
-			push.textureless = gl_textureless.integer ? 1.0f : 0.0f;
+			push.flags |= (gl_textureless.integer) ? VK_WORLD_TEXTURELESS : 0u;
 			// Tinted/bright r_drawflat_mode (1/2) for the textured/lightmapped
 			// pipelines -- mode 0 ("normal", solid replace) is already handled
 			// entirely by the separate vk_world_flat pipeline via drawflatColor
@@ -2545,17 +2529,11 @@ void VK_RenderView(void)
 			// vk_world_lightmapped.frag for how these are applied per-fragment,
 			// gated by the surface's EZQ_SURFACE_IS_FLOOR bit (inFlags).
 			if (r_drawflat.integer && r_drawflat_mode.integer) {
-				push.drawflatMode = (float)r_drawflat_mode.integer;
-				push.tintFloors = (r_drawflat.integer == 1 || r_drawflat.integer == 2) ? 1.0f : 0.0f;
-				push.tintWalls = (r_drawflat.integer == 1 || r_drawflat.integer == 3) ? 1.0f : 0.0f;
-				push.floorColor[0] = (float)r_floorcolor.color[0] / 255.0f;
-				push.floorColor[1] = (float)r_floorcolor.color[1] / 255.0f;
-				push.floorColor[2] = (float)r_floorcolor.color[2] / 255.0f;
-				push.floorColor[3] = 1.0f;
-				push.wallColor[0] = (float)r_wallcolor.color[0] / 255.0f;
-				push.wallColor[1] = (float)r_wallcolor.color[1] / 255.0f;
-				push.wallColor[2] = (float)r_wallcolor.color[2] / 255.0f;
-				push.wallColor[3] = 1.0f;
+				push.flags |= r_drawflat_mode.integer > 1 ? VK_WORLD_BRIGHT : VK_WORLD_TINTED;
+				push.flags |= ((r_drawflat.integer == 1 || r_drawflat.integer == 2)) ? VK_WORLD_TINT_FLOORS : 0u;
+				push.flags |= ((r_drawflat.integer == 1 || r_drawflat.integer == 3)) ? VK_WORLD_TINT_WALLS : 0u;
+				push.floorColor = (uint32_t)r_floorcolor.color[0] | ((uint32_t)r_floorcolor.color[1] << 8) | ((uint32_t)r_floorcolor.color[2] << 16) | 0xff000000u;
+				push.wallColor = (uint32_t)r_wallcolor.color[0] | ((uint32_t)r_wallcolor.color[1] << 8) | ((uint32_t)r_wallcolor.color[2] << 16) | 0xff000000u;
 			}
 			if (worldDraws[i].surfaceType == TEXTURE_TURB_SKY) {
 				if (VK_WorldSkyboxTexturesReady()) {
@@ -2621,16 +2599,8 @@ void VK_RenderView(void)
 				VkDescriptorSet descriptorSets[2];
 				texture_ref lightmapTex = VK_TextureReady(worldDraws[i].lightmap) ? worldDraws[i].lightmap : solidwhite_texture;
 
-				// vk_world_flat.frag's push-constant block is a strict prefix of
-				// vk_world_push_t (it ends right after this field), so its
-				// "drawflatColor" lands at the same byte offset as this struct's
-				// OWN drawflatColor field -- not causticsEnabled, which lives much
-				// further along in the full 176-byte block that only the
-				// textured/lightmapped shaders read. Writing causticsEnabled here
-				// left the real drawflatColor slot zeroed (memset above), so the
-				// flat fragment shader always took its "texture not ready yet"
-				// fallback branch instead of painting r_wallcolor/r_floorcolor.
-				push.drawflatColor = worldDraws[i].drawflatCvar ? 1.0f : 0.0f;
+				// Flat colour and caustics have independent flags in every world pass.
+				push.flags |= (worldDraws[i].drawflatCvar) ? VK_WORLD_DRAWFLAT_COLOR : 0u;
 				descriptorSets[1] = VK_TextureDescriptorSet(lightmapTex);
 				if (VK_WorldFlatSkyDescriptorSet(&descriptorSets[0]) && descriptorSets[1] != VK_NULL_HANDLE) {
 					VK_WorldBindIfChanged(commandBuffer, worldFlatPipeline, worldFlatPipelineLayout, descriptorSets, 2,
@@ -2653,6 +2623,7 @@ void VK_RenderView(void)
 				vkCmdSetDepthBias(commandBuffer, depthBiasActive ? -4.0f : 0.0f, 0.0f, depthBiasActive ? -0.125f : 0.0f);
 			}
 
+			VK_CVBind(commandBuffer, layout, 4, NULL);
 			vkCmdPushConstants(commandBuffer, layout, pushStages, 0, sizeof(push), &push);
 			vkCmdDrawIndexed(commandBuffer, worldDraws[i].indexCount, 1, worldDraws[i].firstIndex, 0, 0);
 			if (VK_WorldDrawOverlay(commandBuffer, &worldDraws[i], &push, lumaPipelineReady, fullbrightPipelineReady)) {

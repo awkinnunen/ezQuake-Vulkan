@@ -1028,6 +1028,39 @@ qbool LoadCfg(FILE *f)
 	return true;
 }
 
+/* Load the exact file selected in the browser, without basename fallback.
+ * OpenAI Codex, 2026-09-13. Read completely before changing settings. */
+qbool Cfg_LoadConfigFile(const char *path)
+{
+	FILE *f = fopen(path, "rb");
+	char *data, restore[128];
+	long length;
+	if (!f) return false;
+	if (fseek(f, 0, SEEK_END) || (length = ftell(f)) < 0 || length > 1024 * 1024 || fseek(f, 0, SEEK_SET)) {
+		fclose(f); return false;
+	}
+	data = Q_malloc(length + 1);
+	if (fread(data, 1, length, f) != (size_t)length || memchr(data, 0, length)) {
+		fclose(f); Q_free(data); return false;
+	}
+	fclose(f);
+	data[length] = 0;
+	/* Leave room for defaults/load bookkeeping; never report a dropped file as loaded. */
+	if ((size_t)length + 4096 > cbuf_main.maxsize - (cbuf_main.text_end - cbuf_main.text_start)) {
+		Q_free(data); return false;
+	}
+	con_suppress = true;
+	ResetConfigs(false, true);
+	con_suppress = false;
+	snprintf(restore, sizeof(restore), "\ncon_bindphysical %d\nf_cfgload\ncl_warncmd 1\n", con_bindphysical.integer);
+	Cbuf_AddText("cl_warncmd 0\ncon_bindphysical 1\n");
+	Cbuf_AddText(length >= 3 && !memcmp(data, "\xef\xbb\xbf", 3) ? data + 3 : data);
+	Cbuf_AddText(restore);
+	Com_Printf("Loading config: %s\n", path);
+	Q_free(data);
+	return true;
+}
+
 /*
 	example how it works
 	

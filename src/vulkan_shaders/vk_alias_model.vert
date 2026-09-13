@@ -1,4 +1,9 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+#define CV_SET 1
+#include "vk_competitive.glsl"
+#extension GL_GOOGLE_include_directive : require
+#include "vk_alias_lighting.glsl"
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoord;
@@ -26,6 +31,9 @@ layout(location = 3) out vec2 outAltTexCoord;
 layout(location = 4) out vec4 outAltColor;
 layout(location = 5) out float outMode;
 layout(location = 6) out float outMinLumaMix;
+layout(location = 7) out vec3 cvNormal;
+layout(location = 8) out vec3 cvPosition;
+layout(location = 9) out float cvUp;
 
 void main()
 {
@@ -52,6 +60,15 @@ void main()
 	clip.z = clip.z * 0.5 + clip.w * 0.5;
 
 	gl_Position = clip;
+	cvPosition = cvNormal = vec3(0);
+	cvUp = 0;
+	// Uniform per-draw branch: ordinary rendering and powerup passes do not
+	// pay for a normal-matrix inverse when the surface rim is disabled.
+	if (cv.rim.x > 0.0 && pushConstants.mode < 0.5) {
+		cvPosition = (cv.modelView * vec4(position,1)).xyz;
+		cvNormal = transpose(inverse(mat3(cv.modelView))) * inNormal;
+		cvUp = inNormal.z;
+	}
 	if (pushConstants.mode > 3.5) {
 		outTexCoord = inTexCoord;
 		outAltTexCoord = inTexCoord;
@@ -69,7 +86,7 @@ void main()
 		outTexCoord = inTexCoord;
 		outAltTexCoord = inTexCoord;
 	}
-	outColor = pushConstants.color;
+	outColor = aliasLitColor(pushConstants.color, inNormal, pushConstants.altColor.xyz, pushConstants.mode);
 	outAltColor = pushConstants.altColor;
 	outTextured = pushConstants.textured;
 	outMode = pushConstants.mode;

@@ -1,0 +1,233 @@
+[
+  {
+    "id": "CODE-001",
+    "repository": "rtgl1",
+    "paths": [
+      "CMakeLists.txt"
+    ]
+  },
+  {
+    "id": "CODE-002",
+    "repository": "rtgl1",
+    "paths": [
+      "Source/Shaders/CmPrepareFinal.comp"
+    ]
+  },
+  {
+    "id": "CODE-003",
+    "repository": "rtgl1",
+    "paths": [
+      "Source/Shaders/ShaderCommonGLSLFunc.h"
+    ]
+  },
+  {
+    "id": "CODE-004",
+    "repository": "vkquake-rt",
+    "paths": [
+      "Quake/host_cmd.c"
+    ]
+  },
+  {
+    "id": "CODE-005",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/vk_aliasmodel.c",
+      "src/vk_draw.c",
+      "src/vk_local.h",
+      "src/vk_main.c",
+      "src/vk_misc.c",
+      "src/vk_physical_devices.c",
+      "src/vk_resources.c",
+      "src/vk_sprite3d.c",
+      "src/vk_vao.c",
+      "src/vk_world.c",
+      "src/vk_limits.h",
+      "src/vulkan_shaders/vk_world_alpha_textured.frag",
+      "src/vulkan_shaders/vk_world_alpha_textured.vert",
+      "src/vulkan_shaders/vk_world_flat.frag",
+      "src/vulkan_shaders/vk_world_flat.vert",
+      "src/vulkan_shaders/vk_world_lightmapped.frag",
+      "src/vulkan_shaders/vk_world_lightmapped.vert",
+      "src/vulkan_shaders/vk_world_overlay.frag",
+      "src/vulkan_shaders/vk_world_textured.frag",
+      "src/vulkan_shaders/vk_world_textured.vert",
+      "src/vulkan_shaders/vk_sprite3d.frag",
+      "src/vulkan_shaders/vk_sprite3d.vert",
+      "src/vulkan_shaders/vk_world_push.glsl",
+      "src/vulkan_shaders/vk_world_flags.h"
+    ]
+  },
+  {
+    "id": "CODE-006",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/vk_main.c",
+      "src/vk_swapchain.c"
+    ]
+  },
+  {
+    "id": "CODE-007",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/EX_qtvlist.c",
+      "src/host.c"
+    ]
+  },
+  {
+    "id": "CODE-008",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/vk_main.c"
+    ]
+  },
+  {
+    "id": "CODE-009",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/vulkan_shaders/vk_world_flat.frag",
+      "src/vulkan_shaders/vk_skybox_uv.glsl"
+    ]
+  },
+  {
+    "id": "CODE-010",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/vk_aliasmodel.c",
+      "src/vulkan_shaders/vk_alias_model.vert",
+      "src/vulkan_shaders/vk_alias_lighting.glsl"
+    ]
+  },
+  {
+    "id": "CODE-011",
+    "repository": "ktx",
+    "paths": [
+      "src/doors.c"
+    ]
+  },
+  {
+    "id": "CODE-012",
+    "repository": "ktx",
+    "paths": [
+      "src/subs.c"
+    ]
+  },
+  {
+    "id": "CFG-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/EX_FileList.c",
+      "src/EX_FileList.h",
+      "src/config_manager.c",
+      "src/config_manager.h",
+      "src/keys.c",
+      "src/keys.h",
+      "src/menu_options.c",
+      "src/cfg_bindings.c",
+      "src/cfg_bindings.h",
+      "src/menu_config.c",
+      "src/menu_config.h"
+    ]
+  },
+  {
+    "id": "SP-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/menu.c",
+      "src/sv_init.c",
+      "src/pr_edict.c",
+      "src/pr2_exec.c",
+      "src/fs.c"
+    ]
+  },
+  {
+    "id": "ARENA-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/menu.c",
+      "src/menu.h",
+      "src/menu_local.c",
+      "src/menu_local.h"
+    ]
+  },
+  {
+    "id": "ARENA-002",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/cl_main.c",
+      "src/menu_local.c",
+      "src/menu_local.h"
+    ]
+  },
+  {
+    "id": "CV-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/cl_main.c",
+      "src/competitive_visuals.c",
+      "src/competitive_visuals.h",
+      "src/menu.c",
+      "src/menu.h",
+      "src/menu_options.c",
+      "src/vk_aliasmodel.c",
+      "src/vk_competitive.c",
+      "src/vk_draw.c",
+      "src/vk_local.h",
+      "src/vk_main.c",
+      "src/vk_renderpass.c",
+      "src/vk_swapchain.c",
+      "src/vk_world.c",
+      "src/vulkan_shaders/vk_alias_model.frag",
+      "src/vulkan_shaders/vk_alias_model.vert",
+      "src/vulkan_shaders/vk_competitive.glsl",
+      "src/vulkan_shaders/vk_post_process.frag",
+      "src/vulkan_shaders/vk_world_alpha_textured.frag",
+      "src/vulkan_shaders/vk_world_flat.frag",
+      "src/vulkan_shaders/vk_world_lightmapped.frag",
+      "src/vulkan_shaders/vk_world_outline.frag",
+      "src/vulkan_shaders/vk_world_textured.frag"
+    ]
+  },
+  {
+    "id": "INPUT-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/cl_nqdemo.c"
+    ]
+  },
+  {
+    "id": "CV-002",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/competitive_visuals.c"
+    ]
+  },
+  {
+    "id": "CV-003",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/competitive_visuals.c",
+      "src/competitive_visuals.h",
+      "src/menu_options.c",
+      "src/vk_draw.c",
+      "src/vk_swapchain.c",
+      "src/vk_physical_devices.c",
+      "src/r_rmain.c"
+    ]
+  },
+  {
+    "id": "MAINT-002",
+    "repository": "ezquake-vulkan",
+    "paths": ["src/vk_main.c"]
+  },
+  {
+    "id": "MAINT-003",
+    "repository": "ezquake-vulkan",
+    "paths": ["src/competitive_visuals.c"]
+  }
+]

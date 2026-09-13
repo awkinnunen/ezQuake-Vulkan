@@ -1,83 +1,74 @@
-# ezQuake — Modern QuakeWorld Client
-Homepage: [https://ezquake.com][homepage]
+# ezQuake Vulkan
 
-Community discord: [http://discord.quake.world][discord]
+Experimental QuakeWorld client based on tibazera's SDL3/Vulkan work in ezQuake.
+This project adds competitive readability controls, general visual effects,
+configuration previews, local single-player/arena menus, and renderer fixes.
 
-This is the right place to start playing QuakeWorld&reg; — the fastest first
-person shooter action game ever.
+**This is a Vulkan rasterizer. RTX/path tracing is not integrated.**
+An RTX GPU can run the Vulkan renderer, but does not enable ray tracing.
 
-Combining the features of all modern QuakeWorld® clients, ezQuake makes
-QuakeWorld&reg; easier to start and play. The immortal first person shooter
-Quake&reg; in the brand new skin with superb graphics and extremely fast
-gameplay.
+The base is `tibazera/ezquake-source`, branch `feature/sdl3-vulkan-pr`, commit
+`91859a996daede0df166e2a55a5f08d56b052b21`. Original Git history and source notices
+are preserved. See [attribution](docs/ATTRIBUTION.md) for the origin of each
+change and the distinction between inherited work, user direction and Codex implementation.
 
-## Features
+## Features added here
 
- * Modern graphics
- * [QuakeTV][qtv] support
- * Rich menus
- * Multiview support
- * Tons of features to serve latest pro-gaming needs
- * Built in server browser & MP3 player control
- * Recorded games browser
- * Customization of all possible graphics elements of the game including Heads Up Display
- * All sorts of scripting possibilities
- * Windows, Linux, MacOSX and FreeBSD platforms supported (SDL3).
+- Competitive Visuals: texture detail control, soft cel shading, lighting,
+  team-aware silhouettes and restrained rim lighting with powerup/ruleset gates.
+- Separate general effects: bloom, contact AO, exposure, tone mapping, sharpening,
+  MSAA and FXAA. Contextual help, disabled dependencies and video restart feedback.
+- Named graphics profiles and a `.cfg` browser with a keyboard binding preview.
+- Local Arena controls for an external KTX game module, and original Quake
+  single-player startup/save handling when the required game data is installed.
+- GPU-limit, texture, lighting, skybox, shutdown and screenshot lifecycle fixes.
 
-Our client comes only with bare minimum of game media. If you want to
-experience ezQuake with modern graphics and other additional media including
-custom configurations, maps, textures and more, try using the [nQuake][nQuake]-installer.
+## Build and run on Windows
 
-## Support
+Install Visual Studio 2022 C++ Build Tools, CMake 3.22 or newer, Ninja, Git and
+the Vulkan SDK. Open an **x64 Native Tools Command Prompt** with the SDK's
+`Bin` directory on `PATH`, then run:
 
-Need help with using ezQuake? Try #dev-corner on [discord][discord]
+```bat
+git submodule update --init --recursive
+vcpkg\bootstrap-vcpkg.bat -disableMetrics
+cmake --preset msvc-x64 -DENABLE_LTO=OFF -DRENDERER_VULKAN=ON
+cmake --build build-msvc-x64 --config Release --parallel 4
+Start-Vulkan.cmd "C:\Games\nQuake"
+```
 
-Or (less populated these days) visit us on IRC at QuakeNet, channel #ezQuake: [webchat][webchat] or [IRC][IRC].
+The launcher runs the build directly against your installed game data.
+Use `--config Debug` to build a Debug executable; pass `Debug` as the launcher's
+second argument. This enables developer diagnostics and Vulkan validation.
+See [the inherited build guide](BUILD.md) for other platforms; this project's
+current validation was performed on Windows x64.
 
-Sometimes help from other users of ezQuake might be more useful to you so you
-can also try visiting the [quakeworld.nu Client Talk-forums][forum].
+## WASD and graphics defaults
 
-If you have found a bug, please report it [here][issues]
+Copy the **contents** of `profiles/` into your game-data directory once, preserving
+the `qw/` and `ezquake/` subdirectories. Back up any same-named files first.
+In the game console, load either or both:
 
-## Installation guide
+```text
+exec ezv-wasd.cfg
+exec ezv-defaults.cfg
+// Or both together:
+exec ezv-wasd-defaults.cfg
+```
 
-To play Quakeworld you need the files *pak0.pak* and *pak1.pak* from the original Quake-game.
+The graphics profile contains all 53 user-approved values, including edge depth
+threshold **16**. Loading `ezv-defaults.cfg` also restarts video to apply MSAA.
+It is a named profile; the engine's factory reset remains a separate action.
+The WASD overlay preserves installed nQuake non-letter bindings and communication
+aliases. See [controls](docs/CONTROLS.md). Game data, private full configs and
+custom crosshair images are not bundled.
 
-### Install ezQuake to an existing Quake-installation
-If you have an existing Quake-installation simply extract the ezQuake executable into your Quake-directory.
+## Status and license
 
-A typical error message when installing ezQuake into a pre-existing directory is about *glide2x.dll* missing.
-To get rid of this error, remove the file *opengl32.dll* from your Quake directory.
+See [validation](docs/VALIDATION.md) and [next work](docs/TODO.md).
+The project is experimental; the tests are bounded checks, not a complete campaign
+playthrough or a tournament/ruleset certification.
 
-### Upgrade an nQuake-installation
-If you have a version of [nQuake][nQuake] already installed you can upgrade ezQuake by extracting the new executable into the nQuake-directory.
-
-### Minimal clean installation
-If you want to make a clean installation of ezQuake you can do this by following these steps:
-
-1. Create a new directory
-2. Extract the ezQuake-executable into this directory
-3. Create a subdirectory called *id1*
-4. Copy *pak0.pak* and *pak1.pak* into this subdirectory
-
-## Compiling
-
-On Linux, `./build-linux.sh` produces an ezQuake binary in the top directory. 
-
-For a more in-depth description of how to build on all platforms, have a look at 
-[BUILD.md](BUILD.md).
-
-## Nightly builds
-
-Nightly builds can be found [here][nightly]
-
- [nQuake]: http://nquake.com/
- [webchat]: http://webchat.quakenet.org/?channels=#ezquake
- [IRC]: irc://irc.quakenet.org/#ezquake
- [forum]: http://www.quakeworld.nu/forum/8
- [qtv]: http://qtv.quakeworld.nu/
- [nightly]: https://builds.quakeworld.nu/ezquake/snapshots/
- [releases]: https://github.com/ezQuake/ezquake-source/releases
- [issues]: https://github.com/ezQuake/ezquake-source/issues
- [homepage]: https://ezquake.com
- [discord]: http://discord.quake.world/
+Existing ezQuake GPL terms and component notices remain in force; see
+[LICENSE](LICENSE). Quake game assets must be supplied separately.
+The upstream project README is retained in [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).

@@ -1,0 +1,1168 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -477,7 +477,7 @@
+         add_custom_command(
+                 OUTPUT ${output_file}
+                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
+-                DEPENDS ${source_file}
++                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h
+                 COMMENT "Compiling Vulkan shader ${source_file}"
+                 VERBATIM
+         )
+diff --git a/src/EX_qtvlist.c b/src/EX_qtvlist.c
+--- a/src/EX_qtvlist.c
++++ b/src/EX_qtvlist.c
+@@ -28,6 +28,7 @@
+ 
+ static json_t *root;
+ static SDL_Mutex *qtvlist_mutex;
++static SDL_Thread *qtvlist_thread;
+ 
+ extern char *CL_QTV_GetCurrentStream(void);
+ 
+@@ -75,6 +76,9 @@
+ 	buf.str = Q_calloc(1, 128); /*  Initially set to 128 bytes, will grow if necessary */
+ 
+ 	res += curl_easy_setopt(handle, CURLOPT_URL, qtv_api_url.string);
++	// Bound the join at shutdown even when the remote endpoint is unavailable.
++	res += curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 5000L);
++	res += curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 10000L);
+ 	res += curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void*)&buf);
+ 	res += curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, qtvlist_curl_callback);
+ 
+@@ -566,11 +570,20 @@
+ 
+ static void qtvlist_spawn_updater(void)
+ {
+-	SDL_Thread *qtvlist_thread;
+ 
+ 	if (qtvlist_mutex == NULL) {
+ 		Com_Printf("error: cannot update QTV list, mutex not initialized\n");
+ 		return;
++	}
++
++	// Keep ownership of the worker so shutdown cannot free its mutex/JSON.
++	if (qtvlist_thread) {
++		if (SDL_GetThreadState(qtvlist_thread) != SDL_THREAD_COMPLETE) {
++			Com_Printf("The qtvlist is already in the process of being updated\n");
++			return;
++		}
++		SDL_WaitThread(qtvlist_thread, NULL);
++		qtvlist_thread = NULL;
+ 	}
+ 
+ 	qtvlist_thread = SDL_CreateThread(qtvlist_update, "qtvupdater", (void*)NULL);
+@@ -580,7 +593,6 @@
+ 		return;
+ 	}
+ 
+-	SDL_DetachThread(qtvlist_thread);
+ }
+ 
+ void qtvlist_joinfromqtv_cmd(void)
+@@ -648,15 +660,20 @@
+ 
+ void qtvlist_deinit(void)
+ {
++	if (qtvlist_thread) {
++		SDL_WaitThread(qtvlist_thread, NULL);
++		qtvlist_thread = NULL;
++	}
++
+ 	if (root != NULL) {
+ 		json_decref(root);
+ 		root = NULL;
+ 	}
+ 
+ 	if (qtvlist_mutex != NULL) {
+-		SDL_UnlockMutex(qtvlist_mutex);
+ 		SDL_DestroyMutex(qtvlist_mutex);
+-	}
+-}
+-
+-
++		qtvlist_mutex = NULL;
++	}
++}
++
++
+diff --git a/src/host.c b/src/host.c
+--- a/src/host.c
++++ b/src/host.c
+@@ -877,8 +877,8 @@
+ 	Central_Shutdown();
+ 	CL_Shutdown ();
+ 	NET_Shutdown ();
++	qtvlist_deinit();
+ 	Con_Shutdown();
+-	qtvlist_deinit();
+ 	Cvar_Shutdown();
+ 	FS_Shutdown();
+ 	SYSINFO_Shutdown();
+diff --git a/src/vk_aliasmodel.c b/src/vk_aliasmodel.c
+--- a/src/vk_aliasmodel.c
++++ b/src/vk_aliasmodel.c
+@@ -13,6 +13,7 @@
+ #include "quakedef.h"
+ 
+ #include <stdarg.h>
++#include <stddef.h>
+ 
+ #include "gl_model.h"
+ #include "r_aliasmodel.h"
+@@ -81,12 +82,23 @@
+ 	float textureIndex;
+ } vk_alias_push_t;
+ 
+-// aliasPipelineLayout is built against the bindless texture array
+-// (VK_TextureBindlessDescriptorSetLayout) when the device supports descriptor
+-// indexing, falling back to the legacy per-texture layout otherwise --
+-// aliasUsingBindless records which one so VK_RenderAliasModels knows whether
+-// to bind the one global set + push the texture index, or bind a fresh
+-// per-draw descriptor set like before.
++// C/GLSL ABI contract; SPIR-V member offsets are also checked by Test-Vulkan.ps1.
++typedef char vk_alias_push_t_size_check[(sizeof(vk_alias_push_t) == 128) ? 1 : -1];
++typedef char vk_alias_push_t_mvp_check[(offsetof(vk_alias_push_t, mvp) == 0) ? 1 : -1];
++typedef char vk_alias_push_t_color_check[(offsetof(vk_alias_push_t, color) == 64) ? 1 : -1];
++typedef char vk_alias_push_t_altColor_check[(offsetof(vk_alias_push_t, altColor) == 80) ? 1 : -1];
++typedef char vk_alias_push_t_lerp_check[(offsetof(vk_alias_push_t, lerp) == 96) ? 1 : -1];
++typedef char vk_alias_push_t_textured_check[(offsetof(vk_alias_push_t, textured) == 100) ? 1 : -1];
++typedef char vk_alias_push_t_weapon_check[(offsetof(vk_alias_push_t, weapon) == 104) ? 1 : -1];
++typedef char vk_alias_push_t_mode_check[(offsetof(vk_alias_push_t, mode) == 108) ? 1 : -1];
++typedef char vk_alias_push_t_minLumaMix_check[(offsetof(vk_alias_push_t, minLumaMix) == 112) ? 1 : -1];
++typedef char vk_alias_push_t_scrollS_check[(offsetof(vk_alias_push_t, scrollS) == 116) ? 1 : -1];
++typedef char vk_alias_push_t_scrollT_check[(offsetof(vk_alias_push_t, scrollT) == 120) ? 1 : -1];
++typedef char vk_alias_push_t_textureIndex_check[(offsetof(vk_alias_push_t, textureIndex) == 124) ? 1 : -1];
++
++
++// Alias shaders require the bindless texture array. Initialization checks its
++// features and descriptor limits; a per-texture alias fallback is not implemented.
+ static VkPipelineLayout aliasPipelineLayout;
+ static qbool aliasUsingBindless;
+ static VkPipeline aliasOpaquePipeline;
+@@ -346,7 +358,7 @@
+ 		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &aliasPipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &aliasPipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+diff --git a/src/vk_draw.c b/src/vk_draw.c
+--- a/src/vk_draw.c
++++ b/src/vk_draw.c
+@@ -309,7 +309,7 @@
+ 	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudImagePipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudImagePipelineLayout) != VK_SUCCESS) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 		return false;
+@@ -381,7 +381,7 @@
+ 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudColorPipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudColorPipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+@@ -599,7 +599,7 @@
+ 		pipelineLayoutInfo.pSetLayouts = &postProcessDescriptorSetLayout;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &postProcessPipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &postProcessPipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+@@ -903,7 +903,7 @@
+ 		pipelineLayoutInfo.pSetLayouts = &worldOutlineDescriptorSetLayout;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOutlinePipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOutlinePipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+diff --git a/src/vk_limits.h b/src/vk_limits.h
+new file mode 100644
+--- /dev/null
++++ b/src/vk_limits.h
+@@ -0,0 +1,32 @@
++/* Local implementation: OpenAI Codex, 2026-09-13. GPL-2.0-or-later.
++ * Pure limit checks shared by the renderer and its boundary tests. */
++#ifndef EZQUAKE_VK_LIMITS_H
++#define EZQUAKE_VK_LIMITS_H
++#include <vulkan/vulkan.h>
++
++#define VK_WORLD_PUSH_BYTES 128u
++
++static inline int VK_PushRangeFits(uint32_t limit, const VkPushConstantRange* range)
++{
++	return range->stageFlags && range->size && !(range->offset & 3u) &&
++		!(range->size & 3u) && range->offset <= limit &&
++		range->size <= limit - range->offset;
++}
++
++/* Both fixed arrays contain combined image samplers. Each descriptor counts
++ * against both the sampler and sampled-image limits, and once as a resource.
++ * This renderer owns one update-after-bind pool containing this one set. */
++static inline const char* VK_BindlessLimitFailure(
++	const VkPhysicalDeviceDescriptorIndexingProperties* limits, uint32_t count)
++{
++#define VK_CHECK_BINDLESS_LIMIT(field) if (count > limits->field) return #field
++	VK_CHECK_BINDLESS_LIMIT(maxPerStageDescriptorUpdateAfterBindSamplers);
++	VK_CHECK_BINDLESS_LIMIT(maxPerStageDescriptorUpdateAfterBindSampledImages);
++	VK_CHECK_BINDLESS_LIMIT(maxPerStageUpdateAfterBindResources);
++	VK_CHECK_BINDLESS_LIMIT(maxDescriptorSetUpdateAfterBindSamplers);
++	VK_CHECK_BINDLESS_LIMIT(maxDescriptorSetUpdateAfterBindSampledImages);
++	VK_CHECK_BINDLESS_LIMIT(maxUpdateAfterBindDescriptorsInAllPools);
++#undef VK_CHECK_BINDLESS_LIMIT
++	return NULL;
++}
++#endif
+diff --git a/src/vk_local.h b/src/vk_local.h
+--- a/src/vk_local.h
++++ b/src/vk_local.h
+@@ -21,6 +21,10 @@
+ #define EZQUAKE_VK_LOCAL_HEADER
+ 
+ #include <vulkan/vulkan.h>
++#include "vk_limits.h"
++
++VkResult VK_CreatePipelineLayoutChecked(VkDevice device, const VkPipelineLayoutCreateInfo* info,
++	const VkAllocationCallbacks* allocator, VkPipelineLayout* layout);
+ 
+ #include "r_local.h"
+ #include "r_state.h"
+@@ -206,6 +210,7 @@
+ 	VkPhysicalDevice physicalDevice;
+ 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
+ 	VkPhysicalDeviceProperties physicalDeviceProperties;
++	VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties;
+ 	uint32_t physicalDeviceGraphicsQueueFamilyIndex;
+ 	uint32_t physicalDeviceComputeQueueFamilyIndex;
+ 	uint32_t physicalDevicePresentQueueFamilyIndex;
+diff --git a/src/vk_main.c b/src/vk_main.c
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -216,6 +216,11 @@
+ 	memset(buffer, 0, size);
+ 
+ 	if (vk_options.logicalDevice == VK_NULL_HANDLE || vk_options.swapChain.handle == VK_NULL_HANDLE || !vk_options.swapChain.images || vk_options.swapChain.imageCount <= 0) {
++		return;
++	}
++
++	if (!(vk_options.physicalDeviceSurfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)) {
++		Con_Printf("vulkan: this surface does not support screenshot readback\n");
+ 		return;
+ 	}
+ 
+@@ -1048,6 +1053,14 @@
+ 		return false;
+ 	}
+ 
++	if (vk_options.physicalDeviceProperties.limits.maxPushConstantsSize < VK_WORLD_PUSH_BYTES) {
++		Con_Printf("vulkan: %s supports %u push-constant bytes; world renderer requires %u. Select OpenGL.\n",
++			vk_options.physicalDeviceProperties.deviceName,
++			vk_options.physicalDeviceProperties.limits.maxPushConstantsSize, VK_WORLD_PUSH_BYTES);
++		VK_Shutdown(r_shutdown_full);
++		return false;
++	}
++
+ 	VK_DetermineMSAASampleCount();
+ 
+ 	if (!VK_CreateLogicalDevice(vk_options.instance)) {
+@@ -1077,7 +1090,7 @@
+ 	}
+ 
+ 	Con_Printf("Vulkan initialised successfully\n");
+-	Con_Printf("vulkan: descriptor indexing (bindless) %s\n", vk_options.supportsDescriptorIndexing ? "supported" : "NOT supported, falling back to per-texture descriptor sets");
++	VK_PrintGfxInfo();
+ 	return true;
+ }
+ 
+diff --git a/src/vk_misc.c b/src/vk_misc.c
+--- a/src/vk_misc.c
++++ b/src/vk_misc.c
+@@ -21,9 +21,23 @@
+ #ifdef RENDERER_OPTION_VULKAN
+ 
+ #include "quakedef.h"
++#include "vk_local.h"
++#include "r_texture.h"
+ 
+ void VK_PrintGfxInfo(void)
+ {
++	const VkPhysicalDeviceProperties* p = &vk_options.physicalDeviceProperties;
++	const VkPhysicalDeviceDescriptorIndexingProperties* d = &vk_options.descriptorIndexingProperties;
++	Con_Printf("vulkan: device %s, API %u.%u.%u\n", p->deviceName,
++		VK_VERSION_MAJOR(p->apiVersion), VK_VERSION_MINOR(p->apiVersion), VK_VERSION_PATCH(p->apiVersion));
++	Con_Printf("vulkan: push constants %u bytes (world requires %u), descriptor sets %u\n",
++		p->limits.maxPushConstantsSize, VK_WORLD_PUSH_BYTES, p->limits.maxBoundDescriptorSets);
++	Con_Printf("vulkan: descriptor indexing %s, bindless table %u combined image samplers\n",
++		vk_options.supportsDescriptorIndexing ? "enabled" : "unavailable", 2u * MAX_GLTEXTURES);
++	Con_Printf("vulkan: update-after-bind limits: stage samplers/images/resources %u/%u/%u, set samplers/images %u/%u, pools %u\n",
++		d->maxPerStageDescriptorUpdateAfterBindSamplers, d->maxPerStageDescriptorUpdateAfterBindSampledImages,
++		d->maxPerStageUpdateAfterBindResources, d->maxDescriptorSetUpdateAfterBindSamplers,
++		d->maxDescriptorSetUpdateAfterBindSampledImages, d->maxUpdateAfterBindDescriptorsInAllPools);
+ }
+ 
+ #endif // #ifdef RENDERER_OPTION_VULKAN
+diff --git a/src/vk_physical_devices.c b/src/vk_physical_devices.c
+--- a/src/vk_physical_devices.c
++++ b/src/vk_physical_devices.c
+@@ -28,6 +28,7 @@
+ #include <SDL3/SDL_vulkan.h>
+ 
+ #include "vk_local.h"
++#include "r_texture.h"
+ 
+ static const char* requiredDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+ 
+@@ -596,6 +597,12 @@
+ 	// for what this unlocks.
+ 	{
+ 		VkPhysicalDeviceFeatures2 indexingQueryFeatures2 = { 0 };
++		VkPhysicalDeviceProperties2 properties2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
++		const char* failedLimit;
++
++		vk_options.descriptorIndexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
++		properties2.pNext = &vk_options.descriptorIndexingProperties;
++		vkGetPhysicalDeviceProperties2(vk_options.physicalDevice, &properties2);
+ 
+ 		descriptorIndexingQuery.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+ 		indexingQueryFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+@@ -608,6 +615,16 @@
+ 			descriptorIndexingQuery.descriptorBindingVariableDescriptorCount &&
+ 			descriptorIndexingQuery.runtimeDescriptorArray &&
+ 			descriptorIndexingQuery.descriptorBindingSampledImageUpdateAfterBind;
++		if (!vk_options.supportsDescriptorIndexing) {
++			Con_Printf("vulkan: required descriptor-indexing features unavailable; alias models have no fallback. Select OpenGL.\n");
++			return false;
++		}
++		failedLimit = VK_BindlessLimitFailure(&vk_options.descriptorIndexingProperties, 2u * MAX_GLTEXTURES);
++		if (failedLimit) {
++			Con_Printf("vulkan: bindless table needs %u combined image samplers; exceeds %s. Select OpenGL.\n",
++				2u * MAX_GLTEXTURES, failedLimit);
++			return false;
++		}
+ 	}
+ 
+ 	queueInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+diff --git a/src/vk_resources.c b/src/vk_resources.c
+--- a/src/vk_resources.c
++++ b/src/vk_resources.c
+@@ -15,6 +15,29 @@
+ #include "vk_local.h"
+ 
+ static VkCommandPool immediateCommandPool;
++
++VkResult VK_CreatePipelineLayoutChecked(VkDevice device, const VkPipelineLayoutCreateInfo* info,
++	const VkAllocationCallbacks* allocator, VkPipelineLayout* layout)
++{
++	const VkPhysicalDeviceLimits* limits = &vk_options.physicalDeviceProperties.limits;
++	uint32_t i;
++
++	*layout = VK_NULL_HANDLE;
++	if (info->setLayoutCount > limits->maxBoundDescriptorSets) {
++		Con_Printf("vulkan: pipeline needs %u descriptor sets; device limit is %u\n",
++			info->setLayoutCount, limits->maxBoundDescriptorSets);
++		return VK_ERROR_INITIALIZATION_FAILED;
++	}
++	for (i = 0; i < info->pushConstantRangeCount; ++i) {
++		const VkPushConstantRange* range = &info->pPushConstantRanges[i];
++		if (!VK_PushRangeFits(limits->maxPushConstantsSize, range)) {
++			Con_Printf("vulkan: invalid push range offset=%u size=%u stages=0x%x; device limit=%u\n",
++				range->offset, range->size, range->stageFlags, limits->maxPushConstantsSize);
++			return VK_ERROR_INITIALIZATION_FAILED;
++		}
++	}
++	return vkCreatePipelineLayout(device, info, allocator, layout);
++}
+ 
+ uint32_t VK_FindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties)
+ {
+diff --git a/src/vk_sprite3d.c b/src/vk_sprite3d.c
+--- a/src/vk_sprite3d.c
++++ b/src/vk_sprite3d.c
+@@ -32,17 +32,12 @@
+ 
+ mspriteframe_t* R_GetSpriteFrame(entity_t* e, msprite2_t* psprite);
+ 
++// Precombine matrices like the world/alias paths: 68 bytes instead of 160.
+ typedef struct vk_sprite3d_push_s {
+-	float modelView[16];
+-	float projection[16];
++	float mvp[16];
+ 	float alphaThreshold;
+-	// vk_sprite3d.vert/.frag's matching GLSL struct ends with a vec3, which
+-	// std430-style push-constant rules align to 16 bytes -- the real
+-	// compiled block is 156 bytes, not the 144 this plain-float-array struct
+-	// summed to (no such alignment jump for a C float[3]). Padded to 160
+-	// (next 16-byte multiple) to cover it.
+-	float padding[7];
+ } vk_sprite3d_push_t;
++typedef char vk_sprite3d_push_size_check[(sizeof(vk_sprite3d_push_t) == 68) ? 1 : -1];
+ 
+ typedef enum vk_sprite_pipeline_id_s {
+ 	VK_SPRITE_PIPELINE_PREMULT_DEPTH,
+@@ -316,7 +311,7 @@
+ 		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &spritePipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &spritePipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+@@ -485,8 +480,7 @@
+ 	}
+ 
+ 	memset(&push, 0, sizeof(push));
+-	memcpy(push.modelView, R_ModelviewMatrix(), sizeof(push.modelView));
+-	memcpy(push.projection, R_ProjectionMatrix(), sizeof(push.projection));
++	R_MultiplyMatrix(R_ModelviewMatrix(), R_ProjectionMatrix(), push.mvp);
+ 
+ 	VK_SpriteSetViewportScissor(commandBuffer);
+ 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
+diff --git a/src/vk_swapchain.c b/src/vk_swapchain.c
+--- a/src/vk_swapchain.c
++++ b/src/vk_swapchain.c
+@@ -667,7 +667,11 @@
+ 		createInfo.imageExtent.width = width;
+ 		createInfo.imageExtent.height = height;
+ 	}
+-	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // VK_IMAGE_USAGE_TRANSFER_DST_BIT if pre-processing enabled
++	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
++	// Screenshot readback needs transfer-source usage, when the surface supports it.
++	if (vk_options.physicalDeviceSurfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
++		createInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
++	}
+ 	if (VK_PhysicalDeviceGraphicsQueueFamilyIndex() != VK_PhysicalDevicePresentQueueFamilyIndex()) {
+ 		queueFamilyIndices[0] = VK_PhysicalDeviceGraphicsQueueFamilyIndex();
+ 		queueFamilyIndices[1] = VK_PhysicalDevicePresentQueueFamilyIndex();
+diff --git a/src/vk_vao.c b/src/vk_vao.c
+--- a/src/vk_vao.c
++++ b/src/vk_vao.c
+@@ -149,7 +149,7 @@
+ 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+ 	pipelineLayoutInfo.pPushConstantRanges = NULL; // Optional
+ 
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
+ 		return false;
+ 	}
+ 
+diff --git a/src/vk_world.c b/src/vk_world.c
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -13,6 +13,7 @@
+ #include "quakedef.h"
+ 
+ #include <stdarg.h>
++#include <stddef.h>
+ 
+ #include "gl_model.h"
+ #include "r_aliasmodel.h"
+@@ -90,6 +91,9 @@
+ 	int overlayMode;
+ } vk_world_draw_t;
+ 
++// 128-byte shared world ABI. Tint cvars are already RGB bytes, so packing
++// them loses no precision; independent boolean/mode values use shared flags.
++#include "vulkan_shaders/vk_world_flags.h"
+ typedef struct vk_world_push_s {
+ 	float mvp[16];
+ 	float color[4];
+@@ -99,55 +103,27 @@
+ 	float surfaceType;
+ 	float useSkyTexture;
+ 	float fastTurb;
+-	float detailEnabled;
+-	float textureless;
+-	// 1.0 tells vk_world_flat.frag to paint surfaceType==0 (normal wall/floor)
+-	// surfaces with pushConstants.color -- the real r_wallcolor/r_floorcolor
+-	// value computed by VK_WorldFlatColorForSurface -- instead of the
+-	// per-vertex baked texture-average color it otherwise falls back to for
+-	// surfaces whose real texture just isn't ready yet on Vulkan.
+-	float drawflatColor;
+-	// Textured/lightmapped-pipeline equivalent of GLC/GLM's applyColorTinting():
+-	// r_drawflat_mode 1 (tinted) multiplies the real texture by these colors,
+-	// mode 2 (bright) replaces it with a luminance-preserving recolor, gated
+-	// per-fragment by the EZQ_SURFACE_IS_FLOOR bit carried in vbo_world_vert_t's
+-	// flags field (see the new location-3/4 "inFlags" vertex attribute in
+-	// vk_world_textured.vert/vk_world_lightmapped.vert). Unlike vk_world_flat's
+-	// drawflatColor (mode 0, whole surface replaced with a solid fill, routed
+-	// through a completely separate pipeline), this keeps the real texture
+-	// visible -- matching GLC/GLM, where tinted/bright surfaces never leave the
+-	// normal textured draw path.
+-	float floorColor[4];
+-	float wallColor[4];
+-	// 0 = off, 1 = tinted, 2 = bright -- mirrors r_drawflat_mode.integer.
+-	float drawflatMode;
+-	// Independently gate floor vs wall tinting, matching GLC/GLM's
+-	// DRAW_FLATFLOORS/DRAW_FLATWALLS (r_drawflat 1 = both, 2 = floors only,
+-	// 3 = walls only) -- these are NOT gated by drawflatMode/r_drawflat_mode,
+-	// only by r_drawflat itself, same as the GLSL side.
+-	float tintFloors;
+-	float tintWalls;
+-	// vk_world_flat.vert/.frag end their matching GLSL struct with a trailing
+-	// vec3, which the std430-style push-constant layout rules align to 16
+-	// bytes -- bumping that shader's real compiled block to 140 bytes even
+-	// though every *other* field here is a plain scalar/array with no such
+-	// jump. Padded to the next 16-byte multiple so this one shared C struct
+-	// covers all 5 world pipelines that reuse it; validation correctly flags
+-	// an undersized block for world_flat otherwise. 176 bytes total, above the
+-	// Vulkan-guaranteed minimum of 128 but comfortably within the 256 typical
+-	// desktop AMD/NVIDIA/Intel drivers expose -- same portability caveat as
+-	// the rest of this struct (desktop-only branch; do not carry to Android).
+-	// This trailing slot used to be pure padding; the textured/lightmapped/
+-	// alpha_textured shaders never read a drawflatColor-shaped field here, so
+-	// it's repurposed as causticsEnabled (GLC/GLM's gl_caustics, applied only
+-	// to EZQ_SURFACE_UNDERWATER fragments) without growing the struct.
+-	float causticsEnabled;
++	uint32_t floorColor;
++	uint32_t wallColor;
++	uint32_t flags;
+ } vk_world_push_t;
++
++typedef char vk_world_push_size_check[(sizeof(vk_world_push_t) == VK_WORLD_PUSH_BYTES) ? 1 : -1];
++typedef char vk_world_push_mvp_check[(offsetof(vk_world_push_t, mvp) == 0) ? 1 : -1];
++typedef char vk_world_push_color_check[(offsetof(vk_world_push_t, color) == 64) ? 1 : -1];
++typedef char vk_world_push_cameraPosition_check[(offsetof(vk_world_push_t, cameraPosition) == 80) ? 1 : -1];
++typedef char vk_world_push_time_check[(offsetof(vk_world_push_t, time) == 96) ? 1 : -1];
++typedef char vk_world_push_alpha_check[(offsetof(vk_world_push_t, alpha) == 100) ? 1 : -1];
++typedef char vk_world_push_surfaceType_check[(offsetof(vk_world_push_t, surfaceType) == 104) ? 1 : -1];
++typedef char vk_world_push_useSkyTexture_check[(offsetof(vk_world_push_t, useSkyTexture) == 108) ? 1 : -1];
++typedef char vk_world_push_fastTurb_check[(offsetof(vk_world_push_t, fastTurb) == 112) ? 1 : -1];
++typedef char vk_world_push_floorColor_check[(offsetof(vk_world_push_t, floorColor) == 116) ? 1 : -1];
++typedef char vk_world_push_wallColor_check[(offsetof(vk_world_push_t, wallColor) == 120) ? 1 : -1];
++typedef char vk_world_push_flags_check[(offsetof(vk_world_push_t, flags) == 124) ? 1 : -1];
+ 
+ // Must match the push_constant block in vk_world_normals.vert /
+ // vk_world_normals.frag exactly. mat4 + vec4 + 2 floats = 88 bytes, well
+-// inside the 128-byte guaranteed minimum (unlike vk_world_push_t, which is
+-// desktop-only at 176) -- this one is portable as-is.
++// inside the 128-byte guaranteed minimum.
+ typedef struct vk_world_normals_push_s {
+ 	float mvp[16];
+ 	float cameraPosition[4];
+@@ -850,7 +826,7 @@
+ 	pipelineLayoutInfo.pSetLayouts = setLayouts;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldFlatPipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldFlatPipelineLayout) != VK_SUCCESS) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 		return false;
+@@ -1038,7 +1014,7 @@
+ 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldTexturedPipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldTexturedPipelineLayout) != VK_SUCCESS) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 		return false;
+@@ -1243,7 +1219,7 @@
+ 		pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOverlayPipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOverlayPipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+@@ -1438,7 +1414,7 @@
+ 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldAlphaTexturedPipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldAlphaTexturedPipelineLayout) != VK_SUCCESS) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 		return false;
+@@ -1633,7 +1609,7 @@
+ 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldLightmappedPipelineLayout) != VK_SUCCESS) {
++	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldLightmappedPipelineLayout) != VK_SUCCESS) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 		return false;
+@@ -1810,7 +1786,7 @@
+ 		pipelineLayoutInfo.setLayoutCount = 0;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldNormalsPipelineLayout) != VK_SUCCESS) {
++		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldNormalsPipelineLayout) != VK_SUCCESS) {
+ 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+ 			return false;
+@@ -2530,14 +2506,14 @@
+ 			push.surfaceType = worldDraws[i].surfaceType;
+ 			push.useSkyTexture = VK_WORLD_SKY_MODE_NONE;
+ 			push.fastTurb = (worldDraws[i].surfaceType > 0.5f && worldDraws[i].surfaceType < 5.5f && r_fastturb.integer) ? 1.0f : 0.0f;
+-			push.detailEnabled = (worldDraws[i].detail && VK_WorldDetailTextureReady()) ? 1.0f : 0.0f;
+-			push.causticsEnabled = (worldDraws[i].caustics && VK_WorldCausticsTextureReady()) ? 1.0f : 0.0f;
++			push.flags |= ((worldDraws[i].detail && VK_WorldDetailTextureReady())) ? VK_WORLD_DETAIL : 0u;
++			push.flags |= ((worldDraws[i].caustics && VK_WorldCausticsTextureReady())) ? VK_WORLD_CAUSTICS : 0u;
+ 			// Matches Modern OpenGL's DRAW_TEXTURELESS: keep the normal
+ 			// lit/lightmapped pipeline (so depth shading, outlines, detail
+ 			// textures etc. are unaffected), just force the diffuse texture
+ 			// sample to a single fixed texel in the fragment shader instead
+ 			// of the surface's real UVs.
+-			push.textureless = gl_textureless.integer ? 1.0f : 0.0f;
++			push.flags |= (gl_textureless.integer) ? VK_WORLD_TEXTURELESS : 0u;
+ 			// Tinted/bright r_drawflat_mode (1/2) for the textured/lightmapped
+ 			// pipelines -- mode 0 ("normal", solid replace) is already handled
+ 			// entirely by the separate vk_world_flat pipeline via drawflatColor
+@@ -2545,17 +2521,11 @@
+ 			// vk_world_lightmapped.frag for how these are applied per-fragment,
+ 			// gated by the surface's EZQ_SURFACE_IS_FLOOR bit (inFlags).
+ 			if (r_drawflat.integer && r_drawflat_mode.integer) {
+-				push.drawflatMode = (float)r_drawflat_mode.integer;
+-				push.tintFloors = (r_drawflat.integer == 1 || r_drawflat.integer == 2) ? 1.0f : 0.0f;
+-				push.tintWalls = (r_drawflat.integer == 1 || r_drawflat.integer == 3) ? 1.0f : 0.0f;
+-				push.floorColor[0] = (float)r_floorcolor.color[0] / 255.0f;
+-				push.floorColor[1] = (float)r_floorcolor.color[1] / 255.0f;
+-				push.floorColor[2] = (float)r_floorcolor.color[2] / 255.0f;
+-				push.floorColor[3] = 1.0f;
+-				push.wallColor[0] = (float)r_wallcolor.color[0] / 255.0f;
+-				push.wallColor[1] = (float)r_wallcolor.color[1] / 255.0f;
+-				push.wallColor[2] = (float)r_wallcolor.color[2] / 255.0f;
+-				push.wallColor[3] = 1.0f;
++				push.flags |= r_drawflat_mode.integer > 1 ? VK_WORLD_BRIGHT : VK_WORLD_TINTED;
++				push.flags |= ((r_drawflat.integer == 1 || r_drawflat.integer == 2)) ? VK_WORLD_TINT_FLOORS : 0u;
++				push.flags |= ((r_drawflat.integer == 1 || r_drawflat.integer == 3)) ? VK_WORLD_TINT_WALLS : 0u;
++				push.floorColor = (uint32_t)r_floorcolor.color[0] | ((uint32_t)r_floorcolor.color[1] << 8) | ((uint32_t)r_floorcolor.color[2] << 16) | 0xff000000u;
++				push.wallColor = (uint32_t)r_wallcolor.color[0] | ((uint32_t)r_wallcolor.color[1] << 8) | ((uint32_t)r_wallcolor.color[2] << 16) | 0xff000000u;
+ 			}
+ 			if (worldDraws[i].surfaceType == TEXTURE_TURB_SKY) {
+ 				if (VK_WorldSkyboxTexturesReady()) {
+@@ -2621,16 +2591,8 @@
+ 				VkDescriptorSet descriptorSets[2];
+ 				texture_ref lightmapTex = VK_TextureReady(worldDraws[i].lightmap) ? worldDraws[i].lightmap : solidwhite_texture;
+ 
+-				// vk_world_flat.frag's push-constant block is a strict prefix of
+-				// vk_world_push_t (it ends right after this field), so its
+-				// "drawflatColor" lands at the same byte offset as this struct's
+-				// OWN drawflatColor field -- not causticsEnabled, which lives much
+-				// further along in the full 176-byte block that only the
+-				// textured/lightmapped shaders read. Writing causticsEnabled here
+-				// left the real drawflatColor slot zeroed (memset above), so the
+-				// flat fragment shader always took its "texture not ready yet"
+-				// fallback branch instead of painting r_wallcolor/r_floorcolor.
+-				push.drawflatColor = worldDraws[i].drawflatCvar ? 1.0f : 0.0f;
++				// Flat colour and caustics have independent flags in every world pass.
++				push.flags |= (worldDraws[i].drawflatCvar) ? VK_WORLD_DRAWFLAT_COLOR : 0u;
+ 				descriptorSets[1] = VK_TextureDescriptorSet(lightmapTex);
+ 				if (VK_WorldFlatSkyDescriptorSet(&descriptorSets[0]) && descriptorSets[1] != VK_NULL_HANDLE) {
+ 					VK_WorldBindIfChanged(commandBuffer, worldFlatPipeline, worldFlatPipelineLayout, descriptorSets, 2,
+diff --git a/src/vulkan_shaders/vk_sprite3d.frag b/src/vulkan_shaders/vk_sprite3d.frag
+--- a/src/vulkan_shaders/vk_sprite3d.frag
++++ b/src/vulkan_shaders/vk_sprite3d.frag
+@@ -6,10 +6,8 @@
+ layout(location = 1) in vec4 inColor;
+ 
+ layout(push_constant) uniform PushConstants {
+-	mat4 modelView;
+-	mat4 projection;
++	mat4 mvp;
+ 	float alphaThreshold;
+-	vec3 padding;
+ } pushConstants;
+ 
+ layout(location = 0) out vec4 fragColour;
+diff --git a/src/vulkan_shaders/vk_sprite3d.vert b/src/vulkan_shaders/vk_sprite3d.vert
+--- a/src/vulkan_shaders/vk_sprite3d.vert
++++ b/src/vulkan_shaders/vk_sprite3d.vert
+@@ -5,10 +5,8 @@
+ layout(location = 2) in vec4 inColor;
+ 
+ layout(push_constant) uniform PushConstants {
+-	mat4 modelView;
+-	mat4 projection;
++	mat4 mvp;
+ 	float alphaThreshold;
+-	vec3 padding;
+ } pushConstants;
+ 
+ layout(location = 0) out vec2 outTexCoord;
+@@ -16,7 +14,7 @@
+ 
+ void main()
+ {
+-	vec4 clip = pushConstants.projection * pushConstants.modelView * vec4(inPosition, 1.0);
++	vec4 clip = pushConstants.mvp * vec4(inPosition, 1.0);
+ 
+ 	clip.y = -clip.y;
+ 	clip.z = clip.z * 0.5 + clip.w * 0.5;
+diff --git a/src/vulkan_shaders/vk_world_alpha_textured.frag b/src/vulkan_shaders/vk_world_alpha_textured.frag
+--- a/src/vulkan_shaders/vk_world_alpha_textured.frag
++++ b/src/vulkan_shaders/vk_world_alpha_textured.frag
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -8,19 +9,7 @@
+ layout(location = 1) in vec2 inDetailCoord;
+ layout(location = 2) flat in uint inFlags;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	float causticsEnabled;
+-	float padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -48,14 +37,14 @@
+ 	}
+ 
+ 	fragColour = vec4(texColour.rgb, texColour.a);
+-	if (pushConstants.detailEnabled > 0.5) {
++	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ 	// Port of GLC/GLM's gl_caustics: an animated multiplicative overlay,
+ 	// applied only to fragments flagged underwater at surface-build time
+ 	// (see draw_world.fragment.glsl for the reference UV animation/blend).
+-	if (pushConstants.causticsEnabled > 0.5 && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
++	if (worldFlag(VK_WORLD_CAUSTICS) && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
+ 		vec2 causticCoord = vec2(
+ 			(inTexCoord.s + sin(0.465 * (pushConstants.time + inTexCoord.t))) * -0.1234375,
+ 			(inTexCoord.t + sin(0.465 * (pushConstants.time + inTexCoord.s))) * -0.1234375);
+diff --git a/src/vulkan_shaders/vk_world_alpha_textured.vert b/src/vulkan_shaders/vk_world_alpha_textured.vert
+--- a/src/vulkan_shaders/vk_world_alpha_textured.vert
++++ b/src/vulkan_shaders/vk_world_alpha_textured.vert
+@@ -1,22 +1,12 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inPosition;
+ layout(location = 1) in vec2 inTexCoord;
+ layout(location = 2) in vec2 inDetailCoord;
+ layout(location = 3) in uint inFlagsAttrib;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	vec2 padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec2 outTexCoord;
+ layout(location = 1) out vec2 outDetailCoord;
+diff --git a/src/vulkan_shaders/vk_world_flags.h b/src/vulkan_shaders/vk_world_flags.h
+new file mode 100644
+--- /dev/null
++++ b/src/vulkan_shaders/vk_world_flags.h
+@@ -0,0 +1,9 @@
++// Shared C/GLSL flags. OpenAI Codex, 2026-09-13. GPL-2.0-or-later.
++#define VK_WORLD_DETAIL (1u << 0)
++#define VK_WORLD_TEXTURELESS (1u << 1)
++#define VK_WORLD_DRAWFLAT_COLOR (1u << 2)
++#define VK_WORLD_TINT_FLOORS (1u << 3)
++#define VK_WORLD_TINT_WALLS (1u << 4)
++#define VK_WORLD_CAUSTICS (1u << 5)
++#define VK_WORLD_TINTED (1u << 6)
++#define VK_WORLD_BRIGHT (1u << 7)
+diff --git a/src/vulkan_shaders/vk_world_flat.frag b/src/vulkan_shaders/vk_world_flat.frag
+--- a/src/vulkan_shaders/vk_world_flat.frag
++++ b/src/vulkan_shaders/vk_world_flat.frag
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inFlatColor;
+ layout(location = 1) in vec3 inDirection;
+@@ -14,19 +15,7 @@
+ layout(set = 0, binding = 7) uniform sampler2D skyboxFace5;
+ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	float textureless;
+-	float drawflatColor;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -107,14 +96,14 @@
+ 
+ void main()
+ {
+-	vec3 base = (pushConstants.surfaceType > 0.5 || pushConstants.drawflatColor > 0.5)
++	vec3 base = (pushConstants.surfaceType > 0.5 || worldFlag(VK_WORLD_DRAWFLAT_COLOR))
+ 		? pushConstants.color.rgb
+ 		: max(inFlatColor, vec3(0.08));
+ 
+ 	// True r_drawflat surfaces (not sky/turb, no fallback) still get shaded
+ 	// by the surface's real lightmap, same as GLC/GLM's drawflat mode -- a
+ 	// solid, completely unlit fill would otherwise flatten all depth cues.
+-	if (pushConstants.drawflatColor > 0.5 && pushConstants.surfaceType < 0.5) {
++	if (worldFlag(VK_WORLD_DRAWFLAT_COLOR) && pushConstants.surfaceType < 0.5) {
+ 		base *= texture(lightmapTexture[0], inLightmapCoord).rgb;
+ 	}
+ 
+diff --git a/src/vulkan_shaders/vk_world_flat.vert b/src/vulkan_shaders/vk_world_flat.vert
+--- a/src/vulkan_shaders/vk_world_flat.vert
++++ b/src/vulkan_shaders/vk_world_flat.vert
+@@ -1,20 +1,11 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inPosition;
+ layout(location = 1) in vec3 inFlatColor;
+ layout(location = 2) in vec3 inLightmapCoord;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	vec3 padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec3 outFlatColor;
+ layout(location = 1) out vec3 outDirection;
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.frag b/src/vulkan_shaders/vk_world_lightmapped.frag
+--- a/src/vulkan_shaders/vk_world_lightmapped.frag
++++ b/src/vulkan_shaders/vk_world_lightmapped.frag
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
+@@ -10,24 +11,7 @@
+ layout(location = 2) in vec2 inDetailCoord;
+ layout(location = 3) flat in uint inFlags;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	float textureless;
+-	float causticsEnabled; // vk_world_flat's drawflatColor slot, repurposed here
+-	vec4 floorColor;
+-	vec4 wallColor;
+-	float drawflatMode; // 0=off, 1=tinted, 2=bright -- see r_drawflat_mode
+-	float tintFloors;
+-	float tintWalls;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -48,19 +32,19 @@
+ 	}
+ 
+ 	bool isFloor = (inFlags & EZQ_SURFACE_IS_FLOOR) != 0u;
+-	float mixFloor = (isFloor && pushConstants.tintFloors > 0.5) ? 1.0 : 0.0;
+-	float mixWall = (!isFloor && pushConstants.tintWalls > 0.5) ? 1.0 : 0.0;
++	float mixFloor = (isFloor && worldFlag(VK_WORLD_TINT_FLOORS)) ? 1.0 : 0.0;
++	float mixWall = (!isFloor && worldFlag(VK_WORLD_TINT_WALLS)) ? 1.0 : 0.0;
+ 
+-	if (pushConstants.drawflatMode > 1.5) {
++	if (worldFlag(VK_WORLD_BRIGHT)) {
+ 		// Bright: luminance-preserving recolor (kudos to Darel Rex Finley).
+ 		float brightness = sqrt(colour.r * colour.r * 0.241 + colour.g * colour.g * 0.691 + colour.b * colour.b * 0.068);
+-		colour = mix(colour, pushConstants.wallColor.rgb * brightness, mixWall);
+-		colour = mix(colour, pushConstants.floorColor.rgb * brightness, mixFloor);
++		colour = mix(colour, unpackUnorm4x8(pushConstants.wallColor).rgb * brightness, mixWall);
++		colour = mix(colour, unpackUnorm4x8(pushConstants.floorColor).rgb * brightness, mixFloor);
+ 	}
+-	else if (pushConstants.drawflatMode > 0.5) {
++	else if (worldFlag(VK_WORLD_TINTED)) {
+ 		// Tinted: multiply.
+-		colour = mix(colour, colour * pushConstants.floorColor.rgb, mixFloor);
+-		colour = mix(colour, colour * pushConstants.wallColor.rgb, mixWall);
++		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.floorColor).rgb, mixFloor);
++		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.wallColor).rgb, mixWall);
+ 	}
+ 
+ 	return colour;
+@@ -78,7 +62,7 @@
+ 		texCoord.s += sin((inTexCoord.t + pushConstants.time) * 1.5) * 0.125;
+ 		texCoord.t += sin((inTexCoord.s + pushConstants.time) * 1.5) * 0.125;
+ 	}
+-	else if (pushConstants.textureless > 0.5) {
++	else if (worldFlag(VK_WORLD_TEXTURELESS)) {
+ 		// Keep the lightmap/depth/outline pipeline exactly as-is, just
+ 		// sample a single fixed texel from the world texture instead of
+ 		// the surface's real UVs (same trick Modern OpenGL's
+@@ -94,14 +78,14 @@
+ 	}
+ 
+ 	fragColour = vec4(applyDrawflatTint(texColour.rgb) * lightColour.rgb, 1.0);
+-	if (pushConstants.detailEnabled > 0.5) {
++	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ 	// Port of GLC/GLM's gl_caustics: an animated multiplicative overlay,
+ 	// applied only to fragments flagged underwater at surface-build time
+ 	// (see draw_world.fragment.glsl for the reference UV animation/blend).
+-	if (pushConstants.causticsEnabled > 0.5 && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
++	if (worldFlag(VK_WORLD_CAUSTICS) && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
+ 		vec2 causticCoord = vec2(
+ 			(inTexCoord.s + sin(0.465 * (pushConstants.time + inTexCoord.t))) * -0.1234375,
+ 			(inTexCoord.t + sin(0.465 * (pushConstants.time + inTexCoord.s))) * -0.1234375);
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.vert b/src/vulkan_shaders/vk_world_lightmapped.vert
+--- a/src/vulkan_shaders/vk_world_lightmapped.vert
++++ b/src/vulkan_shaders/vk_world_lightmapped.vert
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inPosition;
+ layout(location = 1) in vec2 inTexCoord;
+@@ -6,18 +7,7 @@
+ layout(location = 3) in vec2 inDetailCoord;
+ layout(location = 4) in uint inFlags;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	vec2 padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec2 outTexCoord;
+ layout(location = 1) out vec2 outLightmapCoord;
+diff --git a/src/vulkan_shaders/vk_world_overlay.frag b/src/vulkan_shaders/vk_world_overlay.frag
+--- a/src/vulkan_shaders/vk_world_overlay.frag
++++ b/src/vulkan_shaders/vk_world_overlay.frag
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D overlayTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -6,18 +7,7 @@
+ layout(location = 0) in vec2 inTexCoord;
+ layout(location = 1) in vec2 inDetailCoord;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	vec2 padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -25,7 +15,7 @@
+ {
+ 	vec4 texColour = texture(overlayTexture[0], inTexCoord);
+ 
+-	if (pushConstants.detailEnabled > 0.5) {
++	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		texColour = vec4(detail.rgb * texColour.rgb * 2.0, texColour.a);
+ 	}
+diff --git a/src/vulkan_shaders/vk_world_push.glsl b/src/vulkan_shaders/vk_world_push.glsl
+new file mode 100644
+--- /dev/null
++++ b/src/vulkan_shaders/vk_world_push.glsl
+@@ -0,0 +1,20 @@
++// Must match vk_world_push_t: 128 bytes. OpenAI Codex, 2026-09-13. GPL-2.0-or-later.
++#include "vk_world_flags.h"
++layout(push_constant) uniform PushConstants {
++	mat4 mvp;
++	vec4 color;
++	vec4 cameraPosition;
++	float time;
++	float alpha;
++	float surfaceType;
++	float useSkyTexture;
++	float fastTurb;
++	uint floorColor;
++	uint wallColor;
++	uint flags;
++} pushConstants;
++
++bool worldFlag(uint flag)
++{
++	return (pushConstants.flags & flag) != 0u;
++}
+diff --git a/src/vulkan_shaders/vk_world_textured.frag b/src/vulkan_shaders/vk_world_textured.frag
+--- a/src/vulkan_shaders/vk_world_textured.frag
++++ b/src/vulkan_shaders/vk_world_textured.frag
+@@ -1,4 +1,5 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -8,24 +9,7 @@
+ layout(location = 1) in vec2 inDetailCoord;
+ layout(location = 2) flat in uint inFlags;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	float textureless;
+-	float causticsEnabled; // vk_world_flat's drawflatColor slot, repurposed here
+-	vec4 floorColor;
+-	vec4 wallColor;
+-	float drawflatMode; // 0=off, 1=tinted, 2=bright -- see r_drawflat_mode
+-	float tintFloors;
+-	float tintWalls;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -46,19 +30,19 @@
+ 	}
+ 
+ 	bool isFloor = (inFlags & EZQ_SURFACE_IS_FLOOR) != 0u;
+-	float mixFloor = (isFloor && pushConstants.tintFloors > 0.5) ? 1.0 : 0.0;
+-	float mixWall = (!isFloor && pushConstants.tintWalls > 0.5) ? 1.0 : 0.0;
++	float mixFloor = (isFloor && worldFlag(VK_WORLD_TINT_FLOORS)) ? 1.0 : 0.0;
++	float mixWall = (!isFloor && worldFlag(VK_WORLD_TINT_WALLS)) ? 1.0 : 0.0;
+ 
+-	if (pushConstants.drawflatMode > 1.5) {
++	if (worldFlag(VK_WORLD_BRIGHT)) {
+ 		// Bright: luminance-preserving recolor (kudos to Darel Rex Finley).
+ 		float brightness = sqrt(colour.r * colour.r * 0.241 + colour.g * colour.g * 0.691 + colour.b * colour.b * 0.068);
+-		colour = mix(colour, pushConstants.wallColor.rgb * brightness, mixWall);
+-		colour = mix(colour, pushConstants.floorColor.rgb * brightness, mixFloor);
++		colour = mix(colour, unpackUnorm4x8(pushConstants.wallColor).rgb * brightness, mixWall);
++		colour = mix(colour, unpackUnorm4x8(pushConstants.floorColor).rgb * brightness, mixFloor);
+ 	}
+-	else if (pushConstants.drawflatMode > 0.5) {
++	else if (worldFlag(VK_WORLD_TINTED)) {
+ 		// Tinted: multiply.
+-		colour = mix(colour, colour * pushConstants.floorColor.rgb, mixFloor);
+-		colour = mix(colour, colour * pushConstants.wallColor.rgb, mixWall);
++		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.floorColor).rgb, mixFloor);
++		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.wallColor).rgb, mixWall);
+ 	}
+ 
+ 	return colour;
+@@ -76,7 +60,7 @@
+ 		texCoord.s += sin((inTexCoord.t + pushConstants.time) * 1.5) * 0.125;
+ 		texCoord.t += sin((inTexCoord.s + pushConstants.time) * 1.5) * 0.125;
+ 	}
+-	else if (pushConstants.textureless > 0.5) {
++	else if (worldFlag(VK_WORLD_TEXTURELESS)) {
+ 		texCoord = vec2(0.0);
+ 	}
+ 
+@@ -87,14 +71,14 @@
+ 	}
+ 
+ 	fragColour = vec4(applyDrawflatTint(texColour.rgb), 1.0);
+-	if (pushConstants.detailEnabled > 0.5) {
++	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ 	// Port of GLC/GLM's gl_caustics: an animated multiplicative overlay,
+ 	// applied only to fragments flagged underwater at surface-build time
+ 	// (see draw_world.fragment.glsl for the reference UV animation/blend).
+-	if (pushConstants.causticsEnabled > 0.5 && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
++	if (worldFlag(VK_WORLD_CAUSTICS) && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
+ 		vec2 causticCoord = vec2(
+ 			(inTexCoord.s + sin(0.465 * (pushConstants.time + inTexCoord.t))) * -0.1234375,
+ 			(inTexCoord.t + sin(0.465 * (pushConstants.time + inTexCoord.s))) * -0.1234375);
+diff --git a/src/vulkan_shaders/vk_world_textured.vert b/src/vulkan_shaders/vk_world_textured.vert
+--- a/src/vulkan_shaders/vk_world_textured.vert
++++ b/src/vulkan_shaders/vk_world_textured.vert
+@@ -1,22 +1,12 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inPosition;
+ layout(location = 1) in vec2 inTexCoord;
+ layout(location = 2) in vec2 inDetailCoord;
+ layout(location = 3) in uint inFlags;
+ 
+-layout(push_constant) uniform PushConstants {
+-	mat4 mvp;
+-	vec4 color;
+-	vec4 cameraPosition;
+-	float time;
+-	float alpha;
+-	float surfaceType;
+-	float useSkyTexture;
+-	float fastTurb;
+-	float detailEnabled;
+-	vec2 padding;
+-} pushConstants;
++#include "vk_world_push.glsl"
+ 
+ layout(location = 0) out vec2 outTexCoord;
+ layout(location = 1) out vec2 outDetailCoord;

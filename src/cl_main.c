@@ -48,6 +48,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "utils.h"
 #include "qsound.h"
 #include "menu.h"
+#include "menu_local.h"
 #include "image.h"
 #ifndef _WIN32
 #include <netdb.h>
@@ -439,6 +440,7 @@ void CL_MakeActive(void)
 	// Reset safestrafe state on spawn
 	memset(&cl.safestrafe, 0, sizeof(cl.safestrafe));
 	
+	MLocal_Connected();
 	TP_ExecTrigger("f_spawn");
 }
 
@@ -2848,7 +2850,7 @@ void CL_Frame(double time)
 
 		R_PerformanceBeginFrame();
 		if (SCR_UpdateScreenPrePlayerView()) {
-			qbool two_pass_rendering = GL_FramebufferEnabled2D();
+			qbool two_pass_rendering = R_UseVulkan() || GL_FramebufferEnabled2D();
 			renderer.ScreenDrawStart();
 
 			while (draw_next_view) {

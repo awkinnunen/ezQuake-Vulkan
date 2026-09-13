@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 layout(location = 0) in vec3 inFlatColor;
 layout(location = 1) in vec3 inDirection;
@@ -14,19 +15,11 @@ layout(set = 0, binding = 6) uniform sampler2D skyboxFace4;
 layout(set = 0, binding = 7) uniform sampler2D skyboxFace5;
 layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
 
-layout(push_constant) uniform PushConstants {
-	mat4 mvp;
-	vec4 color;
-	vec4 cameraPosition;
-	float time;
-	float alpha;
-	float surfaceType;
-	float useSkyTexture;
-	float fastTurb;
-	float detailEnabled;
-	float textureless;
-	float drawflatColor;
-} pushConstants;
+#include "vk_world_push.glsl"
+#define CV_SET 4
+#define CV_WORLD_FRAGMENT
+#include "vk_competitive.glsl"
+#include "vk_skybox_uv.glsl"
 
 layout(location = 0) out vec4 fragColour;
 
@@ -41,6 +34,16 @@ int skyboxAxis(vec3 dir)
 		return dir.y < 0.0 ? 3 : 2;
 	}
 	return dir.z < 0.0 ? 5 : 4;
+}
+
+ivec2 skyboxFaceSize(int axis)
+{
+	if (axis == 0) return textureSize(skyboxFace0, 0);
+	if (axis == 1) return textureSize(skyboxFace1, 0);
+	if (axis == 2) return textureSize(skyboxFace2, 0);
+	if (axis == 3) return textureSize(skyboxFace3, 0);
+	if (axis == 4) return textureSize(skyboxFace4, 0);
+	return textureSize(skyboxFace5, 0);
 }
 
 vec2 skyboxUv(int axis, vec3 dir)
@@ -80,7 +83,7 @@ vec2 skyboxUv(int axis, vec3 dir)
 		t = dir.x / dv;
 	}
 
-	vec2 uv = clamp((vec2(s, t) + vec2(1.0)) * 0.5, vec2(1.0 / 512.0), vec2(511.0 / 512.0));
+	vec2 uv = skyboxClampUv((vec2(s, t) + vec2(1.0)) * 0.5, skyboxFaceSize(axis));
 	uv.y = 1.0 - uv.y;
 	return uv;
 }
@@ -107,15 +110,15 @@ vec3 sampleSkyboxFace(int face, vec2 uv)
 
 void main()
 {
-	vec3 base = (pushConstants.surfaceType > 0.5 || pushConstants.drawflatColor > 0.5)
+	vec3 base = (pushConstants.surfaceType > 0.5 || worldFlag(VK_WORLD_DRAWFLAT_COLOR))
 		? pushConstants.color.rgb
 		: max(inFlatColor, vec3(0.08));
 
 	// True r_drawflat surfaces (not sky/turb, no fallback) still get shaded
 	// by the surface's real lightmap, same as GLC/GLM's drawflat mode -- a
 	// solid, completely unlit fill would otherwise flatten all depth cues.
-	if (pushConstants.drawflatColor > 0.5 && pushConstants.surfaceType < 0.5) {
-		base *= texture(lightmapTexture[0], inLightmapCoord).rgb;
+	if (worldFlag(VK_WORLD_DRAWFLAT_COLOR) && pushConstants.surfaceType < 0.5) {
+		base *= cvLighting(texture(lightmapTexture[0], inLightmapCoord).rgb, false);
 	}
 
 	if (pushConstants.surfaceType > 5.5) {

@@ -1,0 +1,1368 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -477,7 +477,7 @@
+         add_custom_command(
+                 OUTPUT ${output_file}
+                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
+-                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl
++                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl
+                 COMMENT "Compiling Vulkan shader ${source_file}"
+                 VERBATIM
+         )
+@@ -535,6 +535,7 @@
+             ${SOURCE_DIR}/vk_texture.c
+             ${SOURCE_DIR}/vk_vao.c
+             ${SOURCE_DIR}/vk_window_surface.c
++            ${SOURCE_DIR}/vk_competitive.c
+             ${SOURCE_DIR}/vk_world.c
+             ${vulkan_renderer_headers}
+     )
+@@ -792,6 +793,8 @@
+         ${SOURCE_DIR}/cfg_bindings.h
+         ${SOURCE_DIR}/menu_config.c
+         ${SOURCE_DIR}/menu_config.h
++        ${SOURCE_DIR}/competitive_visuals.c
++        ${SOURCE_DIR}/competitive_visuals.h
+         ${SOURCE_DIR}/menu_local.c
+         ${SOURCE_DIR}/menu_local.h
+         ${SOURCE_DIR}/console.c
+diff --git a/src/cl_main.c b/src/cl_main.c
+--- a/src/cl_main.c
++++ b/src/cl_main.c
+@@ -2850,7 +2850,7 @@
+ 
+ 		R_PerformanceBeginFrame();
+ 		if (SCR_UpdateScreenPrePlayerView()) {
+-			qbool two_pass_rendering = GL_FramebufferEnabled2D();
++			qbool two_pass_rendering = R_UseVulkan() || GL_FramebufferEnabled2D();
+ 			renderer.ScreenDrawStart();
+ 
+ 			while (draw_next_view) {
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+new file mode 100644
+--- /dev/null
++++ b/src/competitive_visuals.c
+@@ -0,0 +1,269 @@
++/* Competitive Visuals, OpenAI Codex, 2026-09-13. GPL-2.0-or-later. */
++#include "quakedef.h"
++#include "gl_model.h"
++#include "tr_types.h"
++#include "r_local.h"
++extern void M_Print_GetPoint(int cx, int cy, int *rx, int *ry, const char *str, qbool red);
++#include "rulesets.h"
++#include "competitive_visuals.h"
++#include <ctype.h>
++#include <math.h>
++
++#define CV_VAR(id,label,def,lo,hi,step,page,help) {"r_cv_" #id, def},
++static cvar_t vars[] = { CV_OPTIONS(CV_VAR) };
++#undef CV_VAR
++typedef struct { const char *label, *def, *help; float lo, hi, step; int page; } cv_option_t;
++#define CV_OPT(id,label,def,lo,hi,step,page,help) {label,def,help,lo,hi,step,page},
++static const cv_option_t opts[] = { CV_OPTIONS(CV_OPT) };
++#undef CV_OPT
++typedef struct { const char *name, *label, *help; float lo, hi, step; int page; } cv_existing_t;
++static const cv_existing_t existing[] = {
++ {"gl_outline","Outline mode","0 off 1 models 2 world 3 both",0,3,1,3},
++ {"gl_outline_scale_model","Model edge width","Subject to the active ruleset",0,1,.05,3},
++ {"gl_outline_world_depth_threshold","Edge depth threshold","World depth discontinuity threshold",1,16,.5,3},
++ {"gl_outline_use_player_color","Player edge colours","Use the player shirt colour",0,1,1,3},
++ {"r_shadows","Model shadows","Existing projected model shadows",0,1,.1,4},
++ {"gl_detail","Detail overlay","Additional world detail texture",0,1,1,4},
++ {"gl_caustics","Water caustics","Animated underwater decoration",0,1,1,4},
++ {"vid_framebuffer_multisample","MSAA samples","0 off; 2, 4 or 8 samples",0,8,2,5},
++ {"vid_framebuffer_fxaa","FXAA preset","Existing renderer AA setting",0,17,1,5},
++ {"r_rocketTrail","Rocket trail","Existing rocket trail style: 0-9",0,9,1,4},
++ {"r_grenadeTrail","Grenade trail","Existing grenade trail style: 0-3",0,3,1,4},
++ {"r_explosionType","Explosion style","Existing explosion style: 0-7",0,7,1,4},
++ {"cl_muzzleflash","Muzzle flashes","0 off 1 on 2 own weapon off",0,2,1,4},
++ {"r_drawflame","Torch flames","Keep map decoration or simplify",0,1,1,4},
++ {"gl_texturemode","Texture filtering","Cycle nearest through trilinear",0,0,0,5}
++};
++#define CV_EXT_COUNT (sizeof(existing)/sizeof(existing[0]))
++#define CV_TOTAL (CV_COUNT + CV_EXT_COUNT)
++static const char *pages[] = {"Profiles", "World", "Lighting", "Silhouettes", "Effects", "Image"};
++static char notice[160], profile[32] = "competitive", saved[CV_TOTAL][64];
++static qbool comparing, editing;
++static int page, cursor, indices[CV_TOTAL], rows;
++static menu_window_t window;
++
++float CV_Value(cv_id id) {
++ float value = vars[id].value;
++ return isfinite(value) ? bound(opts[id].lo, value, opts[id].hi) : (float)atof(opts[id].def);
++}
++qbool CV_Active(void) { return CV_Value(CV_enable) != 0 && R_UseVulkan(); }
++qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked) {
++ return player && !weapon && !blocked && !(effects & (EF_RED | EF_GREEN | EF_BLUE));
++}
++static void Palette(float *out, int index) {
++ int i, c = 16 * bound(0,index,13) + 8;
++ for (i=0;i<3;++i) out[i] = host_basepal[c*3+i] / 255.0f;
++}
++void CV_EdgeColor(float *out, int kind) {
++ Palette(out,(int)CV_Value(kind==0?CV_worldedge:kind==1?CV_teamedge:CV_enemyedge));
++}
++void CV_Params(cv_params_t *out) {
++ memset(out,0,sizeof(*out));
++ out->world[0]=out->world[2]=out->world[3]=1;
++ out->post[0]=1;
++ out->modelview[0]=out->modelview[5]=out->modelview[10]=out->modelview[15]=1;
++ if (!CV_Active()) return;
++ out->world[0]=CV_Value(CV_detail); out->world[1]=CV_Value(CV_pattern);
++ out->world[2]=CV_Value(CV_contrast); out->world[3]=CV_Value(CV_saturation);
++ Palette(out->floor,(int)CV_Value(CV_floor)); Palette(out->wall,(int)CV_Value(CV_wall));
++ out->floor[3]=CV_Value(CV_tint); out->wall[3]=CV_Value(CV_distance);
++ out->light[0]=CV_Value(CV_light); out->light[1]=CV_Value(CV_lightmix);
++ out->light[2]=CV_Value(CV_worldlight); out->light[3]=CV_Value(CV_modellight);
++ out->levels[0]=CV_Value(CV_shadow); out->levels[1]=CV_Value(CV_midtone);
++ out->levels[2]=CV_Value(CV_highlight); out->levels[3]=CV_Value(CV_bands);
++ out->shape[0]=CV_Value(CV_softness); out->shape[1]=CV_Value(CV_warmth);
++ out->rim[1]=CV_Value(CV_rimwidth); out->rim[2]=CV_Value(CV_rimup);
++ out->post[0]=CV_Value(CV_exposure); out->post[1]=CV_Value(CV_tonemap);
++ out->post[2]=CV_Value(CV_bloom); out->post[3]=CV_Value(CV_bloomthreshold);
++ out->post2[0]=CV_Value(CV_bloomradius); out->post2[1]=CV_Value(CV_ao);
++ out->post2[2]=CV_Value(CV_aoradius); out->post2[3]=CV_Value(CV_sharpen);
++}
++void CV_PlayerParams(cv_params_t *out, entity_t *ent, int effects, int render_effects, const float *modelview) {
++ int i; float tint;
++ CV_Params(out);
++ memcpy(out->modelview,modelview,sizeof(out->modelview));
++ if(ent && RuleSets_DisallowModelOutline(ent->model)) out->light[3]=0;
++ if (!CV_Active() || !ent || !CV_RimAllowed(effects, (render_effects & RF_PLAYERMODEL) != 0,
++     (render_effects & RF_WEAPONMODEL) != 0, RuleSets_DisallowModelOutline(ent->model))) return;
++ out->rim[0]=CV_Value(CV_rim);
++ Palette(out->rimcolor,ent->scoreboard ? ent->scoreboard->topcolor : 0);
++ tint=CV_Value(CV_rimteam);
++ for(i=0;i<3;++i) out->rimcolor[i]=.65f*(1-tint)+out->rimcolor[i]*tint;
++}
++static cvar_t *Var(int index) { return index<CV_COUNT ? &vars[index] : Cvar_Find(existing[index-CV_COUNT].name); }
++static void Snapshot(void) { int i; for(i=0;i<CV_TOTAL;++i) { cvar_t *v=Var(i); strlcpy(saved[i],v?v->string:"",sizeof(saved[i])); } }
++static void Restore(void) { int i; for(i=0;i<CV_TOTAL;++i) { cvar_t *v=Var(i); if(v) Cvar_Set(v,saved[i]); } comparing=false; }
++static void Reset(int which) {
++ int i;
++ for(i=0;i<CV_TOTAL;++i) {
++  cvar_t *v=Var(i); int optionPage=i<CV_COUNT?opts[i].page:existing[i-CV_COUNT].page;
++  if(v && (which<0||optionPage==which)) Cvar_Set(v,v->defaultvalue);
++ }
++}
++static void Preset(int n) {
++ if(comparing) Restore();
++ Reset(-1);
++ if(n) {
++  Cvar_SetValue(&vars[CV_enable],1); Cvar_SetValue(&vars[CV_detail],.35);
++  Cvar_SetValue(&vars[CV_contrast],.8); Cvar_SetValue(&vars[CV_saturation],.85);
++  Cvar_SetValue(&vars[CV_light],n==2?2:1); Cvar_SetValue(&vars[CV_lightmix],n==2?.6:.3);
++  Cvar_SetValue(&vars[CV_rim],.06);
++ }
++ snprintf(notice,sizeof(notice),"Applied %s. Bloom is off.",n==0?"Original":n==1?"Clean":"Soft Cel");
++}
++static void Compare(void) {
++ if(comparing) { Restore(); strlcpy(notice,"Restored your visual settings.",sizeof(notice)); }
++ else { Snapshot(); Reset(-1); comparing=true; strlcpy(notice,"Original comparison. F6 restores.",sizeof(notice)); }
++}
++static qbool ValidName(const char *s) {
++ size_t n=strlen(s); if(!n||n>=sizeof(profile)) return false;
++ while(*s) { if(!isalnum((unsigned char)*s)&&*s!='_'&&*s!='-') return false; ++s; } return true;
++}
++static void Profile(qbool load, const char *name) {
++ char path[MAX_OSPATH], line[160], key[80], value[64], extra; FILE *f; int i, count=0;
++ char pending[CV_TOTAL][64]; qbool seen[CV_TOTAL]={0}, valid=true;
++ if(!ValidName(name)) { strlcpy(notice,"Use letters, digits, - or _ in names.",sizeof(notice)); return; }
++ snprintf(path,sizeof(path),"%s/ezquake/competitive/%s.cfg",com_basedir,name);
++ if(!load) {
++  if(comparing) Restore();
++  FS_CreatePath(path); f=fopen(path,"w");
++  if(!f) { strlcpy(notice,"Could not create visual profile.",sizeof(notice)); return; }
++  fprintf(f,"// Competitive Visuals profile v1\n");
++  for(i=0;i<CV_TOTAL;++i) { cvar_t *v=Var(i); if(v) fprintf(f,"%s %s\n",v->name,v->string); }
++  valid=!ferror(f); if(fclose(f)) valid=false;
++ } else {
++  f=fopen(path,"r"); if(!f) { strlcpy(notice,"Visual profile not found.",sizeof(notice)); return; }
++  while(fgets(line,sizeof(line),f)) {
++   char *end; double number;
++   if(++count>256 || (!strchr(line,'\n')&&!feof(f))) { valid=false; break; }
++   if(line[0]=='/'&&line[1]=='/') continue;
++   if(sscanf(line,"%79s %63s %c",key,value,&extra)!=2) { valid=false; break; }
++   for(i=0;i<CV_TOTAL;++i) { cvar_t *v=Var(i); if(v&&!strcmp(v->name,key)) break; }
++   if(i==CV_TOTAL) { valid=false; break; }
++   if(!strcmp(key,"gl_texturemode")) {
++    if(strcmp(value,"GL_NEAREST")&&strcmp(value,"GL_LINEAR")&&strcmp(value,"GL_NEAREST_MIPMAP_NEAREST")&&strcmp(value,"GL_LINEAR_MIPMAP_NEAREST")&&strcmp(value,"GL_NEAREST_MIPMAP_LINEAR")&&strcmp(value,"GL_LINEAR_MIPMAP_LINEAR")) { valid=false; break; }
++   } else {
++    number=strtod(value,&end);
++    if(*end||!isfinite(number)) { valid=false; break; }
++    if(i<CV_COUNT && (number<opts[i].lo||number>opts[i].hi)) { valid=false; break; }
++    if(i>=CV_COUNT && (number<existing[i-CV_COUNT].lo||number>existing[i-CV_COUNT].hi)) { valid=false; break; }
++   }
++   strlcpy(pending[i],value,sizeof(pending[i])); seen[i]=true;
++  }
++  if(ferror(f)) valid=false; fclose(f);
++  { qbool any=false; for(i=0;i<CV_TOTAL;++i) any |= seen[i]; valid &= any; }
++  if(valid) {
++   if(comparing) Restore();
++   for(i=0;i<CV_TOTAL;++i) if(seen[i]) Cvar_Set(Var(i),pending[i]);
++  }
++ }
++ snprintf(notice,sizeof(notice),"%s",!valid?"Invalid profile; no settings loaded.":load?"Loaded visual-only profile.":"Saved visual-only profile.");
++ Con_Printf("CV_PROFILE %s %s: %s\n",load?"load":"save",name,notice);
++}
++static void BuildRows(void) {
++ int i; rows=0;
++ if(!page) { rows=8; return; }
++ for(i=0;i<CV_COUNT;++i) if(opts[i].page==page) indices[rows++]=i;
++ for(i=0;i<CV_EXT_COUNT;++i) if(existing[i].page==page&&Var(CV_COUNT+i)) indices[rows++]=CV_COUNT+i;
++ cursor=bound(0,cursor,max(0,rows-1));
++}
++void CV_Open(void) { M_EnterMenu(m_competitive); BuildRows(); }
++void CV_Draw(void) {
++ int i,first; char line[80];
++ M_PrintWhite(64,8,"COMPETITIVE VISUALS");
++ snprintf(line,sizeof(line),"< %s >  %d/6",pages[page],page+1); M_PrintWhite(80,24,line);
++ if(page!=3) M_PrintWhite(16,36,R_UseVulkan()?(comparing?"Original comparison active":"Vulkan: live visual controls"):"New style needs Vulkan; others work");
++ if(page==3) {
++  snprintf(line,sizeof(line),"Rules: %.12s  world edges: %s",Rulesets_Ruleset(),RuleSets_AllowEdgeOutline()?"yes":"blocked");
++  M_PrintWhite(16,36,line);
++ }
++ BuildRows(); first=(cursor/10)*10;
++ for(i=first;i<min(rows,first+10);++i) {
++  int y=52+(i-first)*10;
++  if(!page) {
++   const char *labels[]={"Original preset","Clean preset","Soft Cel preset",NULL,"Save visual profile","Load visual profile","Compare original (F6)","Reset visual style"};
++   if(i==3) snprintf(line,sizeof(line),"Name: %.28s%s",profile,editing?"_":""); else strlcpy(line,labels[i],sizeof(line));
++  } else {
++   int index=indices[i]; cvar_t *v=Var(index);
++   if(index<CV_COUNT) snprintf(line,sizeof(line),"%-21.21s %9.3g",opts[index].label,CV_Value(index));
++   else snprintf(line,sizeof(line),"%-21.21s %9.9s",existing[index-CV_COUNT].label,v?v->string:"n/a");
++  }
++  if(i==first) M_Print_GetPoint(32,y,&window.x,&window.y,line,false); else M_Print(32,y,line);
++ }
++ window.w=256; window.h=min(rows-first,10)*10;
++ M_DrawCharacter(16,52+(cursor-first)*10,FLASHINGARROW());
++ M_PrintWhite(16,158,"PgUp/PgDn: page  arrows: adjust");
++ M_PrintWhite(16,168,"F6: compare  F7: reset page");
++ if(page) { int index=indices[cursor]; snprintf(line,sizeof(line),"%.36s",index<CV_COUNT?opts[index].help:existing[index-CV_COUNT].help); M_PrintWhite(16,180,line); }
++ if(notice[0]) { snprintf(line,sizeof(line),"%.36s",notice); M_PrintWhite(16,190,line); }
++}
++void CV_Key(int key) {
++ int index,direction=key==K_LEFTARROW?-1:1; cvar_t *v;
++ if(editing) {
++  size_t len=strlen(profile);
++  if(key==K_ENTER||key==K_ESCAPE) editing=false;
++  else if(key==K_BACKSPACE&&len) profile[len-1]=0;
++  else if(key>0&&key<128&&len+1<sizeof(profile)&&(isalnum(key)||key=='_'||key=='-')) { profile[len]=(char)key; profile[len+1]=0; }
++  return;
++ }
++ BuildRows();
++ if(key==K_ESCAPE||key==K_MOUSE2) { M_LeaveMenu(m_options); return; }
++ if(key==K_F6) { Compare(); return; }
++ if(key==K_F7) { if(comparing) Restore(); Reset(page?page:-1); strlcpy(notice,"Restored default visual settings.",sizeof(notice)); return; }
++ if(key==K_PGUP||key==K_PGDN||key==K_TAB) { notice[0]=0; page=(page+(key==K_PGUP?5:1))%6; cursor=0; return; }
++ if(key==K_UPARROW||key==K_MWHEELUP) { cursor=(cursor+rows-1)%rows; return; }
++ if(key==K_DOWNARROW||key==K_MWHEELDOWN) { cursor=(cursor+1)%rows; return; }
++ if(key==K_HOME) { cursor=0; return; } if(key==K_END) { cursor=rows-1; return; }
++ if(key!=K_ENTER&&key!=K_MOUSE1&&key!=K_LEFTARROW&&key!=K_RIGHTARROW) return;
++ if(!page) {
++  if(cursor<3) Preset(cursor);
++  else if(cursor==3) editing=true;
++  else if(cursor==4||cursor==5) Profile(cursor==5,profile);
++  else if(cursor==6) Compare();
++  else { if(comparing) Restore(); Reset(-1); }
++  return;
++ }
++ if(comparing) Restore(); index=indices[cursor]; v=Var(index); if(!v) return;
++ if(index<CV_COUNT) {
++  float value=CV_Value(index);
++  if((key==K_ENTER||key==K_MOUSE1)&&opts[index].lo==0&&opts[index].hi==1&&opts[index].step==1) value=1-value;
++  else value=bound(opts[index].lo,value+direction*opts[index].step,opts[index].hi);
++  Cvar_SetValue(v,value);
++ }
++ else {
++  const cv_existing_t *e=&existing[index-CV_COUNT];
++  if(!strcmp(e->name,"gl_texturemode")) {
++   const char *filters[]={"GL_NEAREST","GL_LINEAR","GL_NEAREST_MIPMAP_NEAREST","GL_LINEAR_MIPMAP_NEAREST","GL_NEAREST_MIPMAP_LINEAR","GL_LINEAR_MIPMAP_LINEAR"}; int i;
++   for(i=0;i<6;++i) if(!strcmp(v->string,filters[i])) break;
++   Cvar_Set(v,(char *)filters[(i+6+direction)%6]);
++  } else if(!strcmp(e->name,"vid_framebuffer_multisample")) {
++   int samples[]={0,2,4,8}, i=0;
++   while(i<3 && samples[i]<v->value) ++i;
++   Cvar_SetValue(v,samples[bound(0,i+direction,3)]);
++  } else Cvar_SetValue(v,bound(e->lo,v->value+direction*e->step,e->hi));
++ }
++}
++qbool CV_Mouse(const mouse_state_t *ms) {
++ int first=(cursor/10)*10, selected=cursor-first;
++ M_Mouse_Select(&window,ms,min(rows-first,10),&selected); cursor=first+selected;
++ if(ms->button_up==1) CV_Key(K_MOUSE1); if(ms->button_up==2) CV_Key(K_MOUSE2); return true;
++}
++static void Command(void) {
++ const char *action=Cmd_Argv(1);
++ if(!strcmp(action,"preset")) Preset(!strcmp(Cmd_Argv(2),"clean")?1:!strcmp(Cmd_Argv(2),"cel")?2:0);
++ else if(!strcmp(action,"save")||!strcmp(action,"load")) Profile(!strcmp(action,"load"),Cmd_Argv(2));
++ else if(!strcmp(action,"compare")) Compare();
++ else Con_Printf("cv preset original|clean|cel; cv save|load <name>; cv compare\n");
++}
++static void Developer(void) {
++ if(!developer.value) return;
++ if(!strcmp(Cmd_Argv(1),"checkpoint")) { cbuf_main.runAwayLoop=cbuf_main.waitCount=0; return; }
++ if(!strcmp(Cmd_Argv(1),"key")) CV_Key(Key_StringToKeynum(Cmd_Argv(2)));
++ if(!strcmp(Cmd_Argv(1),"page")) { page=bound(0,atoi(Cmd_Argv(2)),5);cursor=0;BuildRows(); }
++ Con_Printf("CV_STATE page=%d rows=%d active=%d compare=%d rim=%g bloom=%g\n",page,rows,CV_Active(),comparing,CV_Value(CV_rim),CV_Value(CV_bloom));
++}
++void CV_Init(void) {
++ int i; for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
++ Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
++ if(IsDeveloperMode()) Cmd_AddCommand("dev_competitive",Developer);
++}
+diff --git a/src/competitive_visuals.h b/src/competitive_visuals.h
+new file mode 100644
+--- /dev/null
++++ b/src/competitive_visuals.h
+@@ -0,0 +1,60 @@
++/* Competitive Visuals, OpenAI Codex, 2026-09-13. GPL-2.0-or-later. */
++#ifndef EZ_COMPETITIVE_VISUALS_H
++#define EZ_COMPETITIVE_VISUALS_H
++#include "menu.h"
++/* One registry drives cvars, bounded shader values, menu and visual-only profiles. */
++#define CV_OPTIONS(X) \
++ X(enable,"Enabled","0",0,1,1,1,"Enable the Vulkan visual style") \
++ X(detail,"Fine detail","1",0,1,.05,1,"Keep large patterns, reduce grain") \
++ X(pattern,"Pattern scale","2",0,5,.25,1,"Mip levels used for broad patterns") \
++ X(contrast,"Texture contrast","1",.2,1.5,.05,1,"Contrast around each broad pattern") \
++ X(saturation,"Saturation","1",0,1.5,.05,1,"World colour saturation") \
++ X(distance,"Distance smoothing","0",0,2,.1,1,"Gradual extra smoothing at distance") \
++ X(floor,"Floor colour","3",0,13,1,1,"Original Quake palette colour") \
++ X(wall,"Wall colour","2",0,13,1,1,"Original Quake palette colour") \
++ X(tint,"Surface tint","0",0,1,.05,1,"Blend floor/wall material colours") \
++ X(light,"Light response","0",0,2,1,2,"0 original  1 gradient  2 soft cel") \
++ X(lightmix,"Style blend","0",0,1,.05,2,"Blend styled and original lighting") \
++ X(worldlight,"World lighting","1",0,1,1,2,"Apply response to baked lighting") \
++ X(modellight,"Model lighting","1",0,1,1,2,"Apply response to ordinary models") \
++ X(shadow,"Shadow level","0.2",0,.7,.025,2,"Styled shadow brightness") \
++ X(midtone,"Midtone level","0.55",.1,1,.025,2,"Styled midtone brightness") \
++ X(highlight,"Highlight level","1",.5,1.5,.025,2,"Styled highlight brightness") \
++ X(bands,"Cel bands","4",2,8,1,2,"Number of lighting bands") \
++ X(softness,"Band softness","0.3",.05,1,.05,2,"Smooth transitions between bands") \
++ X(warmth,"Warm / cool","0",-.2,.2,.025,2,"Subtle light and shadow hue shift") \
++ X(rim,"Player rim","0",0,.2,.01,3,"Surface light; disabled on powerups") \
++ X(rimwidth,"Rim width","3",1,8,.25,3,"Higher values narrow the rim") \
++ X(rimup,"Upward bias","0.65",0,1,.05,3,"Favour upward facing surface normals") \
++ X(rimteam,"Team tint","0.15",0,.3,.025,3,"Very slight player shirt colour") \
++ X(edgewidth,"World edge width","1",.5,3,.1,3,"Screen-space world line width") \
++ X(edgestrength,"World edge opacity","1",0,1,.05,3,"Blend world lines into the scene") \
++ X(modelopacity,"Model edge opacity","1",0,1,.05,3,"Blend existing model outlines") \
++ X(edgepalette,"Use edge palette","0",0,1,1,3,"Override existing outline colours") \
++ X(worldedge,"World edge colour","0",0,13,1,3,"Quake palette colour for geometry") \
++ X(teamedge,"Friend edge colour","3",0,13,1,3,"Friendly player outline colour") \
++ X(enemyedge,"Enemy edge colour","0",0,13,1,3,"Enemy and other model outlines") \
++ X(bloom,"Bloom strength","0",0,.15,.005,4,"Zero disables bloom; HUD excluded") \
++ X(bloomthreshold,"Bloom threshold","0.9",.5,2,.05,4,"Only bright scene pixels contribute") \
++ X(bloomradius,"Bloom radius","2",.5,5,.25,4,"Small glow radius in screen pixels") \
++ X(ao,"World AO strength","0",0,.4,.025,4,"Restrained world contact shading") \
++ X(aoradius,"World AO radius","12",2,32,1,4,"World-space contact sample radius") \
++ X(exposure,"Exposure","1",.5,2,.05,5,"Manual scene exposure; HUD excluded") \
++ X(tonemap,"Tone curve","0",0,2,1,5,"0 original  1 soft shoulder  2 filmic") \
++ X(sharpen,"Scene sharpness","0",0,.5,.025,5,"Restrained scene-only sharpening")
++#define CV_ENUM(id,label,def,lo,hi,step,page,help) CV_##id,
++typedef enum { CV_OPTIONS(CV_ENUM) CV_COUNT } cv_id;
++#undef CV_ENUM
++typedef struct { float world[4], floor[4], wall[4], light[4], levels[4], shape[4], rim[4], rimcolor[4], post[4], post2[4], modelview[16]; } cv_params_t;
++void CV_Init(void);
++float CV_Value(cv_id id);
++qbool CV_Active(void);
++qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked);
++void CV_Params(cv_params_t *out);
++void CV_EdgeColor(float *out, int kind);
++void CV_PlayerParams(cv_params_t *out, entity_t *ent, int effects, int render_effects, const float *modelview);
++void CV_Open(void);
++void CV_Draw(void);
++void CV_Key(int key);
++qbool CV_Mouse(const mouse_state_t *ms);
++#endif
+diff --git a/src/menu.c b/src/menu.c
+--- a/src/menu.c
++++ b/src/menu.c
+@@ -35,6 +35,7 @@
+ #include "menu_ingame.h"
+ #include "menu_multiplayer.h"
+ #include "menu_local.h"
++#include "competitive_visuals.h"
+ #include "EX_FileList.h"
+ #include "help.h"
+ #include "utils.h"
+@@ -1292,6 +1293,7 @@
+ 	Menu_Ingame_Init();
+ 	Menu_MultiPlayer_Init(); // menu_multiplayer.h
+ 	MLocal_Init();
++	CV_Init();
+ 
+ 	Cmd_AddCommand ("togglemenu", M_ToggleMenu_f);
+ 	Cmd_AddCommand ("toggleproxymenu", M_ToggleProxyMenu_f);
+@@ -1368,6 +1370,7 @@
+ 		case m_none: break;
+ 		case m_main:			M_Main_Draw(); break;
+ 		case m_local:        MLocal_Draw(); break;
++		case m_competitive: CV_Draw(); break;
+ 		case m_singleplayer:	M_SinglePlayer_Draw(); break;
+ #ifndef CLIENTONLY
+ 		case m_load:			M_Load_Draw(); break;
+@@ -1428,6 +1431,7 @@
+ 		case m_none: return;
+ 		case m_main:			M_Main_Key(key); return;
+ 		case m_local:        MLocal_Key(key); return;
++		case m_competitive: CV_Key(key); return;
+ 		case m_singleplayer:	M_SinglePlayer_Key(key); return;
+ #ifndef CLIENTONLY
+ 		case m_load:			M_Load_Key(key); return;
+@@ -1462,6 +1466,7 @@
+     switch (m_state) {
+ 	case m_main:			return M_Main_Mouse_Event(ms);
+ 	case m_local:        return MLocal_Mouse(ms);
++	case m_competitive: return CV_Mouse(ms);
+ #ifndef CLIENTONLY
+ 	case m_singleplayer:	return M_SinglePlayer_Mouse_Event(ms);
+ #endif
+diff --git a/src/menu.h b/src/menu.h
+--- a/src/menu.h
++++ b/src/menu.h
+@@ -64,7 +64,7 @@
+ 
+ typedef enum {
+     m_none, m_main, m_proxy, m_singleplayer, m_load, m_save,
+-	m_multiplayer, m_demos, m_multiplayer_submenu, m_local,
++	m_multiplayer, m_demos, m_multiplayer_submenu, m_local, m_competitive,
+     m_options,
+ 	m_help,
+ 	m_quit, m_ingame, 
+diff --git a/src/menu_options.c b/src/menu_options.c
+--- a/src/menu_options.c
++++ b/src/menu_options.c
+@@ -51,6 +51,7 @@
+ #include "hud.h"
+ #include "hud_common.h"
+ #include "r_local.h"
++#include "competitive_visuals.h"
+ #include "menu_config.h"
+ 
+ extern cvar_t r_farclip, gl_max_size, gl_miptexLevel;
+@@ -974,6 +975,7 @@
+ 
+ // GRAPHICS TAB
+ setting settfps_arr[] = {
++	ADDSET_ACTION("Competitive Visuals", CV_Open, "World detail, lighting, silhouettes and visual profiles."),
+ 	ADDSET_BOOL		("Advanced Options", menu_advanced),
+ 	
+ 	ADDSET_SEPARATOR("Presets"),
+diff --git a/src/vk_aliasmodel.c b/src/vk_aliasmodel.c
+--- a/src/vk_aliasmodel.c
++++ b/src/vk_aliasmodel.c
+@@ -24,6 +24,7 @@
+ #include "rulesets.h"
+ #include "tr_types.h"
+ #include "vk_local.h"
++#include "competitive_visuals.h"
+ 
+ extern const unsigned char vk_alias_model_vert_spv[];
+ extern const unsigned int vk_alias_model_vert_spv_len;
+@@ -66,6 +67,7 @@
+ 	int blendMode;
+ 	qbool postscene;
+ 	qbool player;
++	cv_params_t cv;
+ } vk_alias_draw_t;
+ 
+ typedef struct vk_alias_push_s {
+@@ -204,6 +206,7 @@
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 	VkDescriptorSetLayout descriptorSetLayout;
++	VkDescriptorSetLayout cvLayouts[2];
+ 	VkPipeline* pipeline =
+ 		blendMode == VK_ALIAS_BLEND_SHADOW ? &aliasShadowPipeline :
+ 		blendMode == VK_ALIAS_BLEND_ADDITIVE ? &aliasAdditivePipeline :
+@@ -354,8 +357,9 @@
+ 
+ 		VK_InitialiseStructure(pipelineLayoutInfo);
+ 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+-		pipelineLayoutInfo.setLayoutCount = 1;
+-		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
++		pipelineLayoutInfo.setLayoutCount = 2;
++		cvLayouts[0] = descriptorSetLayout; cvLayouts[1] = VK_CVLayout();
++		pipelineLayoutInfo.pSetLayouts = cvLayouts;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+ 		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &aliasPipelineLayout) != VK_SUCCESS) {
+@@ -510,6 +514,10 @@
+ 	}
+ 
+ 	VK_AliasOutlineColor(ent, outlineColor);
++ if (CV_Active()) {
++  outlineColor[3] *= CV_Value(CV_modelopacity);
++  if (CV_Value(CV_edgepalette)) CV_EdgeColor(outlineColor,ent->scoreboard && ent->scoreboard->teammate ? 1 : 2);
++ }
+ 	outlineParams[0] = ent->outlineScale * RuleSets_ModelOutlineScale();
+ 	if (outlineParams[0] <= 0) {
+ 		return;
+@@ -570,6 +578,7 @@
+ 	R_MultiplyMatrix(modelView, R_ProjectionMatrix(), mvp);
+ 
+ 	draw = &aliasDraws[aliasDrawCount++];
++	CV_PlayerParams(&draw->cv, ent, ent->effects, render_effects, modelView);
+ 	draw->firstVertex = (uint32_t)firstVertex;
+ 	draw->vertexCount = (uint32_t)vertexCount;
+ 	memcpy(draw->mvp, mvp, sizeof(draw->mvp));
+@@ -872,6 +881,7 @@
+ 				lastPipeline = pipeline;
+ 			}
+ 		}
++		VK_CVBind(commandBuffer, aliasPipelineLayout, 1, &draw->cv);
+ 		vkCmdPushConstants(commandBuffer, aliasPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+ 		vkCmdDraw(commandBuffer, draw->vertexCount, 1, draw->firstVertex, 0);
+ 		++submitted;
+diff --git a/src/vk_competitive.c b/src/vk_competitive.c
+new file mode 100644
+--- /dev/null
++++ b/src/vk_competitive.c
+@@ -0,0 +1,72 @@
++/* Competitive Visuals uniforms. OpenAI Codex, 2026-09-13. GPL-2.0-or-later. */
++#ifdef RENDERER_OPTION_VULKAN
++#include <vulkan/vulkan.h>
++#include "quakedef.h"
++#include "vk_local.h"
++#include "competitive_visuals.h"
++
++#define CV_DRAWS 8192
++static VkDescriptorSetLayout cvLayout;
++static VkDescriptorPool cvPool;
++static VkDeviceSize cvStride;
++static struct { VkBuffer buffer; VkDeviceMemory memory; byte *mapped; VkDescriptorSet set; uint32_t used; } frames[VK_MAX_FRAMES_IN_FLIGHT];
++typedef char cv_params_size_check[(sizeof(cv_params_t)==224)?1:-1];
++
++VkDescriptorSetLayout VK_CVLayout(void) {
++ VkDescriptorSetLayoutBinding binding={0}; VkDescriptorSetLayoutCreateInfo info={0};
++ if(cvLayout) return cvLayout;
++ binding.binding=0; binding.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
++ binding.descriptorCount=1; binding.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
++ info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO; info.bindingCount=1;info.pBindings=&binding;
++ if(vkCreateDescriptorSetLayout(vk_options.logicalDevice,&info,NULL,&cvLayout)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals layout failed");
++ return cvLayout;
++}
++void VK_CVBeginFrame(void) {
++ uint32_t i=vk_options.frame.currentFrame;
++ cv_params_t params;
++ if(!cvPool) {
++  VkDescriptorPoolSize size={VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_MAX_FRAMES_IN_FLIGHT};
++  VkDescriptorPoolCreateInfo info={0}; VkPhysicalDeviceProperties props;
++  vkGetPhysicalDeviceProperties(vk_options.physicalDevice,&props);
++  if(props.limits.maxBoundDescriptorSets<5) Sys_Error("Vulkan: Competitive Visuals pipelines require 5 descriptor sets");
++  cvStride=(sizeof(cv_params_t)+props.limits.minUniformBufferOffsetAlignment-1)&~(props.limits.minUniformBufferOffsetAlignment-1);
++  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;info.maxSets=VK_MAX_FRAMES_IN_FLIGHT;info.poolSizeCount=1;info.pPoolSizes=&size;
++  if(vkCreateDescriptorPool(vk_options.logicalDevice,&info,NULL,&cvPool)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals pool failed");
++ }
++ if(!frames[i].buffer) {
++  VkDescriptorSetAllocateInfo alloc={0};VkDescriptorBufferInfo buf={0};VkWriteDescriptorSet write={0};VkDescriptorSetLayout layout=VK_CVLayout();
++  if(!VK_CreateBufferResource(cvStride*CV_DRAWS,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
++      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,&frames[i].buffer,&frames[i].memory)) Sys_Error("Vulkan: Competitive Visuals buffer failed");
++  if(vkMapMemory(vk_options.logicalDevice,frames[i].memory,0,VK_WHOLE_SIZE,0,(void**)&frames[i].mapped)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals map failed");
++  alloc.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;alloc.descriptorPool=cvPool;alloc.descriptorSetCount=1;alloc.pSetLayouts=&layout;
++  if(vkAllocateDescriptorSets(vk_options.logicalDevice,&alloc,&frames[i].set)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals descriptor failed");
++  buf.buffer=frames[i].buffer;buf.range=sizeof(cv_params_t);
++  write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=frames[i].set;write.dstBinding=0;
++  write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;write.descriptorCount=1;write.pBufferInfo=&buf;
++  vkUpdateDescriptorSets(vk_options.logicalDevice,1,&write,0,NULL);
++ }
++ /* Called only after this frame slot's fence has completed. Draw slices are
++    immutable until that fence completes again, including unsubmitted records. */
++ frames[i].used=1; CV_Params(&params);memcpy(frames[i].mapped,&params,sizeof(params));
++}
++void VK_CVBind(VkCommandBuffer command, VkPipelineLayout layout, uint32_t set, const void *params) {
++ uint32_t i=vk_options.frame.currentFrame,offset=0;
++ if(params) {
++  if(frames[i].used>=CV_DRAWS) Sys_Error("Vulkan: Competitive Visuals draw capacity exceeded");
++  offset=(uint32_t)(cvStride*frames[i].used++);
++  memcpy(frames[i].mapped+offset,params,sizeof(cv_params_t));
++ }
++ vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,set,1,&frames[i].set,1,&offset);
++}
++void VK_CVShutdown(void) {
++ int i;
++ for(i=0;i<VK_MAX_FRAMES_IN_FLIGHT;++i) {
++  if(frames[i].mapped) vkUnmapMemory(vk_options.logicalDevice,frames[i].memory);
++  if(frames[i].buffer) vkDestroyBuffer(vk_options.logicalDevice,frames[i].buffer,NULL);
++  if(frames[i].memory) vkFreeMemory(vk_options.logicalDevice,frames[i].memory,NULL);
++ }
++ if(cvPool) vkDestroyDescriptorPool(vk_options.logicalDevice,cvPool,NULL);
++ if(cvLayout) vkDestroyDescriptorSetLayout(vk_options.logicalDevice,cvLayout,NULL);
++ memset(frames,0,sizeof(frames));cvPool=VK_NULL_HANDLE;cvLayout=VK_NULL_HANDLE;cvStride=0;
++}
++#endif
+diff --git a/src/vk_draw.c b/src/vk_draw.c
+--- a/src/vk_draw.c
++++ b/src/vk_draw.c
+@@ -26,6 +26,7 @@
+ #include "tr_types.h"
+ #include "glsl/constants.glsl"
+ #include "vk_local.h"
++#include "competitive_visuals.h"
+ 
+ void Atlas_SolidTextureCoordinates(texture_ref* ref, float* s, float* t);
+ 
+@@ -78,6 +79,7 @@
+ 	float invWidth;
+ 	float invHeight;
+ 	float zFar;
++	float aoStrength, aoRadius, edges, edgeOpacity;
+ } vk_world_outline_push_t;
+ 
+ static VkPipelineLayout hudImagePipelineLayout;
+@@ -284,7 +286,7 @@
+ 
+ 	VK_InitialiseStructure(multisampling);
+ 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+-	multisampling.rasterizationSamples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
++	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+ 
+ 	VK_InitialiseStructure(depthStencil);
+ 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+@@ -328,7 +330,7 @@
+ 	pipelineInfo.pColorBlendState = &colorBlending;
+ 	pipelineInfo.pDynamicState = &dynamicState;
+ 	pipelineInfo.layout = hudImagePipelineLayout;
+-	pipelineInfo.renderPass = VK_MainRenderPass();
++	pipelineInfo.renderPass = VK_HudRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+ 	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &hudImagePipeline) != VK_SUCCESS) {
+@@ -437,7 +439,7 @@
+ 
+ 	VK_InitialiseStructure(multisampling);
+ 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+-	multisampling.rasterizationSamples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
++	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+ 
+ 	VK_InitialiseStructure(depthStencil);
+ 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+@@ -464,7 +466,7 @@
+ 	pipelineInfo.pColorBlendState = &colorBlending;
+ 	pipelineInfo.pDynamicState = &dynamicState;
+ 	pipelineInfo.layout = hudColorPipelineLayout;
+-	pipelineInfo.renderPass = VK_MainRenderPass();
++	pipelineInfo.renderPass = VK_HudRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+ 	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
+@@ -497,6 +499,7 @@
+ 	VkSamplerCreateInfo samplerInfo;
+ 	VkDescriptorSetLayoutBinding binding;
+ 	VkDescriptorSetLayoutCreateInfo layoutInfo;
++	VkDescriptorSetLayout cvLayouts[2];
+ 
+ 	if (postProcessPipeline != VK_NULL_HANDLE) {
+ 		return true;
+@@ -595,8 +598,9 @@
+ 
+ 		VK_InitialiseStructure(pipelineLayoutInfo);
+ 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+-		pipelineLayoutInfo.setLayoutCount = 1;
+-		pipelineLayoutInfo.pSetLayouts = &postProcessDescriptorSetLayout;
++		pipelineLayoutInfo.setLayoutCount = 2;
++		cvLayouts[0] = postProcessDescriptorSetLayout; cvLayouts[1] = VK_CVLayout();
++		pipelineLayoutInfo.pSetLayouts = cvLayouts;
+ 		pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+ 		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &postProcessPipelineLayout) != VK_SUCCESS) {
+@@ -758,6 +762,7 @@
+ 	VK_HudSetViewportScissor(commandBuffer);
+ 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postProcessPipeline);
+ 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postProcessPipelineLayout, 0, 1, &descriptorSet, 0, NULL);
++	VK_CVBind(commandBuffer, postProcessPipelineLayout, 1, NULL);
+ 	vkCmdPushConstants(commandBuffer, postProcessPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+ 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+ }
+@@ -768,7 +773,7 @@
+ qbool VK_WorldOutlineActive(void)
+ {
+ 	extern qbool R_DrawWorldOutlines(void);
+-	return R_DrawWorldOutlines();
++	return R_DrawWorldOutlines() || (CV_Active() && CV_Value(CV_ao) > 0);
+ }
+ 
+ static qbool VK_WorldOutlineCreatePipeline(void)
+@@ -999,6 +1004,7 @@
+ // more draw to it.
+ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+ {
++	extern qbool R_DrawWorldOutlines(void);
+ 	extern cvar_t gl_outline_color_world, gl_outline_world_depth_threshold, gl_outline_world_normal_threshold;
+ 	extern cvar_t r_farclip;
+ 	VkDescriptorSet descriptorSet;
+@@ -1014,6 +1020,10 @@
+ 		return;
+ 	}
+ 
++	push.aoStrength = CV_Active() ? CV_Value(CV_ao) : 0;
++	push.aoRadius = CV_Value(CV_aoradius);
++	push.edges = R_DrawWorldOutlines() ? 1 : 0;
++ push.edgeOpacity = CV_Active() ? CV_Value(CV_edgestrength) : 1;
+ 	push.outlineColor[0] = (float)gl_outline_color_world.color[0] / 255.0f;
+ 	push.outlineColor[1] = (float)gl_outline_color_world.color[1] / 255.0f;
+ 	push.outlineColor[2] = (float)gl_outline_color_world.color[2] / 255.0f;
+@@ -1030,6 +1040,10 @@
+ 	fbScaleX = (float)VID_ScaledWidth3D() / (float)max(1, glConfig.vidWidth);
+ 	fbScaleY = (float)VID_ScaledHeight3D() / (float)max(1, glConfig.vidHeight);
+ 	push.outlineScale = bound(1.0f, max(fbScaleX, fbScaleY), 4.0f);
++ if (CV_Active()) {
++  push.outlineScale *= CV_Value(CV_edgewidth);
++  if (CV_Value(CV_edgepalette)) CV_EdgeColor(push.outlineColor,0);
++ }
+ 
+ 	VK_HudSetViewportScissor(commandBuffer);
+ 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipeline);
+diff --git a/src/vk_local.h b/src/vk_local.h
+--- a/src/vk_local.h
++++ b/src/vk_local.h
+@@ -344,6 +344,7 @@
+ 		uint32_t currentFrame;
+ 		uint32_t imageIndex;
+ 		qbool active;
++		qbool hudStarted;
+ 	} frame;
+ 	float clearColor[4];
+ } vk_options_t;
+@@ -351,5 +352,10 @@
+ extern vk_options_t vk_options;
+ 
+ void VK_PrintGfxInfo(void);
++VkDescriptorSetLayout VK_CVLayout(void);
++void VK_CVBeginFrame(void);
++void VK_CVBind(VkCommandBuffer command, VkPipelineLayout layout, uint32_t set, const void *params);
++void VK_CVShutdown(void);
++VkRenderPass VK_HudRenderPass(void);
+ 
+ #endif
+diff --git a/src/vk_main.c b/src/vk_main.c
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -609,6 +609,7 @@
+ 		}
+ 	}
+ 	vk_options.frame.imageInFlightFences[vk_options.frame.imageIndex] = frameFence;
++	VK_CVBeginFrame();
+ 
+ 	// Anti-lag / low-latency input marker: as close to the start of the
+ 	// frame's CPU work as we can get it, before any of the (potentially
+@@ -722,7 +723,9 @@
+ 	vk_options.swapChain.postProcessActive = VK_PostProcessActive();
+ 
+ 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+-	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color);
++	// An offscreen image ended the preceding frame as a sampled texture.
++	// Discard it before the new scene instead of assuming PRESENT layout.
++	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color || vk_options.swapChain.postProcessActive);
+ 	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
+ 		VK_PostProcessFramebuffer(vk_options.frame.imageIndex) : vk_options.swapChain.framebuffers[vk_options.frame.imageIndex];
+ 	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
+@@ -737,6 +740,7 @@
+ 
+ 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+ 	vk_options.frame.active = true;
++	vk_options.frame.hudStarted = false;
+ }
+ 
+ VkCommandBuffer VK_CurrentCommandBuffer(void)
+@@ -745,6 +749,24 @@
+ 		return VK_NULL_HANDLE;
+ 	}
+ 	return vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
++}
++
++static void VK_Begin2DRendering(void)
++{
++ VkCommandBuffer commandBuffer=VK_CurrentCommandBuffer();
++ VkRenderPassBeginInfo pass={0};
++ if(!commandBuffer||vk_options.frame.hudStarted) return;
++ vkCmdEndRenderPass(commandBuffer);
++ if(vk_options.swapChain.postProcessActive) {
++  VK_PostProcessTransitionForSampling(commandBuffer,vk_options.frame.imageIndex);
++  pass.renderPass=VK_PostProcessRenderPass();
++ } else pass.renderPass=VK_HudRenderPass();
++ pass.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
++ pass.framebuffer=VK_PostProcessCompositeFramebuffer(vk_options.frame.imageIndex);
++ pass.renderArea.extent=vk_options.swapChain.imageSize;
++ vkCmdBeginRenderPass(commandBuffer,&pass,VK_SUBPASS_CONTENTS_INLINE);
++ if(vk_options.swapChain.postProcessActive) VK_PostProcessComposite(commandBuffer,vk_options.frame.imageIndex);
++ vk_options.frame.hudStarted=true;
+ }
+ 
+ void VK_EndFrame(void)
+@@ -766,28 +788,9 @@
+ 	frameFence = vk_options.frame.inFlightFences[frameIndex];
+ 
+ 	commandBuffer = vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
++	VK_Begin2DRendering();
+ 	vkCmdEndRenderPass(commandBuffer);
+ 
+-	if (vk_options.swapChain.postProcessActive) {
+-		VkFramebuffer compositeFramebuffer = VK_PostProcessCompositeFramebuffer(vk_options.frame.imageIndex);
+-
+-		if (compositeFramebuffer != VK_NULL_HANDLE) {
+-			VkRenderPassBeginInfo compositePassInfo = { 0 };
+-
+-			VK_PostProcessTransitionForSampling(commandBuffer, vk_options.frame.imageIndex);
+-
+-			compositePassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+-			compositePassInfo.renderPass = VK_PostProcessRenderPass();
+-			compositePassInfo.framebuffer = compositeFramebuffer;
+-			compositePassInfo.renderArea.offset.x = 0;
+-			compositePassInfo.renderArea.offset.y = 0;
+-			compositePassInfo.renderArea.extent = vk_options.swapChain.imageSize;
+-
+-			vkCmdBeginRenderPass(commandBuffer, &compositePassInfo, VK_SUBPASS_CONTENTS_INLINE);
+-			VK_PostProcessComposite(commandBuffer, vk_options.frame.imageIndex);
+-			vkCmdEndRenderPass(commandBuffer);
+-		}
+-	}
+ 
+ 	result = vkEndCommandBuffer(commandBuffer);
+ 	if (result != VK_SUCCESS) {
+@@ -1146,6 +1149,7 @@
+ 		VK_WorldResourcesShutdown();
+ 		VK_AliasModelResourcesShutdown();
+ 		VK_Sprite3DResourcesShutdown();
++		VK_CVShutdown();
+ 		VK_TextureShutdown();
+ 		VK_DestroyImmediateCommandPool();
+ 		VK_DestroyFrameResources();
+@@ -1240,7 +1244,7 @@
+ #define VK_DrawWaterSurfaces              VK_DrawWaterSurfaces
+ #define VK_ScreenDrawStart                VK_NoOperation
+ #define VK_EnsureFinished                 VK_NoOperation
+-#define VK_Begin2DRendering               VK_NoOperation
++// VK_Begin2DRendering composites the scene before HUD draws.
+ #define VK_IsFramebufferEnabled3D         VK_False
+ #define VK_RenderView                     VK_RenderView
+ #define VK_PreRenderView                  VK_PreRenderView
+diff --git a/src/vk_renderpass.c b/src/vk_renderpass.c
+--- a/src/vk_renderpass.c
++++ b/src/vk_renderpass.c
+@@ -44,6 +44,7 @@
+ 	// real gamma/contrast/FXAA, and writes the swapchain image directly --
+ 	// see VK_PostProcessComposite in vk_draw.c.
+ 	vk_renderpass_postprocess,
++	vk_renderpass_hud,
+ 	// World-outline normals prepass (gl_outline & 2): a small, always
+ 	// single-sample render pass with its own color (normal+linear-depth,
+ 	// RGBA16F) and depth attachments, entirely separate from the main
+@@ -80,7 +81,7 @@
+ 	attachments[0].format = vk_options.physicalDeviceSurfaceFormat.format;
+ 	attachments[0].samples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
+ 	attachments[0].loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+-	attachments[0].storeOp = msaa ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
++	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Resumed after world normals/AO.
+ 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+ 	if (msaa) {
+@@ -110,7 +111,7 @@
+ 	// gl_misc.c, which only gates GL_COLOR_BUFFER_BIT on clear_color and
+ 	// always ORs in GL_DEPTH_BUFFER_BIT.
+ 	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+-	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
++	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Preserve depth across scene subpasses.
+ 	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+ 	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+@@ -202,7 +203,7 @@
+ // sampled descriptor by the pipeline in vk_draw.c, not as a render-pass
+ // attachment, so no input-attachment subpass dependency is needed here beyond
+ // the usual external one.
+-static qbool VK_PostProcessRenderPassCreate(void)
++static qbool VK_PostProcessRenderPassCreate(qbool hud)
+ {
+ 	VkAttachmentDescription colorAttachment;
+ 	VkAttachmentReference colorAttachmentRef;
+@@ -213,11 +214,11 @@
+ 	VK_InitialiseStructure(colorAttachment);
+ 	colorAttachment.format = vk_options.physicalDeviceSurfaceFormat.format;
+ 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+-	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
++	colorAttachment.loadOp = hud ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+ 	colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+-	colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
++	colorAttachment.initialLayout = hud ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED;
+ 	colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+ 
+ 	VK_InitialiseStructure(colorAttachmentRef);
+@@ -238,9 +239,9 @@
+ 	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+ 	dependency.dstSubpass = 0;
+ 	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+-	dependency.srcAccessMask = 0;
++	dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+ 	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+-	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+ 
+ 	VK_InitialiseStructure(renderPassInfo);
+ 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+@@ -251,7 +252,7 @@
+ 	renderPassInfo.dependencyCount = 1;
+ 	renderPassInfo.pDependencies = &dependency;
+ 
+-	return vkCreateRenderPass(vk_options.logicalDevice, &renderPassInfo, NULL, &renderPasses[vk_renderpass_postprocess]) == VK_SUCCESS;
++	return vkCreateRenderPass(vk_options.logicalDevice, &renderPassInfo, NULL, &renderPasses[hud ? vk_renderpass_hud : vk_renderpass_postprocess]) == VK_SUCCESS;
+ }
+ 
+ // See VK_WorldNormalsFormat above for the color format. Always
+@@ -344,9 +345,15 @@
+ VkRenderPass VK_PostProcessRenderPass(void)
+ {
+ 	if (renderPasses[vk_renderpass_postprocess] == VK_NULL_HANDLE) {
+-		VK_PostProcessRenderPassCreate();
++		VK_PostProcessRenderPassCreate(false);
+ 	}
+ 	return renderPasses[vk_renderpass_postprocess];
++}
++
++VkRenderPass VK_HudRenderPass(void)
++{
++	if (!renderPasses[vk_renderpass_hud]) VK_PostProcessRenderPassCreate(true);
++	return renderPasses[vk_renderpass_hud];
+ }
+ 
+ VkRenderPass VK_WorldNormalsRenderPass(void)
+diff --git a/src/vk_swapchain.c b/src/vk_swapchain.c
+--- a/src/vk_swapchain.c
++++ b/src/vk_swapchain.c
+@@ -29,6 +29,7 @@
+ #include <SDL3/SDL_vulkan.h>
+ 
+ #include "vk_local.h"
++#include "competitive_visuals.h"
+ 
+ static void VK_DestroySwapChainDepthResources(void)
+ {
+@@ -235,6 +236,7 @@
+ // a restart.
+ qbool VK_PostProcessActive(void)
+ {
++	if (CV_Active()) return true;
+ 	extern cvar_t v_gamma, v_contrast;
+ 	extern cvar_t vid_framebuffer_fxaa;
+ 	extern cvar_t vid_software_palette;
+diff --git a/src/vk_world.c b/src/vk_world.c
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -691,7 +691,7 @@
+ 	VkPipelineDynamicStateCreateInfo dynamicState;
+ 	VkPushConstantRange pushConstantRange;
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+-	VkDescriptorSetLayout setLayouts[2];
++	VkDescriptorSetLayout setLayouts[5];
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 
+ 	if (worldFlatPipeline != VK_NULL_HANDLE) {
+@@ -814,6 +814,8 @@
+ 
+ 	setLayouts[0] = worldFlatSkyDescriptorSetLayout;
+ 	setLayouts[1] = VK_TextureDescriptorSetLayout();
++	setLayouts[2] = setLayouts[3] = setLayouts[1];
++	setLayouts[4] = VK_CVLayout();
+ 	if (setLayouts[1] == VK_NULL_HANDLE) {
+ 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
+ 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
+@@ -822,7 +824,7 @@
+ 
+ 	VK_InitialiseStructure(pipelineLayoutInfo);
+ 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+-	pipelineLayoutInfo.setLayoutCount = 2;
++	pipelineLayoutInfo.setLayoutCount = 5;
+ 	pipelineLayoutInfo.pSetLayouts = setLayouts;
+ 	pipelineLayoutInfo.pushConstantRangeCount = 1;
+ 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+@@ -878,7 +880,7 @@
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 	VkDescriptorSetLayout descriptorSetLayout;
+-	VkDescriptorSetLayout descriptorSetLayouts[3];
++	VkDescriptorSetLayout descriptorSetLayouts[5];
+ 
+ 	if (worldTexturedPipeline != VK_NULL_HANDLE) {
+ 		return true;
+@@ -891,6 +893,8 @@
+ 	descriptorSetLayouts[0] = descriptorSetLayout;
+ 	descriptorSetLayouts[1] = descriptorSetLayout;
+ 	descriptorSetLayouts[2] = descriptorSetLayout;
++	descriptorSetLayouts[3] = descriptorSetLayout;
++	descriptorSetLayouts[4] = VK_CVLayout();
+ 
+ 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_textured_vert_spv, vk_world_textured_vert_spv_len);
+ 	fragShaderModule = VK_WorldCreateShaderModule(vk_world_textured_frag_spv, vk_world_textured_frag_spv_len);
+@@ -1272,7 +1276,7 @@
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 	VkDescriptorSetLayout descriptorSetLayout;
+-	VkDescriptorSetLayout descriptorSetLayouts[3];
++	VkDescriptorSetLayout descriptorSetLayouts[5];
+ 
+ 	if (worldAlphaTexturedPipeline != VK_NULL_HANDLE) {
+ 		return true;
+@@ -1285,6 +1289,8 @@
+ 	descriptorSetLayouts[0] = descriptorSetLayout;
+ 	descriptorSetLayouts[1] = descriptorSetLayout;
+ 	descriptorSetLayouts[2] = descriptorSetLayout;
++	descriptorSetLayouts[3] = descriptorSetLayout;
++	descriptorSetLayouts[4] = VK_CVLayout();
+ 
+ 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_alpha_textured_vert_spv, vk_world_alpha_textured_vert_spv_len);
+ 	fragShaderModule = VK_WorldCreateShaderModule(vk_world_alpha_textured_frag_spv, vk_world_alpha_textured_frag_spv_len);
+@@ -1466,7 +1472,7 @@
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 	VkDescriptorSetLayout descriptorSetLayout;
+-	VkDescriptorSetLayout descriptorSetLayouts[4];
++	VkDescriptorSetLayout descriptorSetLayouts[5];
+ 
+ 	if (worldLightmappedPipeline != VK_NULL_HANDLE) {
+ 		return true;
+@@ -1479,6 +1485,8 @@
+ 	descriptorSetLayouts[0] = descriptorSetLayout;
+ 	descriptorSetLayouts[1] = descriptorSetLayout;
+ 	descriptorSetLayouts[2] = descriptorSetLayout;
++	descriptorSetLayouts[3] = descriptorSetLayout;
++	descriptorSetLayouts[4] = VK_CVLayout();
+ 	descriptorSetLayouts[3] = descriptorSetLayout;
+ 
+ 	vertShaderModule = VK_WorldCreateShaderModule(vk_world_lightmapped_vert_spv, vk_world_lightmapped_vert_spv_len);
+@@ -2615,6 +2623,7 @@
+ 				vkCmdSetDepthBias(commandBuffer, depthBiasActive ? -4.0f : 0.0f, 0.0f, depthBiasActive ? -0.125f : 0.0f);
+ 			}
+ 
++			VK_CVBind(commandBuffer, layout, 4, NULL);
+ 			vkCmdPushConstants(commandBuffer, layout, pushStages, 0, sizeof(push), &push);
+ 			vkCmdDrawIndexed(commandBuffer, worldDraws[i].indexCount, 1, worldDraws[i].firstIndex, 0, 0);
+ 			if (VK_WorldDrawOverlay(commandBuffer, &worldDraws[i], &push, lumaPipelineReady, fullbrightPipelineReady)) {
+diff --git a/src/vulkan_shaders/vk_alias_model.frag b/src/vulkan_shaders/vk_alias_model.frag
+--- a/src/vulkan_shaders/vk_alias_model.frag
++++ b/src/vulkan_shaders/vk_alias_model.frag
+@@ -1,4 +1,7 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : enable
++#define CV_SET 1
++#include "vk_competitive.glsl"
+ #extension GL_EXT_nonuniform_qualifier : require
+ 
+ // Bindless path: binding 0/1 are MAX_GLTEXTURES-sized runtime arrays (the
+@@ -39,6 +42,9 @@
+ layout(location = 4) in vec4 inAltColor;
+ layout(location = 5) in float inMode;
+ layout(location = 6) in float inMinLumaMix;
++layout(location = 7) in vec3 cvNormal;
++layout(location = 8) in vec3 cvPosition;
++layout(location = 9) in float cvUp;
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -71,9 +77,11 @@
+ 	if (inTextured > 0.5) {
+ 		float mixAmount = max(inMinLumaMix, texColour.a);
+ 
+-		fragColour = vec4(mix(texColour.rgb, texColour.rgb * inColor.rgb, mixAmount), inColor.a);
++		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(inColor.rgb, true), mixAmount), inColor.a);
+ 	}
+ 	else {
+-		fragColour = vec4(inColor.rgb, inColor.a);
++		fragColour = vec4(cvLighting(inColor.rgb, true), inColor.a);
+ 	}
++	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
++	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
+ }
+diff --git a/src/vulkan_shaders/vk_alias_model.vert b/src/vulkan_shaders/vk_alias_model.vert
+--- a/src/vulkan_shaders/vk_alias_model.vert
++++ b/src/vulkan_shaders/vk_alias_model.vert
+@@ -1,4 +1,7 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : enable
++#define CV_SET 1
++#include "vk_competitive.glsl"
+ #extension GL_GOOGLE_include_directive : require
+ #include "vk_alias_lighting.glsl"
+ 
+@@ -28,6 +31,9 @@
+ layout(location = 4) out vec4 outAltColor;
+ layout(location = 5) out float outMode;
+ layout(location = 6) out float outMinLumaMix;
++layout(location = 7) out vec3 cvNormal;
++layout(location = 8) out vec3 cvPosition;
++layout(location = 9) out float cvUp;
+ 
+ void main()
+ {
+@@ -54,6 +60,15 @@
+ 	clip.z = clip.z * 0.5 + clip.w * 0.5;
+ 
+ 	gl_Position = clip;
++	cvPosition = cvNormal = vec3(0);
++	cvUp = 0;
++	// Uniform per-draw branch: ordinary rendering and powerup passes do not
++	// pay for a normal-matrix inverse when the surface rim is disabled.
++	if (cv.rim.x > 0.0 && pushConstants.mode < 0.5) {
++		cvPosition = (cv.modelView * vec4(position,1)).xyz;
++		cvNormal = transpose(inverse(mat3(cv.modelView))) * inNormal;
++		cvUp = inNormal.z;
++	}
+ 	if (pushConstants.mode > 3.5) {
+ 		outTexCoord = inTexCoord;
+ 		outAltTexCoord = inTexCoord;
+diff --git a/src/vulkan_shaders/vk_competitive.glsl b/src/vulkan_shaders/vk_competitive.glsl
+new file mode 100644
+--- /dev/null
++++ b/src/vulkan_shaders/vk_competitive.glsl
+@@ -0,0 +1,48 @@
++// OpenAI Codex, 2026-09-13. GPL-2.0-or-later. std140 mirrors cv_params_t.
++#ifndef CV_TEST_PARAMS
++layout(std140,set=CV_SET,binding=0) uniform CompetitiveVisuals {
++ vec4 world, floorTint, wallTint, light, levels, shape, rim, rimColor, post, post2;
++ mat4 modelView;
++} cv;
++#endif
++
++vec3 cvLighting(vec3 original, bool model) {
++ if(cv.light.x<0.5||cv.light.y<=0.0||(model?cv.light.w:cv.light.z)<0.5) return original;
++ float luma=dot(original,vec3(.2126,.7152,.0722));
++ float x=clamp(luma,0.0,1.0), t=x;
++ if(cv.light.x>1.5) {
++  float bands=max(2.0,round(cv.levels.w))-1.0;
++  float q=x*bands;
++  t=(floor(q)+smoothstep(.5-.5*cv.shape.x,.5+.5*cv.shape.x,fract(q)))/bands;
++ }
++ float low=min(cv.levels.x,cv.levels.y), high=max(cv.levels.y,cv.levels.z);
++ float value=t<.5?mix(low,cv.levels.y,smoothstep(0.0,.5,t)):mix(cv.levels.y,high,smoothstep(.5,1.0,t));
++ vec3 styled=(luma>.0001?original/luma:vec3(1.0))*value;
++ styled*=vec3(1.0+cv.shape.y*(2.0*x-1.0),1.0,1.0-cv.shape.y*(2.0*x-1.0));
++ return mix(original,styled,cv.light.y);
++}
++
++#ifdef CV_WORLD_FRAGMENT
++vec3 cvMaterial(sampler2D tex,vec2 uv,vec3 original,bool floorSurface) {
++ vec3 colour=original;
++ if(cv.world.x<.999||abs(cv.world.z-1.0)>.001) {
++  float lod=max(0.0,textureQueryLod(tex,uv).x);
++  float distanceBias=cv.wallTint.w*smoothstep(0.0,4.0,lod);
++  vec3 broad=textureLod(tex,uv,lod+cv.world.y+distanceBias).rgb;
++  colour=broad+(original-broad)*cv.world.x*cv.world.z;
++ }
++ float lum=dot(colour,vec3(.2126,.7152,.0722));
++ colour=mix(vec3(lum),colour,cv.world.w);
++ vec3 tint=floorSurface?cv.floorTint.rgb:cv.wallTint.rgb;
++ return max(vec3(0.0),mix(colour,colour*tint,cv.floorTint.w));
++}
++#endif
++
++// Continuous surface rim: no displaced shell geometry or animated texture.
++vec3 cvRim(vec3 normal, vec3 position, float up) {
++ if(cv.rim.x<=0.0 || length(normal)<=.001 || length(position)<=.001) return vec3(0);
++ float facing=abs(dot(normalize(normal),normalize(-position)));
++ float amount=pow(1.0-clamp(facing,0.0,1.0),cv.rim.y);
++ amount*=mix(1.0,smoothstep(-.4,.8,up),cv.rim.z);
++ return cv.rimColor.rgb*cv.rim.x*amount;
++}
+diff --git a/src/vulkan_shaders/vk_post_process.frag b/src/vulkan_shaders/vk_post_process.frag
+--- a/src/vulkan_shaders/vk_post_process.frag
++++ b/src/vulkan_shaders/vk_post_process.frag
+@@ -1,4 +1,7 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
++#define CV_SET 1
++#include "vk_competitive.glsl"
+ 
+ layout(location = 0) in vec2 texCoord;
+ layout(location = 0) out vec4 fragColour;
+@@ -65,6 +68,27 @@
+ 	return mix(centerColor, average, blendAmount);
+ }
+ 
++// Small normalized kernel: bright scene pixels only, never HUD or crosshair.
++vec3 cvBloom() {
++ vec3 glow=vec3(0.0); float weights=0.0;
++ vec2 pixel=vec2(pc.invWidth,pc.invHeight)*cv.post2.x;
++ for(int y=-2;y<=2;++y) for(int x=-2;x<=2;++x) {
++  float w=exp(-float(x*x+y*y)*.65);
++  vec3 sampleColour=texture(sceneColor,texCoord+vec2(x,y)*pixel).rgb;
++  float peak=max(sampleColour.r,max(sampleColour.g,sampleColour.b));
++  float contribution=max(0.0,peak-cv.post.w)/max(peak,.001);
++  glow+=sampleColour*contribution*w; weights+=w;
++ }
++ return glow/max(weights,.001)*cv.post.z;
++}
++vec3 cvTone(vec3 colour) {
++ if(cv.post.y<.5 && abs(cv.post.x-1.0)<.0001) return colour;
++ vec3 linear=pow(max(colour,vec3(0)),vec3(2.2))*cv.post.x;
++ if(cv.post.y>.5 && cv.post.y<1.5) linear=linear/(vec3(1)+linear*.35);
++ else if(cv.post.y>1.5) linear=clamp((linear*(2.51*linear+.03))/(linear*(2.43*linear+.59)+.14),0.0,1.0);
++ return pow(max(linear,vec3(0)),vec3(1.0/2.2));
++}
++
+ void main()
+ {
+ 	vec3 colour = texture(sceneColor, texCoord).rgb;
+@@ -73,7 +97,19 @@
+ 		colour = ApplyFXAA(colour);
+ 	}
+ 
+-	// Same formula as src/glsl/post_process_screen.fragment.glsl
++	if(cv.post2.w>0.0) {
++  vec2 p=vec2(pc.invWidth,pc.invHeight);
++  vec3 a=texture(sceneColor,texCoord+vec2(p.x,0)).rgb;
++  vec3 b=texture(sceneColor,texCoord-vec2(p.x,0)).rgb;
++  vec3 c=texture(sceneColor,texCoord+vec2(0,p.y)).rgb;
++  vec3 d=texture(sceneColor,texCoord-vec2(0,p.y)).rgb;
++  vec3 lo=min(colour,min(min(a,b),min(c,d))), hi=max(colour,max(max(a,b),max(c,d)));
++  colour=clamp(colour+(colour-(a+b+c+d)*.25)*cv.post2.w,lo,hi);
++ }
++ if(cv.post.z>0.0) colour+=cvBloom();
++ colour=cvTone(colour);
++
++ // Same formula as src/glsl/post_process_screen.fragment.glsl
+ 	// (EZ_POSTPROCESS_PALETTE path): blend/tint, then contrast, then gamma.
+ 	colour = (colour * pc.blend.a + pc.blend.rgb) * pc.contrast;
+ 	colour = pow(max(colour, vec3(0.0)), vec3(pc.gamma));
+diff --git a/src/vulkan_shaders/vk_world_alpha_textured.frag b/src/vulkan_shaders/vk_world_alpha_textured.frag
+--- a/src/vulkan_shaders/vk_world_alpha_textured.frag
++++ b/src/vulkan_shaders/vk_world_alpha_textured.frag
+@@ -10,6 +10,9 @@
+ layout(location = 2) flat in uint inFlags;
+ 
+ #include "vk_world_push.glsl"
++#define CV_SET 4
++#define CV_WORLD_FRAGMENT
++#include "vk_competitive.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -31,6 +34,7 @@
+ 	}
+ 
+ 	vec4 texColour = texture(worldTexture[0], texCoord);
++	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
+ 
+ 	if (texColour.a <= 0.0) {
+ 		discard;
+diff --git a/src/vulkan_shaders/vk_world_flat.frag b/src/vulkan_shaders/vk_world_flat.frag
+--- a/src/vulkan_shaders/vk_world_flat.frag
++++ b/src/vulkan_shaders/vk_world_flat.frag
+@@ -16,6 +16,9 @@
+ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
+ 
+ #include "vk_world_push.glsl"
++#define CV_SET 4
++#define CV_WORLD_FRAGMENT
++#include "vk_competitive.glsl"
+ #include "vk_skybox_uv.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+@@ -115,7 +118,7 @@
+ 	// by the surface's real lightmap, same as GLC/GLM's drawflat mode -- a
+ 	// solid, completely unlit fill would otherwise flatten all depth cues.
+ 	if (worldFlag(VK_WORLD_DRAWFLAT_COLOR) && pushConstants.surfaceType < 0.5) {
+-		base *= texture(lightmapTexture[0], inLightmapCoord).rgb;
++		base *= cvLighting(texture(lightmapTexture[0], inLightmapCoord).rgb, false);
+ 	}
+ 
+ 	if (pushConstants.surfaceType > 5.5) {
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.frag b/src/vulkan_shaders/vk_world_lightmapped.frag
+--- a/src/vulkan_shaders/vk_world_lightmapped.frag
++++ b/src/vulkan_shaders/vk_world_lightmapped.frag
+@@ -12,6 +12,9 @@
+ layout(location = 3) flat in uint inFlags;
+ 
+ #include "vk_world_push.glsl"
++#define CV_SET 4
++#define CV_WORLD_FRAGMENT
++#include "vk_competitive.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -71,7 +74,9 @@
+ 	}
+ 
+ 	vec4 texColour = texture(worldTexture[0], texCoord);
++	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
+ 	vec4 lightColour = texture(lightmapTexture[0], inLightmapCoord);
++	lightColour.rgb = cvLighting(lightColour.rgb, false);
+ 
+ 	if (texColour.a < 0.5) {
+ 		discard;
+diff --git a/src/vulkan_shaders/vk_world_outline.frag b/src/vulkan_shaders/vk_world_outline.frag
+--- a/src/vulkan_shaders/vk_world_outline.frag
++++ b/src/vulkan_shaders/vk_world_outline.frag
+@@ -13,6 +13,10 @@
+ 	float invWidth;
+ 	float invHeight;
+ 	float zFar;
++	float aoStrength;
++	float aoRadius;
++	float edges;
++ float edgeOpacity;
+ } pc;
+ 
+ // Port of GLM's fx_world_geometry.fragment.glsl -- see that file for the
+@@ -25,7 +29,7 @@
+ 	return dot(a, b) < pc.outlineNormalThreshold;
+ }
+ 
+-void main()
++void drawEdges()
+ {
+ 	vec2 offset = vec2(pc.outlineScale * pc.invWidth, pc.outlineScale * pc.invHeight);
+ 
+@@ -61,3 +65,28 @@
+ 
+ 	fragColour = vec4(0.0);
+ }
++
++// Non-temporal world contact shading. Same-plane samples are excluded so a
++// sloping wall cannot darken itself. Depth discontinuities beyond the radius
++// and sky/water sentinels never occlude. Drawn before players and the HUD.
++void main() {
++ vec4 center=texture(normalTexture,texCoord);
++ float ao=0.0;
++ if(pc.aoStrength>0.0 && center.a>0.0) {
++  float depth=center.a*pc.zFar;
++  float pixels=clamp(pc.aoRadius/max(depth,1.0)/pc.invHeight*.5,1.0,40.0);
++  for(int i=0;i<8;++i) {
++   float angle=float(i)*.7853981634;
++   vec2 offset=vec2(cos(angle),sin(angle))*vec2(pc.invWidth,pc.invHeight)*pixels;
++   vec4 neighbour=texture(normalTexture,texCoord+offset);
++   float dz=depth-neighbour.a*pc.zFar;
++   float bend=1.0-smoothstep(.65,.98,dot(center.rgb,neighbour.rgb));
++   if(neighbour.a>0.0 && dz>0.0 && dz<pc.aoRadius)
++    ao+=bend*smoothstep(0.0,pc.aoRadius*.2,dz)*(1.0-dz/pc.aoRadius);
++  }
++  ao=clamp(ao/8.0*pc.aoStrength*2.0,0.0,pc.aoStrength);
++ }
++ fragColour=vec4(0);
++ if(pc.edges>.5) { drawEdges(); fragColour.a *= pc.edgeOpacity; }
++ if(fragColour.a==0.0) fragColour=vec4(0,0,0,ao);
++}
+diff --git a/src/vulkan_shaders/vk_world_textured.frag b/src/vulkan_shaders/vk_world_textured.frag
+--- a/src/vulkan_shaders/vk_world_textured.frag
++++ b/src/vulkan_shaders/vk_world_textured.frag
+@@ -10,6 +10,9 @@
+ layout(location = 2) flat in uint inFlags;
+ 
+ #include "vk_world_push.glsl"
++#define CV_SET 4
++#define CV_WORLD_FRAGMENT
++#include "vk_competitive.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -65,6 +68,7 @@
+ 	}
+ 
+ 	vec4 texColour = texture(worldTexture[0], texCoord);
++	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
+ 
+ 	if (texColour.a < 0.5) {
+ 		discard;

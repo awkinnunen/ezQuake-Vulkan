@@ -3236,7 +3236,7 @@ void FS_SaveGameDirectory(char* buffer, int buffer_size)
 {
 	extern cvar_t fs_savegame_home;
 
-	if (fs_savegame_home.integer) {
+	if (fs_savegame_home.integer && *com_homedir) {
 		snprintf(buffer, buffer_size, "%s/%s/save/", com_homedir, com_gamedirfile);
 	}
 	else {

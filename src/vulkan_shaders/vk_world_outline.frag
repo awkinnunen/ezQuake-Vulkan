@@ -13,6 +13,10 @@ layout(push_constant) uniform PushConstants {
 	float invWidth;
 	float invHeight;
 	float zFar;
+	float aoStrength;
+	float aoRadius;
+	float edges;
+ float edgeOpacity;
 } pc;
 
 // Port of GLM's fx_world_geometry.fragment.glsl -- see that file for the
@@ -25,7 +29,7 @@ bool vec_nequ(vec3 a, vec3 b)
 	return dot(a, b) < pc.outlineNormalThreshold;
 }
 
-void main()
+void drawEdges()
 {
 	vec2 offset = vec2(pc.outlineScale * pc.invWidth, pc.outlineScale * pc.invHeight);
 
@@ -60,4 +64,29 @@ void main()
 	}
 
 	fragColour = vec4(0.0);
+}
+
+// Non-temporal world contact shading. Same-plane samples are excluded so a
+// sloping wall cannot darken itself. Depth discontinuities beyond the radius
+// and sky/water sentinels never occlude. Drawn before players and the HUD.
+void main() {
+ vec4 center=texture(normalTexture,texCoord);
+ float ao=0.0;
+ if(pc.aoStrength>0.0 && center.a>0.0) {
+  float depth=center.a*pc.zFar;
+  float pixels=clamp(pc.aoRadius/max(depth,1.0)/pc.invHeight*.5,1.0,40.0);
+  for(int i=0;i<8;++i) {
+   float angle=float(i)*.7853981634;
+   vec2 offset=vec2(cos(angle),sin(angle))*vec2(pc.invWidth,pc.invHeight)*pixels;
+   vec4 neighbour=texture(normalTexture,texCoord+offset);
+   float dz=depth-neighbour.a*pc.zFar;
+   float bend=1.0-smoothstep(.65,.98,dot(center.rgb,neighbour.rgb));
+   if(neighbour.a>0.0 && dz>0.0 && dz<pc.aoRadius)
+    ao+=bend*smoothstep(0.0,pc.aoRadius*.2,dz)*(1.0-dz/pc.aoRadius);
+  }
+  ao=clamp(ao/8.0*pc.aoStrength*2.0,0.0,pc.aoStrength);
+ }
+ fragColour=vec4(0);
+ if(pc.edges>.5) { drawEdges(); fragColour.a *= pc.edgeOpacity; }
+ if(fragColour.a==0.0) fragColour=vec4(0,0,0,ao);
 }

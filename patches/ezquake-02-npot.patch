@@ -1,0 +1,13 @@
+diff --git a/src/vk_main.c b/src/vk_main.c
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -1198,6 +1198,9 @@
+ 	glConfig.gl_max_size_default = limits->maxImageDimension2D ? (int)limits->maxImageDimension2D : 4096;
+ 	glConfig.max_texture_depth = limits->maxImageArrayLayers ? (int)limits->maxImageArrayLayers : 1;
+ 	glConfig.max_3d_texture_size = limits->maxImageDimension3D ? (int)limits->maxImageDimension3D : 1;
++	// Set before shared texture/HUD initialization, including after vid_restart.
++	// Vulkan's 2D texture path accepts NPOT dimensions and floor-halved mip levels.
++	R_SetNonPowerOfTwoSupport(true);
+ 	glConfig.uniformBufferOffsetAlignment = (int)limits->minUniformBufferOffsetAlignment;
+ 	glConfig.shaderStorageBufferOffsetAlignment = (int)limits->minStorageBufferOffsetAlignment;
+ 	glConfig.supported_features =

@@ -107,6 +107,7 @@ typedef struct filelist_s
 
 	qbool			show_dirup;
 	qbool			show_dirs;
+	qbool           registered_types_only; // Suppress implicit archive entries in restricted browsers.
 
     // For PGUP/PGDN, filled by drawing func
     int				last_page_size;

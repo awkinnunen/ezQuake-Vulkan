@@ -280,7 +280,11 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 	Host_ClearMemory();
 
 #ifndef SERVERONLY
-	if (!oldmap[0]) {
+	// The single-player menu has already selected its rules and interpreter.
+	// nQuake's server.cfg selects KTX/deathmatch, so only run it for MP starts.
+	if (!oldmap[0] && !loading_savegame &&
+		!(maxclients.value == 1 && !deathmatch.value && !coop.value &&
+		  !strcmp(sv_progsname.string, "spprogs"))) {
 		Cbuf_InsertTextEx(&cbuf_server, "exec server.cfg\n");
 		Cbuf_ExecuteEx(&cbuf_server);
 	}
@@ -292,6 +296,10 @@ void SV_SpawnServer(char *mapname, qbool devmap, char* entityfile, qbool loading
 		Cvar_SetValue(&coop, 0);
 		Cvar_SetValue(&teamplay, 0);
 		Cvar_SetValue(&maxclients, 1);
+		Cvar_SetValue(&fraglimit, 0);
+		Cvar_SetValue(&timelimit, 0);
+		Cvar_SetByName("samelevel", "0");
+		Cvar_SetByName("pausable", "1");
 		Cvar_Set(&sv_progsname, "spprogs"); // force progsname
 #ifdef USE_PR2
 		Cvar_SetValue(&sv_progtype, 0); // force .dat

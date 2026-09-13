@@ -1,0 +1,4 @@
+# Diff fixtures require their original context whitespace to remain applicable.
+patches/*.patch -whitespace
+# Preserve the upstream README verbatim, including its two trailing spaces.
+docs/UPSTREAM-README.md -whitespace

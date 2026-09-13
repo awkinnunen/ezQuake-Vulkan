@@ -28,6 +28,7 @@ cvar_t qtv_api_url = {"qtv_api_url", "http://qtvapi.quakeworld.nu/api/v1/servers
 
 static json_t *root;
 static SDL_Mutex *qtvlist_mutex;
+static SDL_Thread *qtvlist_thread;
 
 extern char *CL_QTV_GetCurrentStream(void);
 
@@ -75,6 +76,9 @@ static char* qtvlist_get_jsondata(void)
 	buf.str = Q_calloc(1, 128); /*  Initially set to 128 bytes, will grow if necessary */
 
 	res += curl_easy_setopt(handle, CURLOPT_URL, qtv_api_url.string);
+	// Bound the join at shutdown even when the remote endpoint is unavailable.
+	res += curl_easy_setopt(handle, CURLOPT_CONNECTTIMEOUT_MS, 5000L);
+	res += curl_easy_setopt(handle, CURLOPT_TIMEOUT_MS, 10000L);
 	res += curl_easy_setopt(handle, CURLOPT_WRITEDATA, (void*)&buf);
 	res += curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, qtvlist_curl_callback);
 
@@ -566,11 +570,20 @@ static void qtvlist_find_and_follow_player_cmd(void)
 
 static void qtvlist_spawn_updater(void)
 {
-	SDL_Thread *qtvlist_thread;
 
 	if (qtvlist_mutex == NULL) {
 		Com_Printf("error: cannot update QTV list, mutex not initialized\n");
 		return;
+	}
+
+	// Keep ownership of the worker so shutdown cannot free its mutex/JSON.
+	if (qtvlist_thread) {
+		if (SDL_GetThreadState(qtvlist_thread) != SDL_THREAD_COMPLETE) {
+			Com_Printf("The qtvlist is already in the process of being updated\n");
+			return;
+		}
+		SDL_WaitThread(qtvlist_thread, NULL);
+		qtvlist_thread = NULL;
 	}
 
 	qtvlist_thread = SDL_CreateThread(qtvlist_update, "qtvupdater", (void*)NULL);
@@ -580,7 +593,6 @@ static void qtvlist_spawn_updater(void)
 		return;
 	}
 
-	SDL_DetachThread(qtvlist_thread);
 }
 
 void qtvlist_joinfromqtv_cmd(void)
@@ -648,14 +660,19 @@ void qtvlist_init(void)
 
 void qtvlist_deinit(void)
 {
+	if (qtvlist_thread) {
+		SDL_WaitThread(qtvlist_thread, NULL);
+		qtvlist_thread = NULL;
+	}
+
 	if (root != NULL) {
 		json_decref(root);
 		root = NULL;
 	}
 
 	if (qtvlist_mutex != NULL) {
-		SDL_UnlockMutex(qtvlist_mutex);
 		SDL_DestroyMutex(qtvlist_mutex);
+		qtvlist_mutex = NULL;
 	}
 }
 

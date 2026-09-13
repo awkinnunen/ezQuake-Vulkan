@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#define CV_SET 1
+#include "vk_competitive.glsl"
 
 layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColour;
@@ -65,6 +68,27 @@ vec3 ApplyFXAA(vec3 centerColor)
 	return mix(centerColor, average, blendAmount);
 }
 
+// Small normalized kernel: bright scene pixels only, never HUD or crosshair.
+vec3 cvBloom() {
+ vec3 glow=vec3(0.0); float weights=0.0;
+ vec2 pixel=vec2(pc.invWidth,pc.invHeight)*cv.post2.x;
+ for(int y=-2;y<=2;++y) for(int x=-2;x<=2;++x) {
+  float w=exp(-float(x*x+y*y)*.65);
+  vec3 sampleColour=texture(sceneColor,texCoord+vec2(x,y)*pixel).rgb;
+  float peak=max(sampleColour.r,max(sampleColour.g,sampleColour.b));
+  float contribution=max(0.0,peak-cv.post.w)/max(peak,.001);
+  glow+=sampleColour*contribution*w; weights+=w;
+ }
+ return glow/max(weights,.001)*cv.post.z;
+}
+vec3 cvTone(vec3 colour) {
+ if(cv.post.y<.5 && abs(cv.post.x-1.0)<.0001) return colour;
+ vec3 linear=pow(max(colour,vec3(0)),vec3(2.2))*cv.post.x;
+ if(cv.post.y>.5 && cv.post.y<1.5) linear=linear/(vec3(1)+linear*.35);
+ else if(cv.post.y>1.5) linear=clamp((linear*(2.51*linear+.03))/(linear*(2.43*linear+.59)+.14),0.0,1.0);
+ return pow(max(linear,vec3(0)),vec3(1.0/2.2));
+}
+
 void main()
 {
 	vec3 colour = texture(sceneColor, texCoord).rgb;
@@ -73,7 +97,19 @@ void main()
 		colour = ApplyFXAA(colour);
 	}
 
-	// Same formula as src/glsl/post_process_screen.fragment.glsl
+	if(cv.post2.w>0.0) {
+  vec2 p=vec2(pc.invWidth,pc.invHeight);
+  vec3 a=texture(sceneColor,texCoord+vec2(p.x,0)).rgb;
+  vec3 b=texture(sceneColor,texCoord-vec2(p.x,0)).rgb;
+  vec3 c=texture(sceneColor,texCoord+vec2(0,p.y)).rgb;
+  vec3 d=texture(sceneColor,texCoord-vec2(0,p.y)).rgb;
+  vec3 lo=min(colour,min(min(a,b),min(c,d))), hi=max(colour,max(max(a,b),max(c,d)));
+  colour=clamp(colour+(colour-(a+b+c+d)*.25)*cv.post2.w,lo,hi);
+ }
+ if(cv.post.z>0.0) colour+=cvBloom();
+ colour=cvTone(colour);
+
+ // Same formula as src/glsl/post_process_screen.fragment.glsl
 	// (EZ_POSTPROCESS_PALETTE path): blend/tint, then contrast, then gamma.
 	colour = (colour * pc.blend.a + pc.blend.rgb) * pc.contrast;
 	colour = pow(max(colour, vec3(0.0)), vec3(pc.gamma));

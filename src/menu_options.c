@@ -51,6 +51,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "hud.h"
 #include "hud_common.h"
 #include "r_local.h"
+#include "competitive_visuals.h"
+#include "menu_config.h"
 
 extern cvar_t r_farclip, gl_max_size, gl_miptexLevel;
 extern cvar_t r_bloom;
@@ -690,12 +692,14 @@ extern cvar_t cfg_backup, cfg_save_aliases, cfg_save_binds, cfg_save_cmdline,
 
 void MOpt_ImportConfig(void) {
 	MOpt_configpage_mode = MOCPM_CHOOSECONFIG;
-	
-	// hope few doubled trinary operator won't hurt your brains
-	if (cfg_use_home.integer)
-		FL_SetCurrentDir(&configs_filelist, (cfg_use_gamedir.integer) ? va("%s/%s", com_homedir, (strcmp(com_gamedirfile, "qw") == 0) ? "" : com_gamedirfile) : com_homedir);
-    else
-		FL_SetCurrentDir(&configs_filelist, (cfg_use_gamedir.integer) ? va("%s/%s/configs", com_basedir, (strcmp(com_gamedirfile, "qw") == 0) ? "ezquake" : com_gamedirfile) : va("%s/ezquake/configs", com_basedir));
+	MConfig_Open();
+}
+
+static void MOpt_ConfigBrowser_f(void)
+{
+	M_EnterMenu(m_options);
+	CTab_SetCurrentId(&options_tab, OPTPG_CONFIG);
+	MOpt_ImportConfig();
 }
 void MOpt_ExportConfig(void) {
 	MOpt_configpage_mode = MOCPM_ENTERFILENAME;
@@ -764,8 +768,10 @@ void CT_Opt_Config_Draw(int x, int y, int w, int h, CTab_t *tab, CTabPage_t *pag
 		break;
 
 	case MOCPM_CHOOSESCRIPT:
-	case MOCPM_CHOOSECONFIG:
 		FL_Draw(&configs_filelist, x,y,w,h);
+		break;
+	case MOCPM_CHOOSECONFIG:
+		MConfig_Draw(x,y,w,h);
 		break;
 
 	case MOCPM_ENTERFILENAME:
@@ -782,14 +788,10 @@ int CT_Opt_Config_Key(int key, wchar unichar, CTab_t *tab, CTabPage_t *page)
 		break;
 
 	case MOCPM_CHOOSECONFIG:
-		if (key == K_ENTER || key == K_MOUSE1) {
-			Cbuf_AddText(va("cfg_load \"%s\"\n", COM_SkipPath(FL_GetCurrentEntry(&configs_filelist)->name)));
+		if (key == K_ESCAPE || key == K_MOUSE2) {
 			MOpt_configpage_mode = MOCPM_SETTINGS;
 			return true;
-		} else if (key == K_ESCAPE || key == K_MOUSE2) {
-			MOpt_configpage_mode = MOCPM_SETTINGS;
-			return true;
-		} else return FL_Key(&configs_filelist, key);
+		} else return MConfig_Key(key);
 
 	case MOCPM_CHOOSESCRIPT:
 		if (key == K_ENTER || key == K_MOUSE1) {
@@ -819,7 +821,11 @@ void OnShow_SettConfig(void) { Settings_OnShow(&settconfig); }
 
 qbool CT_Opt_Config_Mouse_Event(const mouse_state_t *ms)
 {
-    if (MOpt_configpage_mode == MOCPM_CHOOSECONFIG || MOpt_configpage_mode == MOCPM_CHOOSESCRIPT) {
+	if (MOpt_configpage_mode == MOCPM_CHOOSECONFIG) {
+		if (ms->button_up == 2) { MOpt_configpage_mode = MOCPM_SETTINGS; return true; }
+		return MConfig_Mouse(ms);
+	}
+    if (MOpt_configpage_mode == MOCPM_CHOOSESCRIPT) {
         if (FL_Mouse_Event(&configs_filelist, ms))
             return true;
         else if (ms->button_up == 1 || ms->button_up == 2)
@@ -969,6 +975,8 @@ setting settplayer_arr[] = {
 
 // GRAPHICS TAB
 setting settfps_arr[] = {
+	ADDSET_ACTION("Competitive Visuals", CV_Open, "World detail, lighting, silhouettes and visual profiles."),
+	ADDSET_ACTION("Visual Effects", CV_OpenEffects, "Bloom, ambient shading and scene image quality."),
 	ADDSET_BOOL		("Advanced Options", menu_advanced),
 	
 	ADDSET_SEPARATOR("Presets"),
@@ -1007,7 +1015,6 @@ setting settfps_arr[] = {
 	ADDSET_ADVANCED_SECTION(),
 	ADDSET_NUMBER	("Weapon Shift", r_viewmodeloffset, -10, 10, 1),
 	ADDSET_NAMED	("Weapon Muzzleflashes", cl_muzzleflash, muzzleflashes_enum),
-	ADDSET_NAMED	("Outline", gl_outline, outline_enum),
 	ADDSET_BASIC_SECTION(),
 	
 	ADDSET_SEPARATOR("Environment"),
@@ -1043,9 +1050,6 @@ setting settfps_arr[] = {
 	ADDSET_BASIC_SECTION(),
 
 	ADDSET_SEPARATOR("Lighting"),
-#ifdef RENDERER_OPTION_CLASSIC_OPENGL
-	ADDSET_BOOL		("GL Bloom", r_bloom),
-#endif
 	ADDSET_NAMED	("Powerup Glow", r_powerupglow, powerupglow_enum),
 	ADDSET_NUMBER	("Damage Flash", v_damagecshift, 0, 1, 0.1),
 	ADDSET_ADVANCED_SECTION(),
@@ -1403,7 +1407,7 @@ setting settconfig_arr[] = {
     
 	ADDSET_SEPARATOR("Export & Import"),
 	ADDSET_ACTION("Load Script", MOpt_LoadScript, "Find and load scripts here."),
-	ADDSET_ACTION("Import config ...", MOpt_ImportConfig, "You can load a configuration file from here."),
+	ADDSET_ACTION("Browse configs / key map", MOpt_ImportConfig, "Preview config bindings on a keyboard and mouse map, then load the selected file."),
 	ADDSET_ACTION("Export config ...", MOpt_ExportConfig, "Will export your current configuration to a file."),
 	
 	ADDSET_SEPARATOR("Config Saving Options"),
@@ -1456,6 +1460,8 @@ void Menu_Options_Init(void) {
 	Cvar_ResetCurrentGroup();
 
 	FL_Init(&configs_filelist, "./ezquake/configs");
+	MConfig_Init();
+	Cmd_AddCommand("menu_configs", MOpt_ConfigBrowser_f);
 	FL_SetDirUpOption(&configs_filelist, false);
 	FL_SetDirsOption(&configs_filelist, false);
 	FL_AddFileType(&configs_filelist, 0, ".cfg");
@@ -1476,6 +1482,7 @@ void Menu_Options_Init(void) {
 
 void Menu_Options_Shutdown(void)
 {
+	MConfig_Shutdown();
 	FL_Shutdown(&configs_filelist);
 	Settings_Shutdown(&settmisc);
 	Settings_Shutdown(&settfps);

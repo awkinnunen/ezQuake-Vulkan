@@ -1,0 +1,290 @@
+{
+  "author": "OpenAI Codex",
+  "date": "2026-09-13",
+  "width": 1280,
+  "height": 720,
+  "gpu": "AMD Radeon(TM) Graphics",
+  "api": "1.2.188",
+  "frameCount": 1290,
+  "fixtureSHA256": "2c3608719580eb7a42463d7b577614fe567d99ed46b21b4d57492c0783a340d8",
+  "cases": [
+    {
+      "case": "defaults",
+      "overrides": [],
+      "warmup": {
+        "frames": 1290,
+        "fps": 232.4,
+        "averageMs": 4.303,
+        "stddevMs": 0.652
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 225.9,
+          "averageMs": 4.427,
+          "stddevMs": 0.657
+        },
+        {
+          "frames": 1290,
+          "fps": 232.9,
+          "averageMs": 4.294,
+          "stddevMs": 0.471
+        }
+      ],
+      "meanMs": 4.3605
+    },
+    {
+      "case": "no-ao",
+      "overrides": [
+        "r_cv_ao 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 247.0,
+        "averageMs": 4.048,
+        "stddevMs": 1.119
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 250.0,
+          "averageMs": 4.001,
+          "stddevMs": 0.394
+        },
+        {
+          "frames": 1290,
+          "fps": 246.0,
+          "averageMs": 4.065,
+          "stddevMs": 0.577
+        }
+      ],
+      "meanMs": 4.033
+    },
+    {
+      "case": "no-outlines",
+      "overrides": [
+        "gl_outline 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 247.5,
+        "averageMs": 4.041,
+        "stddevMs": 0.603
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 249.0,
+          "averageMs": 4.016,
+          "stddevMs": 0.337
+        },
+        {
+          "frames": 1290,
+          "fps": 249.8,
+          "averageMs": 4.003,
+          "stddevMs": 0.329
+        }
+      ],
+      "meanMs": 4.0095
+    },
+    {
+      "case": "no-msaa",
+      "overrides": [
+        "vid_framebuffer_multisample 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 390.7,
+        "averageMs": 2.559,
+        "stddevMs": 1.119
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 411.0,
+          "averageMs": 2.433,
+          "stddevMs": 0.241
+        },
+        {
+          "frames": 1290,
+          "fps": 411.9,
+          "averageMs": 2.428,
+          "stddevMs": 0.232
+        }
+      ],
+      "meanMs": 2.4305
+    },
+    {
+      "case": "no-fxaa",
+      "overrides": [
+        "vid_framebuffer_fxaa 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 233.0,
+        "averageMs": 4.292,
+        "stddevMs": 0.601
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 238.8,
+          "averageMs": 4.188,
+          "stddevMs": 0.421
+        },
+        {
+          "frames": 1290,
+          "fps": 237.3,
+          "averageMs": 4.214,
+          "stddevMs": 0.437
+        }
+      ],
+      "meanMs": 4.2010000000000005
+    },
+    {
+      "case": "no-bloom",
+      "overrides": [
+        "r_cv_bloom 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 266.9,
+        "averageMs": 3.746,
+        "stddevMs": 0.614
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 270.9,
+          "averageMs": 3.692,
+          "stddevMs": 0.41
+        },
+        {
+          "frames": 1290,
+          "fps": 269.5,
+          "averageMs": 3.71,
+          "stddevMs": 0.405
+        }
+      ],
+      "meanMs": 3.701
+    },
+    {
+      "case": "no-detail",
+      "overrides": [
+        "gl_detail 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 233.8,
+        "averageMs": 4.277,
+        "stddevMs": 0.647
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 221.5,
+          "averageMs": 4.515,
+          "stddevMs": 1.374
+        },
+        {
+          "frames": 1290,
+          "fps": 234.9,
+          "averageMs": 4.256,
+          "stddevMs": 0.48
+        }
+      ],
+      "meanMs": 4.3855
+    },
+    {
+      "case": "minimal",
+      "overrides": [
+        "r_cv_enable 0",
+        "r_cv_ao 0",
+        "gl_outline 0",
+        "vid_framebuffer_multisample 0",
+        "vid_framebuffer_fxaa 0",
+        "r_cv_bloom 0",
+        "gl_detail 0",
+        "gl_caustics 0",
+        "r_shadows 0"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 1148.4,
+        "averageMs": 0.871,
+        "stddevMs": 0.483
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 1189.9,
+          "averageMs": 0.84,
+          "stddevMs": 0.159
+        },
+        {
+          "frames": 1290,
+          "fps": 1160.2,
+          "averageMs": 0.862,
+          "stddevMs": 0.141
+        }
+      ],
+      "meanMs": 0.851
+    }
+  ],
+  "closingDefault": [
+    {
+      "case": "defaults",
+      "overrides": [],
+      "warmup": {
+        "frames": 1290,
+        "fps": 232.4,
+        "averageMs": 4.303,
+        "stddevMs": 0.633
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 233.2,
+          "averageMs": 4.288,
+          "stddevMs": 0.48
+        },
+        {
+          "frames": 1290,
+          "fps": 233.9,
+          "averageMs": 4.275,
+          "stddevMs": 0.439
+        }
+      ],
+      "meanMs": 4.2815
+    }
+  ],
+  "vsync": [
+    {
+      "case": "vsync",
+      "overrides": [
+        "vid_vsync 1"
+      ],
+      "warmup": {
+        "frames": 1290,
+        "fps": 27.6,
+        "averageMs": 36.205,
+        "stddevMs": 1.16
+      },
+      "measured": [
+        {
+          "frames": 1290,
+          "fps": 27.7,
+          "averageMs": 36.095,
+          "stddevMs": 0.694
+        },
+        {
+          "frames": 1290,
+          "fps": 27.7,
+          "averageMs": 36.135,
+          "stddevMs": 0.756
+        }
+      ],
+      "meanMs": 36.114999999999995
+    }
+  ]
+}

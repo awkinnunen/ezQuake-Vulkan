@@ -34,6 +34,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "menu_options.h"
 #include "menu_ingame.h"
 #include "menu_multiplayer.h"
+#include "menu_local.h"
+#include "competitive_visuals.h"
 #include "EX_FileList.h"
 #include "help.h"
 #include "utils.h"
@@ -99,12 +101,6 @@ int            m_topmenu;       // set if a submenu was entered via a
                                 // menu_* command
 #define    SLIDER_RANGE    10
 
-typedef struct menu_window_s {
-	int x;
-	int y;
-	int w;
-	int h;
-} menu_window_t;
 
 //=============================================================================
 /* Support Routines */
@@ -251,7 +247,7 @@ static void M_Window_Adjust(const menu_window_t *original, menu_window_t *scaled
 // 3rd par: input, how many entries does the window have
 // 4th par: output, newly selected entry, first entry is 0, second 1, ...
 // return value: does the cursor belong to this window? yes/no
-static qbool M_Mouse_Select(const menu_window_t *uw, const mouse_state_t *m, int entries, int *newentry)
+qbool M_Mouse_Select(const menu_window_t *uw, const mouse_state_t *m, int entries, int *newentry)
 {
 	double entryheight;
 	double nentry;
@@ -390,13 +386,16 @@ typedef struct bigmenu_items_s {
 bigmenu_items_t mainmenu_items[] = {
 	{"Single Player", M_Menu_SinglePlayer_f},
 	{"Multiplayer", M_Menu_MultiPlayer_f},
+#ifndef CLIENTONLY
+	{"Local Arena", MLocal_Open},
+#endif
 	{"Options", M_Menu_Options_f},
 	{"Demos", M_Menu_Demos_f},
 	{"Help", M_Menu_Help_f},
 	{"Quit", M_Menu_Quit_f}
 };
 
-#define    MAIN_ITEMS    (newmainmenu ? BIGMENU_ITEMS_COUNT(mainmenu_items) : 5)
+#define    MAIN_ITEMS    BIGMENU_ITEMS_COUNT(mainmenu_items)
 
 // mcharset must be supported in this point
 static void M_BigMenu_DrawItems(bigmenu_items_t *menuitems, const unsigned int items, int left_corner, int top_corner, int *width, int *height)
@@ -442,15 +441,14 @@ void M_Main_Draw (void) {
 	}
 	else {
 		newmainmenu = false;
-		p = Draw_CachePic (CACHEPIC_MAINMENU);
-		m_main_window.w = p->width;
-		m_main_window.h = p->height;
-		M_DrawTransPic_GetPoint (72, 32, &m_main_window.x, &m_main_window.y, p);
-		
-		// main menu specific correction, mainmenu.lmp|png have some useless extra space at the bottom
-		// that makes the mouse pointer position calculation imperfect
-		m_main_window.h *= 0.9;
-
+		// A static mainmenu.lmp cannot contain additional menu entries.
+		// Keep every action accessible even without the optional big font.
+		m_main_window.x = 72 + (menuwidth - 320) / 2;
+		m_main_window.y = 32 + m_yofs;
+		m_main_window.w = 200;
+		m_main_window.h = MAIN_ITEMS * 20;
+		for (int i = 0; i < MAIN_ITEMS; ++i)
+			M_PrintWhite(72, 32 + i * 20, (char *)mainmenu_items[i].label);
 		itemheight = 20;
 	}	
 
@@ -461,16 +459,8 @@ void M_Main_Draw (void) {
 
 static void M_Main_Enter(const unsigned int entry)
 {
-	if (newmainmenu) {
+	if (entry < MAIN_ITEMS) {
 		mainmenu_items[entry].enter_handler();
-	}
-	else {
-		switch (entry) {
-		case 0: M_Menu_SinglePlayer_f (); break;
-		case 1:	M_Menu_MultiPlayer_f (); break;
-		case 2: M_Menu_Options_f (); break;
-		case 4: M_Menu_Quit_f (); break;
-		}
 	}
 }
 
@@ -777,6 +767,10 @@ static void StartNewGame(void)
 	Cvar_Set(&teamplay, "0");
 	Cvar_Set(&deathmatch, "0");
 	Cvar_Set(&coop, "0");
+	Cvar_Set(&fraglimit, "0");
+	Cvar_Set(&timelimit, "0");
+	Cvar_SetByName("samelevel", "0");
+	Cvar_SetByName("pausable", "1");
 
 	Cvar_Set(&sv_progsname, "spprogs"); // force progsname
 #ifdef USE_PR2
@@ -983,10 +977,13 @@ void M_ScanSaves(char* sp_gamedir)
 }
 
 void M_Menu_Load_f (void) {
+#ifndef WITH_NQPROGS
 	vfsfile_t *f;
 
 	if (!(f = FS_OpenVFS("spprogs.dat", "rb", FS_ANY)))
 		return;
+	VFS_CLOSE(f);
+#endif
 
 	M_EnterMenu (m_load);
 	// VFS-FIXME: file_from_gamedir is not set in FS_OpenVFS
@@ -1295,6 +1292,8 @@ void M_Init (void) {
 	Menu_Options_Init(); // menu_options module
 	Menu_Ingame_Init();
 	Menu_MultiPlayer_Init(); // menu_multiplayer.h
+	MLocal_Init();
+	CV_Init();
 
 	Cmd_AddCommand ("togglemenu", M_ToggleMenu_f);
 	Cmd_AddCommand ("toggleproxymenu", M_ToggleProxyMenu_f);
@@ -1302,6 +1301,7 @@ void M_Init (void) {
 	Cmd_AddCommand ("menu_main", M_Menu_Main_f);
 #ifndef CLIENTONLY
 	Cmd_AddCommand ("menu_singleplayer", M_Menu_SinglePlayer_f);
+	Cmd_AddCommand ("newgame", StartNewGame);
 	Cmd_AddCommand ("menu_load", M_Menu_Load_f);
 	Cmd_AddCommand ("menu_save", M_Menu_Save_f);
 #endif
@@ -1369,6 +1369,8 @@ void M_Draw(void)
 	switch (m_state) {
 		case m_none: break;
 		case m_main:			M_Main_Draw(); break;
+		case m_local:        MLocal_Draw(); break;
+		case m_competitive: CV_Draw(); break;
 		case m_singleplayer:	M_SinglePlayer_Draw(); break;
 #ifndef CLIENTONLY
 		case m_load:			M_Load_Draw(); break;
@@ -1428,6 +1430,8 @@ void M_Keydown (int key, wchar unichar) {
 	switch (m_state) {
 		case m_none: return;
 		case m_main:			M_Main_Key(key); return;
+		case m_local:        MLocal_Key(key); return;
+		case m_competitive: CV_Key(key); return;
 		case m_singleplayer:	M_SinglePlayer_Key(key); return;
 #ifndef CLIENTONLY
 		case m_load:			M_Load_Key(key); return;
@@ -1461,6 +1465,8 @@ qbool Menu_Mouse_Event(const mouse_state_t* ms)
     // functions should report if they handled the event or not
     switch (m_state) {
 	case m_main:			return M_Main_Mouse_Event(ms);
+	case m_local:        return MLocal_Mouse(ms);
+	case m_competitive: return CV_Mouse(ms);
 #ifndef CLIENTONLY
 	case m_singleplayer:	return M_SinglePlayer_Mouse_Event(ms);
 #endif

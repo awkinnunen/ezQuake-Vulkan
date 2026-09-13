@@ -101,6 +101,7 @@ void FL_Init(filelist_t	*fl, char *initdir)
 	fl->num_entries = 0;
 	fl->current_entry = 0;
 	fl->num_filetypes = 0;
+	fl->registered_types_only = false;
 
 	fl->search_string[0] = 0;
 	fl->last_page_size = 0;
@@ -767,7 +768,7 @@ void FL_ReadDir(filelist_t *fl)
 		if (!ent.directory && f->type_index < 0
 #ifdef WITH_ZIP
 				// Or isn't a zip.
-				&& !f->is_archive
+				&& (!f->is_archive || fl->registered_types_only)
 #endif
 		   )
 		{

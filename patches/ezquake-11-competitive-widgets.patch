@@ -1,0 +1,181 @@
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -22,7 +22,7 @@
+  {"gl_outline_scale_model","Model edge width","Subject to the active ruleset",0,1,.05,3},
+  {"gl_outline_world_depth_threshold","Edge depth threshold","World depth discontinuity threshold",1,16,.5,3},
+  {"gl_outline_use_player_color","Player edge colours","Use the player shirt colour",0,1,1,3},
+- {"r_shadows","Model shadows","Existing projected model shadows",0,1,.1,4},
++ {"r_shadows","Model shadows","Projected shadows; fixed opacity",0,1,1,4},
+  {"gl_detail","Detail overlay","Additional world detail texture",0,1,1,4},
+  {"gl_caustics","Water caustics","Animated underwater decoration",0,1,1,4},
+  {"vid_framebuffer_multisample","MSAA samples","0 off; 2, 4 or 8 samples",0,8,2,5},
+@@ -41,6 +41,61 @@
+ static qbool comparing, editing;
+ static int page, cursor, indices[CV_TOTAL], rows;
+ static menu_window_t window;
++extern cvar_t scr_scaleMenu;
++extern int menuwidth, menuheight;
++static int dragging = -1;
++#define CV_SLIDER_X 192
++#define CV_SLIDER_TRAVEL 40
++
++static void Bounds(int index, float *lo, float *hi, float *step) {
++ if(index<CV_COUNT) { *lo=opts[index].lo; *hi=opts[index].hi; *step=opts[index].step; }
++ else { const cv_existing_t *e=&existing[index-CV_COUNT]; *lo=e->lo; *hi=e->hi; *step=e->step; }
++}
++static qbool Toggle(int index) {
++ float lo,hi,step; Bounds(index,&lo,&hi,&step); return lo==0 && hi==1 && step==1;
++}
++static qbool Slider(int index) {
++ if(Toggle(index)) return false;
++ if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap;
++ return existing[index-CV_COUNT].step>0 && existing[index-CV_COUNT].step<1;
++}
++static qbool SwitchedOn(cvar_t *v) {
++ // Shared model-shadow admission uses integer, not an opacity value.
++ return !strcmp(v->name,"r_shadows") ? v->integer!=0 : v->value!=0;
++}
++static void DrawControl(int index, int y) {
++ cvar_t *v=index<CV_COUNT?&vars[index]:Cvar_Find(existing[index-CV_COUNT].name);
++ char label[24], value[32]; float lo,hi,step;
++ snprintf(label,sizeof(label),"%.20s",index<CV_COUNT?opts[index].label:existing[index-CV_COUNT].label);
++ M_Print(24,y,label);
++ if(!v) return;
++ if(Slider(index)) {
++  int i; float fraction;
++  Bounds(index,&lo,&hi,&step);
++  fraction=isfinite(v->value)?bound(0,(v->value-lo)/(hi-lo),1):0;
++  M_DrawCharacter(CV_SLIDER_X-8,y,128);
++  for(i=0;i<6;++i) M_DrawCharacter(CV_SLIDER_X+i*8,y,129);
++  M_DrawCharacter(CV_SLIDER_X+48,y,130);
++  M_DrawCharacter(CV_SLIDER_X+CV_SLIDER_TRAVEL*fraction,y,131);
++  snprintf(value,sizeof(value),"%6.3g",v->value); M_PrintWhite(256,y,value);
++ } else {
++  const char *choice=NULL;
++  if(Toggle(index)) choice=SwitchedOn(v)?"On":"Off";
++  else if(index==CV_light) { const char *names[]={"Original","Gradient","Soft Cel"}; choice=names[(int)CV_Value(CV_light)]; }
++  else if(index==CV_tonemap) { const char *names[]={"Original","Soft shoulder","Filmic"}; choice=names[(int)CV_Value(CV_tonemap)]; }
++  else if(!strcmp(v->name,"gl_outline")) { const char *names[]={"Off","Models","World","Both"}; choice=names[(int)bound(0,v->value,3)]; }
++  else if(!strcmp(v->name,"cl_muzzleflash")) { const char *names[]={"Off","On","Others only"}; choice=names[(int)bound(0,v->value,2)]; }
++  else if(!strcmp(v->name,"gl_texturemode")) {
++   if(!strcmp(v->string,"GL_NEAREST")) choice="Nearest";
++   else if(!strcmp(v->string,"GL_LINEAR")) choice="Linear";
++   else if(!strcmp(v->string,"GL_NEAREST_MIPMAP_NEAREST")) choice="Nearest mip";
++   else if(!strcmp(v->string,"GL_LINEAR_MIPMAP_NEAREST")) choice="Bilinear";
++   else if(!strcmp(v->string,"GL_NEAREST_MIPMAP_LINEAR")) choice="Nearest blend";
++   else choice="Trilinear";
++  }
++  snprintf(value,sizeof(value),"%13.13s",choice?choice:v->string); M_PrintWhite(200,y,value);
++ }
++}
+ 
+ float CV_Value(cv_id id) {
+  float value = vars[id].value;
+@@ -167,7 +222,7 @@
+  for(i=0;i<CV_EXT_COUNT;++i) if(existing[i].page==page&&Var(CV_COUNT+i)) indices[rows++]=CV_COUNT+i;
+  cursor=bound(0,cursor,max(0,rows-1));
+ }
+-void CV_Open(void) { M_EnterMenu(m_competitive); BuildRows(); }
++void CV_Open(void) { dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
+ void CV_Draw(void) {
+  int i,first; char line[80];
+  M_PrintWhite(64,8,"COMPETITIVE VISUALS");
+@@ -184,21 +239,21 @@
+    const char *labels[]={"Original preset","Clean preset","Soft Cel preset",NULL,"Save visual profile","Load visual profile","Compare original (F6)","Reset visual style"};
+    if(i==3) snprintf(line,sizeof(line),"Name: %.28s%s",profile,editing?"_":""); else strlcpy(line,labels[i],sizeof(line));
+   } else {
+-   int index=indices[i]; cvar_t *v=Var(index);
+-   if(index<CV_COUNT) snprintf(line,sizeof(line),"%-21.21s %9.3g",opts[index].label,CV_Value(index));
+-   else snprintf(line,sizeof(line),"%-21.21s %9.9s",existing[index-CV_COUNT].label,v?v->string:"n/a");
+-  }
+-  if(i==first) M_Print_GetPoint(32,y,&window.x,&window.y,line,false); else M_Print(32,y,line);
+- }
+- window.w=256; window.h=min(rows-first,10)*10;
++   line[0]=0;
++  }
++  if(i==first) M_Print_GetPoint(24,y,&window.x,&window.y,line,false); else if(!page) M_Print(24,y,line);
++  if(page) DrawControl(indices[i],y);
++ }
++ window.w=280; window.h=min(rows-first,10)*10;
+  M_DrawCharacter(16,52+(cursor-first)*10,FLASHINGARROW());
+- M_PrintWhite(16,158,"PgUp/PgDn: page  arrows: adjust");
++ snprintf(line,sizeof(line),"PgUp/PgDn: page   rows %d-%d/%d",first+1,min(rows,first+10),rows); M_PrintWhite(16,158,line);
+  M_PrintWhite(16,168,"F6: compare  F7: reset page");
+  if(page) { int index=indices[cursor]; snprintf(line,sizeof(line),"%.36s",index<CV_COUNT?opts[index].help:existing[index-CV_COUNT].help); M_PrintWhite(16,180,line); }
+  if(notice[0]) { snprintf(line,sizeof(line),"%.36s",notice); M_PrintWhite(16,190,line); }
+ }
+ void CV_Key(int key) {
+  int index,direction=key==K_LEFTARROW?-1:1; cvar_t *v;
++ dragging=-1;
+  if(editing) {
+   size_t len=strlen(profile);
+   if(key==K_ENTER||key==K_ESCAPE) editing=false;
+@@ -240,13 +295,40 @@
+    int samples[]={0,2,4,8}, i=0;
+    while(i<3 && samples[i]<v->value) ++i;
+    Cvar_SetValue(v,samples[bound(0,i+direction,3)]);
+-  } else Cvar_SetValue(v,bound(e->lo,v->value+direction*e->step,e->hi));
++  } else if(Toggle(index) && (key==K_ENTER||key==K_MOUSE1)) Cvar_SetValue(v,!SwitchedOn(v));
++  else Cvar_SetValue(v,bound(e->lo,v->value+direction*e->step,e->hi));
+  }
+ }
+ qbool CV_Mouse(const mouse_state_t *ms) {
+- int first=(cursor/10)*10, selected=cursor-first;
+- M_Mouse_Select(&window,ms,min(rows-first,10),&selected); cursor=first+selected;
+- if(ms->button_up==1) CV_Key(K_MOUSE1); if(ms->button_up==2) CV_Key(K_MOUSE2); return true;
++ int first,selected; qbool inside;
++ double x=ms->x*(scr_scaleMenu.value?(double)menuwidth/vid.width:1);
++ double y=ms->y*(scr_scaleMenu.value?(double)menuheight/vid.height:1);
++ double track=window.x+CV_SLIDER_X-24;
++ if(ms->button_up==2) { CV_Key(K_MOUSE2); return true; }
++ if(editing) return true;
++ BuildRows(); first=(cursor/10)*10; selected=cursor-first;
++ inside=M_Mouse_Select(&window,ms,min(rows-first,10),&selected);
++ if(dragging<0 && inside) cursor=first+selected;
++ if(dragging<0 && inside && page && Slider(indices[cursor]) &&
++    x>=track-8 && x<=track+CV_SLIDER_TRAVEL+16 && ms->button_down==1) dragging=indices[cursor];
++ if(dragging>=0) {
++  if(ms->buttons[1] || ms->button_down==1 || ms->button_up==1) {
++   float lo,hi,step,value;
++   Bounds(dragging,&lo,&hi,&step);
++   value=lo+bound(0,(x-track)/CV_SLIDER_TRAVEL,1)*(hi-lo);
++   value=lo+floorf((value-lo)/step+.5f)*step;
++   if(comparing) Restore();
++   Cvar_SetValue(Var(dragging),bound(lo,value,hi));
++  }
++  if(ms->button_up==1 || (!ms->buttons[1] && ms->button_down!=1)) dragging=-1;
++  return true;
++ }
++ if(ms->button_up==1) {
++  if(y>=window.y-28 && y<window.y-20 && x>=window.x+56 && x<=window.x+216)
++   CV_Key(x<window.x+136?K_PGUP:K_PGDN);
++  else if(inside) CV_Key(K_MOUSE1);
++ }
++ return true;
+ }
+ static void Command(void) {
+  const char *action=Cmd_Argv(1);
+@@ -260,6 +342,22 @@
+  if(!strcmp(Cmd_Argv(1),"checkpoint")) { cbuf_main.runAwayLoop=cbuf_main.waitCount=0; return; }
+  if(!strcmp(Cmd_Argv(1),"key")) CV_Key(Key_StringToKeynum(Cmd_Argv(2)));
+  if(!strcmp(Cmd_Argv(1),"page")) { page=bound(0,atoi(Cmd_Argv(2)),5);cursor=0;BuildRows(); }
++ if(!strcmp(Cmd_Argv(1),"select")) {
++  int i;
++  for(i=0;i<CV_TOTAL;++i) if(Var(i)&&!strcmp(Var(i)->name,Cmd_Argv(2))) {
++   int row; page=i<CV_COUNT?opts[i].page:existing[i-CV_COUNT].page; BuildRows();
++   for(row=0;row<rows;++row) if(indices[row]==i) cursor=row;
++   break;
++  }
++ }
++ if(!strcmp(Cmd_Argv(1),"mouse")) {
++  mouse_state_t ms={0};
++  ms.x=(window.x+CV_SLIDER_X-24+atof(Cmd_Argv(3))*CV_SLIDER_TRAVEL)*(scr_scaleMenu.value?(double)vid.width/menuwidth:1);
++  ms.y=(window.y+(cursor%10)*10+4)*(scr_scaleMenu.value?(double)vid.height/menuheight:1);
++  ms.button_down=!strcmp(Cmd_Argv(2),"down")?1:0;
++  ms.button_up=!strcmp(Cmd_Argv(2),"up")?1:0;
++  ms.buttons[1]=!ms.button_up; CV_Mouse(&ms);
++ }
+  Con_Printf("CV_STATE page=%d rows=%d active=%d compare=%d rim=%g bloom=%g\n",page,rows,CV_Active(),comparing,CV_Value(CV_rim),CV_Value(CV_bloom));
+ }
+ void CV_Init(void) {

@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
 layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
@@ -10,24 +11,10 @@ layout(location = 1) in vec2 inLightmapCoord;
 layout(location = 2) in vec2 inDetailCoord;
 layout(location = 3) flat in uint inFlags;
 
-layout(push_constant) uniform PushConstants {
-	mat4 mvp;
-	vec4 color;
-	vec4 cameraPosition;
-	float time;
-	float alpha;
-	float surfaceType;
-	float useSkyTexture;
-	float fastTurb;
-	float detailEnabled;
-	float textureless;
-	float causticsEnabled; // vk_world_flat's drawflatColor slot, repurposed here
-	vec4 floorColor;
-	vec4 wallColor;
-	float drawflatMode; // 0=off, 1=tinted, 2=bright -- see r_drawflat_mode
-	float tintFloors;
-	float tintWalls;
-} pushConstants;
+#include "vk_world_push.glsl"
+#define CV_SET 4
+#define CV_WORLD_FRAGMENT
+#include "vk_competitive.glsl"
 
 layout(location = 0) out vec4 fragColour;
 
@@ -48,19 +35,19 @@ vec3 applyDrawflatTint(vec3 colour)
 	}
 
 	bool isFloor = (inFlags & EZQ_SURFACE_IS_FLOOR) != 0u;
-	float mixFloor = (isFloor && pushConstants.tintFloors > 0.5) ? 1.0 : 0.0;
-	float mixWall = (!isFloor && pushConstants.tintWalls > 0.5) ? 1.0 : 0.0;
+	float mixFloor = (isFloor && worldFlag(VK_WORLD_TINT_FLOORS)) ? 1.0 : 0.0;
+	float mixWall = (!isFloor && worldFlag(VK_WORLD_TINT_WALLS)) ? 1.0 : 0.0;
 
-	if (pushConstants.drawflatMode > 1.5) {
+	if (worldFlag(VK_WORLD_BRIGHT)) {
 		// Bright: luminance-preserving recolor (kudos to Darel Rex Finley).
 		float brightness = sqrt(colour.r * colour.r * 0.241 + colour.g * colour.g * 0.691 + colour.b * colour.b * 0.068);
-		colour = mix(colour, pushConstants.wallColor.rgb * brightness, mixWall);
-		colour = mix(colour, pushConstants.floorColor.rgb * brightness, mixFloor);
+		colour = mix(colour, unpackUnorm4x8(pushConstants.wallColor).rgb * brightness, mixWall);
+		colour = mix(colour, unpackUnorm4x8(pushConstants.floorColor).rgb * brightness, mixFloor);
 	}
-	else if (pushConstants.drawflatMode > 0.5) {
+	else if (worldFlag(VK_WORLD_TINTED)) {
 		// Tinted: multiply.
-		colour = mix(colour, colour * pushConstants.floorColor.rgb, mixFloor);
-		colour = mix(colour, colour * pushConstants.wallColor.rgb, mixWall);
+		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.floorColor).rgb, mixFloor);
+		colour = mix(colour, colour * unpackUnorm4x8(pushConstants.wallColor).rgb, mixWall);
 	}
 
 	return colour;
@@ -78,7 +65,7 @@ void main()
 		texCoord.s += sin((inTexCoord.t + pushConstants.time) * 1.5) * 0.125;
 		texCoord.t += sin((inTexCoord.s + pushConstants.time) * 1.5) * 0.125;
 	}
-	else if (pushConstants.textureless > 0.5) {
+	else if (worldFlag(VK_WORLD_TEXTURELESS)) {
 		// Keep the lightmap/depth/outline pipeline exactly as-is, just
 		// sample a single fixed texel from the world texture instead of
 		// the surface's real UVs (same trick Modern OpenGL's
@@ -87,21 +74,23 @@ void main()
 	}
 
 	vec4 texColour = texture(worldTexture[0], texCoord);
+	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
 	vec4 lightColour = texture(lightmapTexture[0], inLightmapCoord);
+	lightColour.rgb = cvLighting(lightColour.rgb, false);
 
 	if (texColour.a < 0.5) {
 		discard;
 	}
 
 	fragColour = vec4(applyDrawflatTint(texColour.rgb) * lightColour.rgb, 1.0);
-	if (pushConstants.detailEnabled > 0.5) {
+	if (worldFlag(VK_WORLD_DETAIL)) {
 		vec4 detail = texture(detailTexture[0], inDetailCoord);
 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
 	}
 	// Port of GLC/GLM's gl_caustics: an animated multiplicative overlay,
 	// applied only to fragments flagged underwater at surface-build time
 	// (see draw_world.fragment.glsl for the reference UV animation/blend).
-	if (pushConstants.causticsEnabled > 0.5 && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
+	if (worldFlag(VK_WORLD_CAUSTICS) && (inFlags & EZQ_SURFACE_UNDERWATER) != 0u) {
 		vec2 causticCoord = vec2(
 			(inTexCoord.s + sin(0.465 * (pushConstants.time + inTexCoord.t))) * -0.1234375,
 			(inTexCoord.t + sin(0.465 * (pushConstants.time + inTexCoord.s))) * -0.1234375);

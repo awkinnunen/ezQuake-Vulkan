@@ -27,6 +27,7 @@ void Config_QuitSave(void);
 void ResetBinds(void);
 void Cfg_ExecuteDefaultConfig(void);
 void Cfg_GetConfigPath(char* path, size_t max_length, const char* name);
+qbool Cfg_LoadConfigFile(const char *path);
 
 extern cvar_t	cfg_save_unchanged, cfg_legacy_exec;
 

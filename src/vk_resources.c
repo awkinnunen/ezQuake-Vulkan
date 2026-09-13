@@ -16,6 +16,29 @@ of the License, or (at your option) any later version.
 
 static VkCommandPool immediateCommandPool;
 
+VkResult VK_CreatePipelineLayoutChecked(VkDevice device, const VkPipelineLayoutCreateInfo* info,
+	const VkAllocationCallbacks* allocator, VkPipelineLayout* layout)
+{
+	const VkPhysicalDeviceLimits* limits = &vk_options.physicalDeviceProperties.limits;
+	uint32_t i;
+
+	*layout = VK_NULL_HANDLE;
+	if (info->setLayoutCount > limits->maxBoundDescriptorSets) {
+		Con_Printf("vulkan: pipeline needs %u descriptor sets; device limit is %u\n",
+			info->setLayoutCount, limits->maxBoundDescriptorSets);
+		return VK_ERROR_INITIALIZATION_FAILED;
+	}
+	for (i = 0; i < info->pushConstantRangeCount; ++i) {
+		const VkPushConstantRange* range = &info->pPushConstantRanges[i];
+		if (!VK_PushRangeFits(limits->maxPushConstantsSize, range)) {
+			Con_Printf("vulkan: invalid push range offset=%u size=%u stages=0x%x; device limit=%u\n",
+				range->offset, range->size, range->stageFlags, limits->maxPushConstantsSize);
+			return VK_ERROR_INITIALIZATION_FAILED;
+		}
+	}
+	return vkCreatePipelineLayout(device, info, allocator, layout);
+}
+
 uint32_t VK_FindMemoryType(uint32_t type_filter, VkMemoryPropertyFlags properties)
 {
 	VkPhysicalDeviceMemoryProperties memoryProperties;

@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <SDL3/SDL_vulkan.h>
 
 #include "vk_local.h"
+#include "r_texture.h"
 
 static const char* requiredDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
@@ -468,6 +469,7 @@ qbool VK_SelectPhysicalDevice(VkInstance instance, VkSurfaceKHR surface)
 void VK_DetermineMSAASampleCount(void)
 {
 	extern cvar_t vid_framebuffer_multisample;
+	extern void CV_VideoApplied(int requested, int actual);
 	VkSampleCountFlags supported;
 	int requestedInt;
 	VkSampleCountFlagBits candidate;
@@ -475,6 +477,7 @@ void VK_DetermineMSAASampleCount(void)
 	vk_options.msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	if (vid_framebuffer_multisample.integer <= 1) {
+		CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
 		return;
 	}
 
@@ -495,11 +498,13 @@ void VK_DetermineMSAASampleCount(void)
 			if (vk_options.msaaSamples != requestedInt) {
 				Con_Printf("vulkan: %dx multisampling requested, device supports up to %dx\n", requestedInt, (int)vk_options.msaaSamples);
 			}
+			CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
 			return;
 		}
 	}
 
 	Con_Printf("vulkan: device doesn't support multisampling, vid_framebuffer_multisample disabled\n");
+	CV_VideoApplied(vid_framebuffer_multisample.integer, (int)vk_options.msaaSamples);
 }
 
 uint32_t VK_PhysicalDeviceGraphicsQueueFamilyIndex(void)
@@ -596,6 +601,12 @@ qbool VK_CreateLogicalDevice(VkInstance instance)
 	// for what this unlocks.
 	{
 		VkPhysicalDeviceFeatures2 indexingQueryFeatures2 = { 0 };
+		VkPhysicalDeviceProperties2 properties2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+		const char* failedLimit;
+
+		vk_options.descriptorIndexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+		properties2.pNext = &vk_options.descriptorIndexingProperties;
+		vkGetPhysicalDeviceProperties2(vk_options.physicalDevice, &properties2);
 
 		descriptorIndexingQuery.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		indexingQueryFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -608,6 +619,16 @@ qbool VK_CreateLogicalDevice(VkInstance instance)
 			descriptorIndexingQuery.descriptorBindingVariableDescriptorCount &&
 			descriptorIndexingQuery.runtimeDescriptorArray &&
 			descriptorIndexingQuery.descriptorBindingSampledImageUpdateAfterBind;
+		if (!vk_options.supportsDescriptorIndexing) {
+			Con_Printf("vulkan: required descriptor-indexing features unavailable; alias models have no fallback. Select OpenGL.\n");
+			return false;
+		}
+		failedLimit = VK_BindlessLimitFailure(&vk_options.descriptorIndexingProperties, 2u * MAX_GLTEXTURES);
+		if (failedLimit) {
+			Con_Printf("vulkan: bindless table needs %u combined image samplers; exceeds %s. Select OpenGL.\n",
+				2u * MAX_GLTEXTURES, failedLimit);
+			return false;
+		}
 	}
 
 	queueInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;

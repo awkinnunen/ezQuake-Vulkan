@@ -477,7 +477,7 @@ if(RENDERER_VULKAN)
         add_custom_command(
                 OUTPUT ${output_file}
                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
-                DEPENDS ${source_file}
+                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl
                 COMMENT "Compiling Vulkan shader ${source_file}"
                 VERBATIM
         )
@@ -535,6 +535,7 @@ if(RENDERER_VULKAN)
             ${SOURCE_DIR}/vk_texture.c
             ${SOURCE_DIR}/vk_vao.c
             ${SOURCE_DIR}/vk_window_surface.c
+            ${SOURCE_DIR}/vk_competitive.c
             ${SOURCE_DIR}/vk_world.c
             ${vulkan_renderer_headers}
     )
@@ -788,6 +789,14 @@ set(client
         ${SOURCE_DIR}/collision.c
         ${SOURCE_DIR}/common_draw.c
         ${SOURCE_DIR}/config_manager.c
+        ${SOURCE_DIR}/cfg_bindings.c
+        ${SOURCE_DIR}/cfg_bindings.h
+        ${SOURCE_DIR}/menu_config.c
+        ${SOURCE_DIR}/menu_config.h
+        ${SOURCE_DIR}/competitive_visuals.c
+        ${SOURCE_DIR}/competitive_visuals.h
+        ${SOURCE_DIR}/menu_local.c
+        ${SOURCE_DIR}/menu_local.h
         ${SOURCE_DIR}/console.c
         ${SOURCE_DIR}/demo_controls.c
         ${SOURCE_DIR}/demo_extension.c

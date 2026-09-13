@@ -149,7 +149,7 @@ qbool VK_CreateAliasModelPipeline(r_buffer_id aliasModelVBO, r_buffer_id instanc
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = NULL; // Optional
 
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &pipelineLayout) != VK_SUCCESS) {
 		return false;
 	}
 

@@ -383,6 +383,8 @@ void R_SetupFrame(void)
 {
 	vec3_t testorigin;
 	mleaf_t	*leaf;
+	extern void CV_TestView(void);
+	CV_TestView();
 
 	R_AnimateLight ();
 

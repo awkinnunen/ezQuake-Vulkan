@@ -32,17 +32,12 @@ extern r_sprite3d_vert_t glvertices[ABSOLUTE_MAX_PARTICLES * 3];
 
 mspriteframe_t* R_GetSpriteFrame(entity_t* e, msprite2_t* psprite);
 
+// Precombine matrices like the world/alias paths: 68 bytes instead of 160.
 typedef struct vk_sprite3d_push_s {
-	float modelView[16];
-	float projection[16];
+	float mvp[16];
 	float alphaThreshold;
-	// vk_sprite3d.vert/.frag's matching GLSL struct ends with a vec3, which
-	// std430-style push-constant rules align to 16 bytes -- the real
-	// compiled block is 156 bytes, not the 144 this plain-float-array struct
-	// summed to (no such alignment jump for a C float[3]). Padded to 160
-	// (next 16-byte multiple) to cover it.
-	float padding[7];
 } vk_sprite3d_push_t;
+typedef char vk_sprite3d_push_size_check[(sizeof(vk_sprite3d_push_t) == 68) ? 1 : -1];
 
 typedef enum vk_sprite_pipeline_id_s {
 	VK_SPRITE_PIPELINE_PREMULT_DEPTH,
@@ -316,7 +311,7 @@ static qbool VK_SpriteCreatePipeline(r_primitive_id primitive, vk_sprite_pipelin
 		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &spritePipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &spritePipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -485,8 +480,7 @@ void VK_Draw3DSprites(void)
 	}
 
 	memset(&push, 0, sizeof(push));
-	memcpy(push.modelView, R_ModelviewMatrix(), sizeof(push.modelView));
-	memcpy(push.projection, R_ProjectionMatrix(), sizeof(push.projection));
+	R_MultiplyMatrix(R_ModelviewMatrix(), R_ProjectionMatrix(), push.mvp);
 
 	VK_SpriteSetViewportScissor(commandBuffer);
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);

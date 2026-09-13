@@ -56,13 +56,15 @@ qbool Menu_Mouse_Event(const mouse_state_t* ms);
 qbool Menu_ExecuteKey(int key);
 
 extern int m_yofs;
+typedef struct menu_window_s { int x, y, w, h; } menu_window_t;
+qbool M_Mouse_Select(const menu_window_t *window, const mouse_state_t *mouse, int entries, int *newentry);
 
 #define FLASHINGARROW() (12+((int)(curtime*4)&1))
 #define FLASHINGCURSOR() (10+((int)(curtime*4)&1))
 
 typedef enum {
     m_none, m_main, m_proxy, m_singleplayer, m_load, m_save,
-	m_multiplayer, m_demos, m_multiplayer_submenu,
+	m_multiplayer, m_demos, m_multiplayer_submenu, m_local, m_competitive,
     m_options,
 	m_help,
 	m_quit, m_ingame, 

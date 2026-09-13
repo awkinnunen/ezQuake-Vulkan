@@ -1163,6 +1163,12 @@ void PR1_LoadProgs (void)
 		snprintf(name, sizeof(name), "%s.dat", sv_progsname.string);
 		progs = (dprograms_t *)FS_LoadHunkFile (name, &filesize);
 	}
+#ifdef WITH_NQPROGS
+	// An explicit single-player request must not fall back to multiplayer QC.
+	if (!progs && !strcmp(sv_progsname.string, "spprogs") &&
+		(progs = (dprograms_t *)FS_LoadHunkFile ("progs.dat", &filesize)))
+		pr_nqprogs = true;
+#endif
 	if (!progs)
 		progs = (dprograms_t *)FS_LoadHunkFile ("qwprogs.dat", &filesize);
 	if (!progs)

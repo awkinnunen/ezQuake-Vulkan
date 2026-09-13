@@ -40,6 +40,7 @@ extern cvar_t cl_rocket2grenade;
 #define R_ModelFlags(model) model->flags
 
 void CL_FindModelNumbers (void);
+void CL_SetStat(int stat, int value);
 void TP_NewMap (void);
 void CL_ParseBaseline (entity_state_t *es);
 void CL_ParseStatic (qbool extended);
@@ -298,16 +299,15 @@ static void NQD_ParseClientdata (int bits)
 	{
 		if (cl.stats[STAT_ACTIVEWEAPON] != i)
 		{
-			cl.stats[STAT_ACTIVEWEAPON] = i;
-			Sbar_Changed ();
+			// Use the shared stat path so f_weaponchange also runs in NQ.
+			CL_SetStat(STAT_ACTIVEWEAPON, i);
 		}
 	}
 	else
 	{
 		if (cl.stats[STAT_ACTIVEWEAPON] != (1<<i))
 		{
-			cl.stats[STAT_ACTIVEWEAPON] = (1<<i);
-			Sbar_Changed ();
+			CL_SetStat(STAT_ACTIVEWEAPON, (1<<i));
 		}
 	}
 }

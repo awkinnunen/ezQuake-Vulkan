@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define EZQUAKE_VK_LOCAL_HEADER
 
 #include <vulkan/vulkan.h>
+#include "vk_limits.h"
+
+VkResult VK_CreatePipelineLayoutChecked(VkDevice device, const VkPipelineLayoutCreateInfo* info,
+	const VkAllocationCallbacks* allocator, VkPipelineLayout* layout);
 
 #include "r_local.h"
 #include "r_state.h"
@@ -206,6 +210,7 @@ typedef struct vk_options_s {
 	VkPhysicalDevice physicalDevice;
 	VkPhysicalDeviceFeatures physicalDeviceFeatures;
 	VkPhysicalDeviceProperties physicalDeviceProperties;
+	VkPhysicalDeviceDescriptorIndexingProperties descriptorIndexingProperties;
 	uint32_t physicalDeviceGraphicsQueueFamilyIndex;
 	uint32_t physicalDeviceComputeQueueFamilyIndex;
 	uint32_t physicalDevicePresentQueueFamilyIndex;
@@ -339,6 +344,7 @@ typedef struct vk_options_s {
 		uint32_t currentFrame;
 		uint32_t imageIndex;
 		qbool active;
+		qbool hudStarted;
 	} frame;
 	float clearColor[4];
 } vk_options_t;
@@ -346,5 +352,10 @@ typedef struct vk_options_s {
 extern vk_options_t vk_options;
 
 void VK_PrintGfxInfo(void);
+VkDescriptorSetLayout VK_CVLayout(void);
+void VK_CVBeginFrame(void);
+void VK_CVBind(VkCommandBuffer command, VkPipelineLayout layout, uint32_t set, const void *params);
+void VK_CVShutdown(void);
+VkRenderPass VK_HudRenderPass(void);
 
 #endif

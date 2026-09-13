@@ -1,4 +1,7 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
+#define CV_SET 1
+#include "vk_competitive.glsl"
 #extension GL_EXT_nonuniform_qualifier : require
 
 // Bindless path: binding 0/1 are MAX_GLTEXTURES-sized runtime arrays (the
@@ -39,6 +42,9 @@ layout(location = 3) in vec2 inAltTexCoord;
 layout(location = 4) in vec4 inAltColor;
 layout(location = 5) in float inMode;
 layout(location = 6) in float inMinLumaMix;
+layout(location = 7) in vec3 cvNormal;
+layout(location = 8) in vec3 cvPosition;
+layout(location = 9) in float cvUp;
 
 layout(location = 0) out vec4 fragColour;
 
@@ -71,9 +77,11 @@ void main()
 	if (inTextured > 0.5) {
 		float mixAmount = max(inMinLumaMix, texColour.a);
 
-		fragColour = vec4(mix(texColour.rgb, texColour.rgb * inColor.rgb, mixAmount), inColor.a);
+		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(inColor.rgb, true), mixAmount), inColor.a);
 	}
 	else {
-		fragColour = vec4(inColor.rgb, inColor.a);
+		fragColour = vec4(cvLighting(inColor.rgb, true), inColor.a);
 	}
+	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
+	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
 }

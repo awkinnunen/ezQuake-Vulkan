@@ -877,8 +877,8 @@ void Host_Shutdown (void)
 	Central_Shutdown();
 	CL_Shutdown ();
 	NET_Shutdown ();
-	Con_Shutdown();
 	qtvlist_deinit();
+	Con_Shutdown();
 	Cvar_Shutdown();
 	FS_Shutdown();
 	SYSINFO_Shutdown();

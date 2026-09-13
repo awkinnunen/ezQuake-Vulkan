@@ -1,22 +1,12 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inTexCoord;
 layout(location = 2) in vec2 inDetailCoord;
 layout(location = 3) in uint inFlagsAttrib;
 
-layout(push_constant) uniform PushConstants {
-	mat4 mvp;
-	vec4 color;
-	vec4 cameraPosition;
-	float time;
-	float alpha;
-	float surfaceType;
-	float useSkyTexture;
-	float fastTurb;
-	float detailEnabled;
-	vec2 padding;
-} pushConstants;
+#include "vk_world_push.glsl"
 
 layout(location = 0) out vec2 outTexCoord;
 layout(location = 1) out vec2 outDetailCoord;

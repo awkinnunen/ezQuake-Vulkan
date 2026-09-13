@@ -26,6 +26,7 @@ of the License, or (at your option) any later version.
 #include "tr_types.h"
 #include "glsl/constants.glsl"
 #include "vk_local.h"
+#include "competitive_visuals.h"
 
 void Atlas_SolidTextureCoordinates(texture_ref* ref, float* s, float* t);
 
@@ -78,6 +79,7 @@ typedef struct vk_world_outline_push_s {
 	float invWidth;
 	float invHeight;
 	float zFar;
+	float aoStrength, aoRadius, edges, edgeOpacity;
 } vk_world_outline_push_t;
 
 static VkPipelineLayout hudImagePipelineLayout;
@@ -284,7 +286,7 @@ static qbool VK_HudCreateImagePipeline(void)
 
 	VK_InitialiseStructure(multisampling);
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.rasterizationSamples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	VK_InitialiseStructure(depthStencil);
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -309,7 +311,7 @@ static qbool VK_HudCreateImagePipeline(void)
 	pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-	if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudImagePipelineLayout) != VK_SUCCESS) {
+	if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudImagePipelineLayout) != VK_SUCCESS) {
 		vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 		vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 		return false;
@@ -328,7 +330,7 @@ static qbool VK_HudCreateImagePipeline(void)
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = &dynamicState;
 	pipelineInfo.layout = hudImagePipelineLayout;
-	pipelineInfo.renderPass = VK_MainRenderPass();
+	pipelineInfo.renderPass = VK_HudRenderPass();
 	pipelineInfo.subpass = 0;
 
 	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &hudImagePipeline) != VK_SUCCESS) {
@@ -381,7 +383,7 @@ static qbool VK_HudCreateColorPipeline(VkPrimitiveTopology topology, r_blendfunc
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudColorPipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &hudColorPipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -437,7 +439,7 @@ static qbool VK_HudCreateColorPipeline(VkPrimitiveTopology topology, r_blendfunc
 
 	VK_InitialiseStructure(multisampling);
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.rasterizationSamples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	VK_InitialiseStructure(depthStencil);
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -464,7 +466,7 @@ static qbool VK_HudCreateColorPipeline(VkPrimitiveTopology topology, r_blendfunc
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = &dynamicState;
 	pipelineInfo.layout = hudColorPipelineLayout;
-	pipelineInfo.renderPass = VK_MainRenderPass();
+	pipelineInfo.renderPass = VK_HudRenderPass();
 	pipelineInfo.subpass = 0;
 
 	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
@@ -497,6 +499,7 @@ static qbool VK_PostProcessCreatePipeline(void)
 	VkSamplerCreateInfo samplerInfo;
 	VkDescriptorSetLayoutBinding binding;
 	VkDescriptorSetLayoutCreateInfo layoutInfo;
+	VkDescriptorSetLayout cvLayouts[2];
 
 	if (postProcessPipeline != VK_NULL_HANDLE) {
 		return true;
@@ -595,11 +598,12 @@ static qbool VK_PostProcessCreatePipeline(void)
 
 		VK_InitialiseStructure(pipelineLayoutInfo);
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &postProcessDescriptorSetLayout;
+		pipelineLayoutInfo.setLayoutCount = 2;
+		cvLayouts[0] = postProcessDescriptorSetLayout; cvLayouts[1] = VK_CVLayout();
+		pipelineLayoutInfo.pSetLayouts = cvLayouts;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &postProcessPipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &postProcessPipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -758,6 +762,7 @@ void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 	VK_HudSetViewportScissor(commandBuffer);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postProcessPipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postProcessPipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+	VK_CVBind(commandBuffer, postProcessPipelineLayout, 1, NULL);
 	vkCmdPushConstants(commandBuffer, postProcessPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 }
@@ -768,7 +773,7 @@ void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 qbool VK_WorldOutlineActive(void)
 {
 	extern qbool R_DrawWorldOutlines(void);
-	return R_DrawWorldOutlines();
+	return R_DrawWorldOutlines() || CV_Value(CV_ao) > 0;
 }
 
 static qbool VK_WorldOutlineCreatePipeline(void)
@@ -903,7 +908,7 @@ static qbool VK_WorldOutlineCreatePipeline(void)
 		pipelineLayoutInfo.pSetLayouts = &worldOutlineDescriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 1;
 		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
-		if (vkCreatePipelineLayout(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOutlinePipelineLayout) != VK_SUCCESS) {
+		if (VK_CreatePipelineLayoutChecked(vk_options.logicalDevice, &pipelineLayoutInfo, NULL, &worldOutlinePipelineLayout) != VK_SUCCESS) {
 			vkDestroyShaderModule(vk_options.logicalDevice, fragShaderModule, NULL);
 			vkDestroyShaderModule(vk_options.logicalDevice, vertShaderModule, NULL);
 			return false;
@@ -999,6 +1004,7 @@ void VK_WorldNormalsTransitionForSampling(VkCommandBuffer commandBuffer, uint32_
 // more draw to it.
 void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
+	extern qbool R_DrawWorldOutlines(void);
 	extern cvar_t gl_outline_color_world, gl_outline_world_depth_threshold, gl_outline_world_normal_threshold;
 	extern cvar_t r_farclip;
 	VkDescriptorSet descriptorSet;
@@ -1014,6 +1020,10 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
 		return;
 	}
 
+	push.aoStrength = CV_Value(CV_ao);
+	push.aoRadius = CV_Value(CV_aoradius);
+	push.edges = R_DrawWorldOutlines() ? 1 : 0;
+ push.edgeOpacity = CV_Active() ? CV_Value(CV_edgestrength) : 1;
 	push.outlineColor[0] = (float)gl_outline_color_world.color[0] / 255.0f;
 	push.outlineColor[1] = (float)gl_outline_color_world.color[1] / 255.0f;
 	push.outlineColor[2] = (float)gl_outline_color_world.color[2] / 255.0f;
@@ -1030,6 +1040,10 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
 	fbScaleX = (float)VID_ScaledWidth3D() / (float)max(1, glConfig.vidWidth);
 	fbScaleY = (float)VID_ScaledHeight3D() / (float)max(1, glConfig.vidHeight);
 	push.outlineScale = bound(1.0f, max(fbScaleX, fbScaleY), 4.0f);
+ if (CV_Active()) {
+  push.outlineScale *= CV_Value(CV_edgewidth);
+  if (CV_Value(CV_edgepalette)) CV_EdgeColor(push.outlineColor,0);
+ }
 
 	VK_HudSetViewportScissor(commandBuffer);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipeline);

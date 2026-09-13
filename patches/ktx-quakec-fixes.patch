@@ -1,0 +1,88 @@
+diff --git a/src/doors.c b/src/doors.c
+index 223ae7a..ecb72ca 100644
+--- a/src/doors.c
++++ b/src/doors.c
+@@ -25,6 +25,10 @@
+ 
+ #include "g_local.h"
+ 
++// Rerelease fixes adapted from id Software's GPL QuakeC, quakec/doors.qc
++// (634eefab09a77eb7b5f5ca7078ba3d8784a91142, Copyright 1996-2022 id Software LLC).
++// C adaptation and typed callback wrapper: OpenAI Codex, 2026-09-13. CODE-011.
++
+ #define DOOR_START_OPEN   1
+ #define DOOR_DONT_LINK    4
+ #define DOOR_GOLD_KEY     8
+@@ -173,7 +177,8 @@ void door_fire(void)
+ 
+ 	if (self->s.v.items)
+ 	{
+-		sound(self, CHAN_VOICE, self->noise4, 1, ATTN_NORM);
++		// Keep the key sound audible when door_go_up starts CHAN_VOICE.
++		sound(self, CHAN_ITEM, self->noise4, 1, ATTN_NORM);
+ 	}
+ 
+ 	self->message = 0;	// no more message
+@@ -849,6 +854,13 @@ void fd_secret_use(gedict_t *attacker, float take)
+ 	sound(self, CHAN_VOICE, self->noise2, 1, ATTN_NORM);
+ }
+ 
++// QuakeC permits the same function in use/pain/die slots; C requires the
++// no-argument callback type used by Killed and the entity use dispatcher.
++static void fd_secret_activate(void)
++{
++	fd_secret_use(world, 0);
++}
++
+ // Wait after first movement...
+ void fd_secret_move1(void)
+ {
+@@ -903,7 +915,7 @@ void fd_secret_done(void)
+ 		self->s.v.health = 10000;
+ 		self->s.v.takedamage = DAMAGE_YES;
+ 		self->th_pain = fd_secret_use;
+-		self->th_die = (void (*)(void)) fd_secret_use;
++		self->th_die = fd_secret_activate;
+ 	}
+ 
+ 	sound(self, CHAN_NO_PHS_ADD + CHAN_VOICE, self->noise3, 1, ATTN_NORM);
+@@ -1035,12 +1047,13 @@ void SP_func_door_secret(void)
+ 	self->touch = (func_t) secret_touch;
+ 	self->blocked = (func_t) secret_blocked;
+ 	self->speed = 50;
+-	self->use = (func_t) fd_secret_use;
++	self->use = (func_t) fd_secret_activate;
+ 	if (!self->targetname || ((int)(self->s.v.spawnflags) & SECRET_YES_SHOOT))
+ 	{
+ 		self->s.v.health = 10000;
+ 		self->s.v.takedamage = DAMAGE_YES;
+ 		self->th_pain = fd_secret_use;
++		self->th_die = fd_secret_activate;
+ 	}
+ 
+ 	VectorCopy(self->s.v.origin, self->s.v.oldorigin);
+diff --git a/src/subs.c b/src/subs.c
+index 97f9052..c8b2767 100644
+--- a/src/subs.c
++++ b/src/subs.c
+@@ -25,6 +25,10 @@
+ 
+ #include "g_local.h"
+ 
++// Target dispatch fix adapted from id Software's GPL QuakeC, quakec/subs.qc
++// (634eefab09a77eb7b5f5ca7078ba3d8784a91142, Copyright 1996-2022 id Software LLC).
++// C adaptation: OpenAI Codex, 2026-09-13. CODE-012.
++
+ /*
+  QuakeEd only writes a single float for angles (bad idea), so up and down are
+  just constant angles.
+@@ -289,7 +293,8 @@ void SUB_UseTargets(void)
+ 			t = find(t, FOFS(targetname), self->killtarget);
+ 			if (!t)
+ 			{
+-				return;
++				// A killtarget does not suppress this event's normal targets.
++				break;
+ 			}
+ 
+ 			ent_remove(t);

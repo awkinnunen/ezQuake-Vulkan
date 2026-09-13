@@ -1,0 +1,95 @@
+{
+  "recorded": "2026-09-13T12:09:00.9409487+03:00",
+  "repositories": [
+    {
+      "name": "ezquake",
+      "origin": "https://github.com/QW-Group/ezquake-source.git",
+      "commit": "c0e22c458e68938423edd82b183b4901c4c86b09",
+      "branch": "dev/vulkan-port",
+      "submodules": [
+        " d508a7a4425e2dcdfab151cd188f8720907e5bbd src/qwprot (d508a7a)",
+        " 66c0373dc7fca549e5803087b9487edfe3aca0a1 vcpkg (2026.01.16)"
+      ],
+      "remotes": [
+        "origin\thttps://github.com/QW-Group/ezquake-source.git (fetch)",
+        "origin\thttps://github.com/QW-Group/ezquake-source.git (push)",
+        "tibazera\thttps://github.com/tibazera/ezquake-source.git (fetch)",
+        "tibazera\thttps://github.com/tibazera/ezquake-source.git (push)"
+      ]
+    },
+    {
+      "name": "ezquake-vulkan",
+      "origin": "https://github.com/QW-Group/ezquake-source.git",
+      "commit": "91859a996daede0df166e2a55a5f08d56b052b21",
+      "branch": "dev/tibazera-vulkan",
+      "submodules": [
+        " d508a7a4425e2dcdfab151cd188f8720907e5bbd src/qwprot (d508a7a442)",
+        " 66c0373dc7fca549e5803087b9487edfe3aca0a1 vcpkg (2026.01.16)"
+      ],
+      "remotes": [
+        "origin\thttps://github.com/QW-Group/ezquake-source.git (fetch)",
+        "origin\thttps://github.com/QW-Group/ezquake-source.git (push)",
+        "tibazera\thttps://github.com/tibazera/ezquake-source.git (fetch)",
+        "tibazera\thttps://github.com/tibazera/ezquake-source.git (push)"
+      ]
+    },
+    {
+      "name": "vkquake",
+      "origin": "https://github.com/Novum/vkQuake.git",
+      "commit": "1b8fa8aae51e33b57304a248cc897e815ddf537b",
+      "branch": "master",
+      "submodules": [],
+      "remotes": [
+        "origin\thttps://github.com/Novum/vkQuake.git (fetch)",
+        "origin\thttps://github.com/Novum/vkQuake.git (push)"
+      ]
+    },
+    {
+      "name": "vkquake-rt",
+      "origin": "https://github.com/sultim-t/vkquake-rt.git",
+      "commit": "bb4a10e60998379efd5a0e9ad0bb30fab94015e8",
+      "branch": "dev/windows-build",
+      "submodules": [],
+      "remotes": [
+        "origin\thttps://github.com/sultim-t/vkquake-rt.git (fetch)",
+        "origin\thttps://github.com/sultim-t/vkquake-rt.git (push)"
+      ]
+    },
+    {
+      "name": "rtgl1",
+      "origin": "https://github.com/sultim-t/RayTracedGL1.git",
+      "commit": "9efa82daf963e1192daaf2a8596446656f113cd2",
+      "branch": "dev/windows-build",
+      "submodules": [
+        " 3327050ca66ad34426a82c217c2d60ced61526b7 Tests/Libs/glfw (3.3-338-g3327050c)",
+        " 1cf91a100968b8c2be6b0b847a903588a79b92cf Tests/Libs/glm (0.9.5.3-2540-g1cf91a10)"
+      ],
+      "remotes": [
+        "origin\thttps://github.com/sultim-t/RayTracedGL1.git (fetch)",
+        "origin\thttps://github.com/sultim-t/RayTracedGL1.git (push)"
+      ]
+    },
+    {
+      "name": "ktx",
+      "origin": "https://github.com/QW-Group/ktx.git",
+      "commit": "631584f7fac3c3891826224d36d873c99880d353",
+      "branch": "dev/rerelease-fixes",
+      "submodules": [],
+      "remotes": [
+        "origin\thttps://github.com/QW-Group/ktx.git (fetch)",
+        "origin\thttps://github.com/QW-Group/ktx.git (push)"
+      ]
+    },
+    {
+      "name": "quake-rerelease-qc",
+      "origin": "https://github.com/id-Software/quake-rerelease-qc.git",
+      "commit": "634eefab09a77eb7b5f5ca7078ba3d8784a91142",
+      "branch": "main",
+      "submodules": [],
+      "remotes": [
+        "origin\thttps://github.com/id-Software/quake-rerelease-qc.git (fetch)",
+        "origin\thttps://github.com/id-Software/quake-rerelease-qc.git (push)"
+      ]
+    }
+  ]
+}
