@@ -556,3 +556,11 @@ without Vulkan validation, recursive alias or host errors. Engine source is unch
   change was needed to resolve those test-script failures.
 - All 14 ordered patches replay exactly to 64 changed/new source paths;
   attribution coverage and git diff --check passed.
+
+## PUBLIC-002 - Publication cfg validation (2026-09-13, OpenAI Codex)
+
+Vulkan Debug test publication-latest-cfg passed with normal exit 0 and no
+validation errors. All 53 current visual settings and 55 conditional effects
+survived the public profile load/save. WASD/CapsLock bindings, automatic pickup
+selection 8/8 and built-in crosshair size 2.5 also passed. The latest settings
+include Explosion 11, MSAA 4, model outline opacity 0.5 and contact AO 0.125.

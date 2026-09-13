@@ -6,6 +6,7 @@ configuration previews, local single-player/arena menus, and renderer fixes.
 
 **This is a Vulkan rasterizer. RTX/path tracing is not integrated.**
 An RTX GPU can run the Vulkan renderer, but does not enable ray tracing.
+See the [RT feasibility assessment](docs/history/RTX-FEASIBILITY.md) and RTX 3060 test plan.
 
 The base is `tibazera/ezquake-source`, branch `feature/sdl3-vulkan-pr`, commit
 `91859a996daede0df166e2a55a5f08d56b052b21`. Original Git history and source notices
@@ -22,6 +23,7 @@ change and the distinction between inherited work, user direction and Codex impl
 - Local Arena controls for an external KTX game module, and original Quake
   single-player startup/save handling when the required game data is installed.
 - GPU-limit, texture, lighting, skybox, shutdown and screenshot lifecycle fixes.
+- Explosion style without the expanding ring; original Big explosion remains available.
 
 ## Build and run on Windows
 
@@ -57,7 +59,8 @@ exec ezv-wasd-defaults.cfg
 ```
 
 The graphics profile contains all 53 user-approved values, including edge depth
-threshold **16**. Loading `ezv-defaults.cfg` also restarts video to apply MSAA.
+threshold **16**, MSAA **4**, model outline opacity **0.5**, contact AO **0.125**,
+and Explosion **11** (without the ring). Loading `ezv-defaults.cfg` also restarts video to apply MSAA.
 It is a named profile; the engine's factory reset remains a separate action.
 The defaults helper also loads `ezv-particles.cfg`, restoring enhanced lightning
 and the other 55 conditional legacy settings. These require nQuake's

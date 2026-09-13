@@ -310,3 +310,13 @@ Adds Explosion (r_explosionType 11) using the inherited QMB detpack fire/rays
 with its shockwave disabled. Big explosion (7) retains its original behavior.
 The underlying particle artwork and effect implementation retain upstream
 authorship. Source paths are recorded in Source-Changes.json; delta in patch 14.
+
+## PUBLIC-002 - Latest settings and RT assessment (2026-09-13)
+
+The user requested publication of all changes, including cfg files. OpenAI Codex
+updated the portable profile from the saved game configuration: model outline
+opacity 0.5, contact AO 0.125, MSAA 4, and Explosion style 11. All 53 visual and
+55 conditional settings match the saved configuration. The existing WASD overlay
+and built-in crosshairs remain included. Private full configs and game assets
+are not part of the export. RTX-FEASIBILITY.md records the RTX 3060 target and
+the staged integration proposal; ray tracing remains unimplemented.

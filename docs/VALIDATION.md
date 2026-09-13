@@ -53,3 +53,11 @@ campaign playthrough, long-session leak result, dedicated automatic-match/movie
 screenshot regression, or RTX integration. See [testing](TESTING.md) for the
 portable runtime harness and [historical validation](history/VALIDATION.md) for
 earlier evidence, attribution and limitations.
+
+## PUBLIC-002 - Publication cfg validation (2026-09-13, OpenAI Codex)
+
+Vulkan Debug test publication-latest-cfg passed with normal exit 0 and no
+validation errors. All 53 current visual settings and 55 conditional effects
+survived the public profile load/save. WASD/CapsLock bindings, automatic pickup
+selection 8/8 and built-in crosshair size 2.5 also passed. The latest settings
+include Explosion 11, MSAA 4, model outline opacity 0.5 and contact AO 0.125.

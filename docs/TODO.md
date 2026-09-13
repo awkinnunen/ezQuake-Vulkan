@@ -46,3 +46,8 @@ OpenGL/Vulkan appearance parity is deferred at the user's request.
 The engine currently renders with Vulkan rasterization; RTX hardware alone does
 not turn on ray tracing. See [the technical plan](history/IMPLEMENTATION-PLAN.md)
 and [the assessment of inherited work](history/TIBAZERA-TODO.md) for context.
+
+Latest update: Explosion without the ring (11) is implemented alongside Big
+explosion (7). Portable defaults match the latest saved settings. See
+[the RT feasibility assessment](history/RTX-FEASIBILITY.md); RTX 3060 rendering
+validation and the optional RT backend are still future work.

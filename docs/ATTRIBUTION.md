@@ -62,3 +62,8 @@ included as reference material, with their own pinned bases in `sources.lock.jso
 Commercial game data, user logs/demos, full personal configs, machine credentials
 and custom crosshair images are excluded. This ledger records provenance; it
 does not change licenses or transfer ownership.
+
+Latest update: Explosion without the ring (11) is implemented alongside Big
+explosion (7). Portable defaults match the latest saved settings. See
+[the RT feasibility assessment](history/RTX-FEASIBILITY.md); RTX 3060 rendering
+validation and the optional RT backend are still future work.

@@ -242,3 +242,9 @@ See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
 - [x] Add Explosion without the ring while keeping Big explosion unchanged.
 - [x] Preserve existing config values and support the new value in visual profiles.
 - [x] Rebuild Debug and Release. Runtime validation is recorded in VALIDATION.md.
+
+## RT-AUDIT-001 - Next RT milestone
+
+- [x] Recheck integration feasibility and local device support; see RTX-FEASIBILITY.md.
+- [ ] Validate a complete RTGL1 triangle/light runtime on the intended RT-capable GPU.
+- [ ] Prototype one static map with original textures in an optional ezQuake RT backend.

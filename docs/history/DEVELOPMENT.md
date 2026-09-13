@@ -672,3 +672,22 @@ The visual-profile allowlist now accepts values through 11, so save/load does
 not clamp the new selection. Both styles still require initialized QMB assets
 and gl_part_explosions; the inherited fallback remains available otherwise.
 Installed user configs and approved defaults were not changed.
+
+## RT-AUDIT-001 - Feasibility recheck (2026-09-13, OpenAI Codex)
+
+At the user request, inspected the RTGL1 creation/device API, donor scene uploads,
+ezQuake renderer dispatch, QW visibility filtering and existing RT artifacts.
+Re-ran the device probe: AMD Radeon(TM) Graphics, Vulkan 1.2.188, neither required
+RT pipeline nor acceleration-structure extension advertised. Documented the
+optional-backend approach and first supported-device milestone in RTX-FEASIBILITY.md.
+No source/config changes and no claim of successful RT rendering.
+
+## PUBLIC-002 - Latest settings and RT assessment (2026-09-13)
+
+The user requested publication of all changes, including cfg files. OpenAI Codex
+updated the portable profile from the saved game configuration: model outline
+opacity 0.5, contact AO 0.125, MSAA 4, and Explosion style 11. All 53 visual and
+55 conditional settings match the saved configuration. The existing WASD overlay
+and built-in crosshairs remain included. Private full configs and game assets
+are not part of the export. RTX-FEASIBILITY.md records the RTX 3060 target and
+the staged integration proposal; ray tracing remains unimplemented.

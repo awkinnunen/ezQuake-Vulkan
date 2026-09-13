@@ -64,3 +64,9 @@ The local driver lacks advertised `VK_KHR_ray_tracing_pipeline` and
 `VK_KHR_acceleration_structure` support. Installing an SDK does not add device
 features. No driver update or RT runtime test was performed. The DLL alone is
 not a complete shader/material resource package. Game data is not included.
+
+## RT feasibility recheck (2026-09-13)
+
+OpenAI Codex rechecked the API boundary, local build artifacts and the current
+Vulkan device. See [RTX-FEASIBILITY.md](RTX-FEASIBILITY.md). An optional RT backend
+is feasible to prototype; RT output is not yet implemented or hardware-validated.
