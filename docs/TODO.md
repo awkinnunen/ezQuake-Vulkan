@@ -38,14 +38,25 @@ Priorities and status recorded by OpenAI Codex under user direction, 2026-09-13.
 - [ ] Broaden GPU/driver and long-session tests, including automatic match and movie captures.
 - [ ] Complete campaign and player-recognition testing across more maps.
 - [ ] Investigate remaining texture lifetime reports when reproducible.
-- [ ] Establish an optional RT backend interface and capability/fallback rules before RTGL1 integration.
-- [ ] Implement and validate static/dynamic geometry, material mapping and light extraction for RT.
-- [ ] Measure the RT path, resource lifetime and fallback behavior on suitable hardware.
+- [x] Plan direct RTGL1 integration with broad effect coverage and independent RT visuals (RT-PLAN-002).
+- [ ] RT-00: inventory host/donor features and validate dependency, ABI and device requirements.
+- [ ] RT-01: render the SDL3 triangle/light harness on RTX 3060.
+- [ ] RT-02: integrate backend lifecycle, 2D rendering and fallback.
+- [ ] RT-03: add static maps, materials, sky and lighting.
+- [ ] RT-04: add animated entities, skins, viewmodel and dynamic lights.
+- [ ] RT-05: port host/donor effects, including particles, shaft, explosions, water and HUD.
+- [ ] RT-06: implement Competitive Visuals/shader extensions and RT settings/profiles.
+- [ ] RT-07: test temporal history, QW/demos, capture and multiview handling.
+- [ ] RT-08: benchmark RTX 3060, verify resource lifetime and package the optional runtime.
 
 OpenGL/Vulkan appearance parity is deferred at the user's request.
 The engine currently renders with Vulkan rasterization; RTX hardware alone does
 not turn on ray tracing. See [the technical plan](history/IMPLEMENTATION-PLAN.md)
 and [the assessment of inherited work](history/TIBAZERA-TODO.md) for context.
+The active RT sequence and acceptance gates are in
+[RT-PLAN-002](history/RT-IMPLEMENTATION-PLAN.md), superseding the older RT numbering.
+All RT implementation stages remain open; functional effects are required,
+while different RT lighting and postprocessing appearance are acceptable.
 
 Latest update: Explosion without the ring (11) is implemented alongside Big
 explosion (7). Portable defaults match the latest saved settings. See

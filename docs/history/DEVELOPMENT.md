@@ -691,3 +691,24 @@ opacity 0.5, contact AO 0.125, MSAA 4, and Explosion style 11. All 53 visual and
 and built-in crosshairs remain included. Private full configs and game assets
 are not part of the export. RTX-FEASIBILITY.md records the RTX 3060 target and
 the staged integration proposal; ray tracing remains unimplemented.
+
+## RT-PLAN-002 - Direct RTGL1 implementation plan (2026-09-13)
+
+The user selected broad migration of host/donor effects and accepted a distinct
+RT appearance, then requested a technical plan before implementation. OpenAI Codex
+reviewed the pinned host, donor and RTGL1 source and wrote
+[RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md). It specifies separate device
+ownership, scene/effect adapters, versioned RTGL1 extensions, capability-aware
+menus, independent RT profiles and nine implementation stages (RT-00..08).
+
+The plan inventories existing and donor effects, including shaft, both explosion
+styles, volumetrics, post effects and Competitive Visuals. Shader extensions,
+temporal resets, multiple views and RTX 3060 validation are explicit work items.
+Functional behavior is the acceptance target; raster appearance parity is not.
+Updated the earlier roadmap, feasibility notes, porting notes and TODO to point
+to the new sequence, and corrected the already-completed publication status.
+
+This step changes documentation and its public export list only. It implements
+no RT backend and changes no engine source or cfg defaults. Document links,
+source/profile identity and the publication allowlist are checked separately
+from runtime tests; earlier raster test evidence does not validate this plan's RT output.

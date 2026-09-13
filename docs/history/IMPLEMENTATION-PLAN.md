@@ -4,6 +4,13 @@ Plan ID: PLAN-001. Revision: 2. Date: 2026-09-13.
 Author and source reviewer: OpenAI Codex, at the user's request.
 Status: implementation roadmap with LOCAL-007 progress recorded below.
 
+Current RT direction (2026-09-13): the user selected direct RTGL1 integration,
+with broad effect coverage and a distinct RT appearance. See
+[RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md), RT-PLAN-002, for the active
+architecture, milestones and tests. Its RT numbering supersedes section 8 below.
+Raster/OpenGL appearance parity and native ray-query shadows are not prerequisites.
+The remaining raster work packages remain recorded here as separate future work.
+
 LOCAL-008 is a separate user-requested gameplay update: latest KTX master plus
 three independent QuakeC fixes, documented in QUAKEC-MERGE.md. It does not change
 the Vulkan work packages or constitute rerelease engine/content compatibility.
@@ -630,6 +637,9 @@ review in motion and measured GPU cost at native and reduced scene resolutions.
 A static screenshot cannot establish temporal quality.
 
 ## 8. RTGL1 integration as a separate phase
+
+Historical proposal: superseded by [RT-PLAN-002](RT-IMPLEMENTATION-PLAN.md).
+The RT-00 and subsequent identifiers below belong to PLAN-001, not the active plan.
 
 Pinned donor: vkquake-rt `bb4a10e60998379efd5a0e9ad0bb30fab94015e8`.
 Pinned library: RTGL1 quake branch `9efa82daf963e1192daaf2a8596446656f113cd2`.

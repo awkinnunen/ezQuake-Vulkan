@@ -10,6 +10,12 @@ credible integration path, but successful RT output in ezQuake is not yet proven
 The existing ezQuake executable remains a Vulkan raster renderer on an RTX GPU.
 This investigation makes no engine or user-configuration changes.
 
+The user subsequently selected direct integration with broad host/donor effect
+coverage and accepted the RT renderer's own appearance. The detailed next steps
+are in [RT-PLAN-002](RT-IMPLEMENTATION-PLAN.md), including RTX 3060 hardware gates,
+RTGL1 shader extensions and separate visual profiles. This supersedes the limited
+prototype scope below; the source/device findings remain applicable.
+
 ## Evidence checked
 
 - ezquake-vulkan/src/r_main.c currently selects classic GL (0), modern GL (1),

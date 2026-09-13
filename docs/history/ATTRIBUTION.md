@@ -320,3 +320,13 @@ opacity 0.5, contact AO 0.125, MSAA 4, and Explosion style 11. All 53 visual and
 and built-in crosshairs remain included. Private full configs and game assets
 are not part of the export. RTX-FEASIBILITY.md records the RTX 3060 target and
 the staged integration proposal; ray tracing remains unimplemented.
+
+## RT-PLAN-002 - Direct RTGL1 implementation plan (2026-09-13)
+
+The user defined the scope: bring across effects and accept the RT renderer's
+own appearance, with a technical plan first. OpenAI Codex reviewed the pinned
+source interfaces and authored RT-IMPLEMENTATION-PLAN.md, the related roadmap/TODO
+updates and the documentation export change. Proposed modules and shader/API
+extensions are design work, not implemented source. Host, vkquake-rt and RTGL1
+code retain their existing authorship. No renderer or configuration changes are
+part of this planning step; future imports and adaptations require separate records.

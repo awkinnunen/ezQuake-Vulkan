@@ -5,6 +5,12 @@ notes, not statements by upstream maintainers.
 
 ## Current direction
 
+The next renderer phase is direct RTGL1 integration, as specified in
+[RT-PLAN-002](RT-IMPLEMENTATION-PLAN.md). Port host and donor effects with functional
+tests, accepting RT-specific visuals and defaults. OpenGL appearance comparisons
+and a separate ray-query shadow implementation are not prerequisites. RT remains
+unimplemented; the first actual rendering gate is on the RTX 3060 test machine.
+
 Use tibazera's existing SDL3/Vulkan ezQuake branch. It is checked out in
 `ezquake-vulkan/`; its initial Debug build succeeded without source changes.
 LOCAL-007 subsequently added and tested the first corrections: compact checked
@@ -36,7 +42,10 @@ That base used SDL2, whereas current vkQuake uses SDL3. Discovering tibazera's
 SDL3/Vulkan branch changed the plan. The initial estimate had not accounted for
 the open PR and should not be used to estimate continuing the existing fork.
 
-## Recommended sequence (Codex proposal)
+## Earlier sequence (historical Codex proposal)
+
+The active RT sequence is now RT-PLAN-002. The list below records the earlier
+raster-first proposal; later validation and publication are tracked in the TODO.
 
 1. Run the compiled fork with Quake data and Vulkan validation enabled.
 2. Compare map changes, renderer changes, vid_restart, demos, seeking, multiview,

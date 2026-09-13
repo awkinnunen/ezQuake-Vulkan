@@ -67,3 +67,8 @@ Latest update: Explosion without the ring (11) is implemented alongside Big
 explosion (7). Portable defaults match the latest saved settings. See
 [the RT feasibility assessment](history/RTX-FEASIBILITY.md); RTX 3060 rendering
 validation and the optional RT backend are still future work.
+
+RT-PLAN-002: the user selected broad host/donor effect migration with a distinct
+RT appearance. OpenAI Codex authored the source-reviewed
+[implementation plan](history/RT-IMPLEMENTATION-PLAN.md) and related documentation.
+This is planning work only; proposed adapters and RTGL1 extensions are not yet code.

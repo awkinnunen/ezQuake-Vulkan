@@ -234,8 +234,8 @@ See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
 - [x] Measure selected effect costs with fixed Release timedemos and a closing baseline.
 - [x] Retain the approved 53 graphics values and export the portable WASD module.
 - [x] Verify the actual combined profile load, saved values and movement-dependent jump binding.
-- [x] Verify all 13 source patches and source-path attribution.
-- [ ] Complete first public GitHub upload after account sign-in is available.
+- [x] Verify the 13 source patches at the pre-publication pass; the later FX-001 patch brings the verified sequence to 14.
+- [x] Complete the first public GitHub upload with portable cfg files; published main verified at bcace078b8cdbd8212bb9b16eb141f2ea9537d07 (PUBLIC-002).
 
 ## FX-001 - Explosion style (2026-09-13)
 
@@ -243,8 +243,21 @@ See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
 - [x] Preserve existing config values and support the new value in visual profiles.
 - [x] Rebuild Debug and Release. Runtime validation is recorded in VALIDATION.md.
 
-## RT-AUDIT-001 - Next RT milestone
+## RT-AUDIT-001 / RT-PLAN-002 - Direct RTGL1 integration
 
 - [x] Recheck integration feasibility and local device support; see RTX-FEASIBILITY.md.
-- [ ] Validate a complete RTGL1 triangle/light runtime on the intended RT-capable GPU.
-- [ ] Prototype one static map with original textures in an optional ezQuake RT backend.
+- [x] Write the user-requested detailed plan for broad effects migration, allowing a distinct RT appearance.
+- [ ] RT-00: inventory host/donor features, pin runtime/ABI and implement device diagnostics.
+- [ ] RT-01: validate the SDL3 triangle/light harness on the RTX 3060.
+- [ ] RT-02: integrate backend lifecycle, 2D rendering and raster recovery.
+- [ ] RT-03: submit static BSP, materials, sky and map lights.
+- [ ] RT-04: add moving models, skins, viewmodel and transient lights.
+- [ ] RT-05: adapt all host/donor effects, particles, water, powerups and HUD details.
+- [ ] RT-06: extend RTGL1 for Competitive Visuals and shared controls; add RT profiles/menus.
+- [ ] RT-07: validate temporal resets, QW/demos, capture and multiview handling.
+- [ ] RT-08: measure RTX 3060 performance/memory and package the optional runtime.
+
+Architecture, scope and acceptance gates: [RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md).
+All implementation stages remain open. Earlier RT numbering is superseded.
+All requested effects remain inventoried; missing features must stay visible as
+open work. No raster appearance-matching pass is planned.
