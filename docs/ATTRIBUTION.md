@@ -72,3 +72,12 @@ RT-PLAN-002: the user selected broad host/donor effect migration with a distinct
 RT appearance. OpenAI Codex authored the source-reviewed
 [implementation plan](history/RT-IMPLEMENTATION-PLAN.md) and related documentation.
 This is planning work only; proposed adapters and RTGL1 extensions are not yet code.
+
+## Optional RT foundation
+
+OpenAI Codex authored the RT device/package adapter, SDL3 hardware harness,
+CPU geometry adapters and tests. The vendored RTGL1 SDK header retains its MIT
+notice and API; one comment dash was normalized to ASCII for portable patches.
+RTGL1 changes are supplied as attributed patches against the pinned upstream
+source. Existing RTGL1 code and shaders retain their original authorship.
+This foundation is not a completed ezQuake RT gameplay renderer.

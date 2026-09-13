@@ -10,6 +10,9 @@ See the [RT feasibility assessment](docs/history/RTX-FEASIBILITY.md) and
 [direct RTGL1 implementation plan](docs/history/RT-IMPLEMENTATION-PLAN.md).
 The plan covers existing and donor effects, independent RT defaults and RTX 3060
 validation. A matching raster appearance is not an acceptance requirement.
+An optional RTGL1 package/device test harness now builds with
+`-DRENDERER_RTGL1=ON`. It does not enable RT gameplay or add a new renderer choice.
+See the [implementation status](docs/history/RT-IMPLEMENTATION-STATUS.md).
 
 The base is `tibazera/ezquake-source`, branch `feature/sdl3-vulkan-pr`, commit
 `91859a996daede0df166e2a55a5f08d56b052b21`. Original Git history and source notices

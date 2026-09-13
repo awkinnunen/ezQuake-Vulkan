@@ -58,6 +58,11 @@ The active RT sequence and acceptance gates are in
 All RT implementation stages remain open; functional effects are required,
 while different RT lighting and postprocessing appearance are acceptable.
 
+RT foundation update: device/package/API checks and the standalone triangle/light
+harness are implemented, together with central RTGL1 initialization cleanup.
+The first RTX 3060 image test is pending; host adapters and styling remain open.
+See [the implementation status](history/RT-IMPLEMENTATION-STATUS.md).
+
 Latest update: Explosion without the ring (11) is implemented alongside Big
 explosion (7). Portable defaults match the latest saved settings. See
 [the RT feasibility assessment](history/RTX-FEASIBILITY.md); RTX 3060 rendering

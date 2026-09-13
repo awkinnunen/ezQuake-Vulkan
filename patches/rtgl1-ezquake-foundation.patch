@@ -1,0 +1,300 @@
+diff --git a/Source/PhysicalDevice.cpp b/Source/PhysicalDevice.cpp
+index 9baae3d..5426f90 100644
+--- a/Source/PhysicalDevice.cpp
++++ b/Source/PhysicalDevice.cpp
+@@ -22,11 +22,25 @@
+ 
+ #include <string>
+ #include <vector>
++#include <cstring>
+ 
+ #include "RgException.h"
+ 
+ using namespace RTGL1;
+ 
++// RT-00, OpenAI Codex: explicit device binding for the ezQuake adapter.
++// Additive ABI; call before instance creation, from the renderer thread.
++static uint8_t ezqDeviceUuid[VK_UUID_SIZE] = {};
++static bool ezqDeviceSelected = false;
++extern "C" RGAPI uint32_t RGCONV rgEzqGetApiVersion(void) { return 1; }
++extern "C" RGAPI RgBool32 RGCONV rgEzqSelectDevice(const uint8_t* uuid)
++{
++    if (!uuid) return RG_FALSE;
++    std::memcpy(ezqDeviceUuid, uuid, VK_UUID_SIZE);
++    ezqDeviceSelected = true;
++    return RG_TRUE;
++}
++
+ PhysicalDevice::PhysicalDevice(VkInstance instance)
+     : physDevice(VK_NULL_HANDLE), memoryProperties{}, rtPipelineProperties{}, asProperties{}
+ {
+@@ -47,6 +61,14 @@ PhysicalDevice::PhysicalDevice(VkInstance instance)
+ 
+     for (VkPhysicalDevice p : physicalDevices)
+     {
++        if (ezqDeviceSelected)
++        {
++            VkPhysicalDeviceIDProperties id = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES };
++            VkPhysicalDeviceProperties2 properties = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
++            properties.pNext = &id;
++            vkGetPhysicalDeviceProperties2(p, &properties);
++            if (std::memcmp(id.deviceUUID, ezqDeviceUuid, VK_UUID_SIZE) != 0) continue;
++        }
+         VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtFeatures = {};
+         rtFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+ 
+diff --git a/Source/RTGL1.cpp b/Source/RTGL1.cpp
+index dfdceff..52efe53 100644
+--- a/Source/RTGL1.cpp
++++ b/Source/RTGL1.cpp
+@@ -57,7 +57,10 @@ static void TryPrintError(RgInstance rgInstance, const char *pMessage)
+ 
+ RgResult rgCreateInstance(const RgInstanceCreateInfo *pInfo, RgInstance *pResult)
+ {
++    // RT-02, OpenAI Codex: validate before dereferencing the C ABI arguments.
++    if (pResult == nullptr) return RG_WRONG_ARGUMENT;
+     *pResult = nullptr;
++    if (pInfo == nullptr) return RG_WRONG_ARGUMENT;
+ 
+     if (G_DEVICES.size() >= MAX_DEVICE_COUNT)
+     {
+@@ -73,8 +76,8 @@ RgResult rgCreateInstance(const RgInstanceCreateInfo *pInfo, RgInstance *pResult
+         G_DEVICES[rgInstance] = std::make_unique<VulkanDevice>(pInfo);
+         *pResult = rgInstance;
+     }
+-    // TODO: VulkanDevice must clean all the resources if initialization failed!
+-    // So for now exceptions should not happen. But if they did, target application must be closed.
++    // VulkanDevice releases its completed members/owned handles on failure.
++    // Constructors of individual components still require their own exception safety.
+     catch (RTGL1::RgException &e) 
+     { 
+         // UserPrint class probably wasn't initialized, print manually
+@@ -85,6 +88,16 @@ RgResult rgCreateInstance(const RgInstanceCreateInfo *pInfo, RgInstance *pResult
+ 
+         return e.GetErrorCode(); 
+     } 
++    catch (const std::exception &e)
++    {
++        if (pInfo->pfnPrint) pInfo->pfnPrint(e.what(), pInfo->pUserPrintData);
++        return RG_GRAPHICS_API_ERROR;
++    }
++    catch (...)
++    {
++        if (pInfo->pfnPrint) pInfo->pfnPrint("Unexpected RT initialization failure", pInfo->pUserPrintData);
++        return RG_GRAPHICS_API_ERROR;
++    }
+     return RG_SUCCESS;
+ }
+ 
+diff --git a/Source/VulkanDevice.h b/Source/VulkanDevice.h
+index 5467461..b5b18b5 100644
+--- a/Source/VulkanDevice.h
++++ b/Source/VulkanDevice.h
+@@ -120,6 +120,7 @@ private:
+     void ValidateCreateInfo(const RgInstanceCreateInfo *pInfo);
+ 
+     void DestroyInstance();
++    void ReleaseResources() noexcept;
+     void DestroyDevice();
+     void DestroySyncPrimitives();
+ 
+diff --git a/Source/VulkanDevice_Init.cpp b/Source/VulkanDevice_Init.cpp
+index 3e443e5..0e0423f 100644
+--- a/Source/VulkanDevice_Init.cpp
++++ b/Source/VulkanDevice_Init.cpp
+@@ -32,6 +32,14 @@
+ 
+ using namespace RTGL1;
+ 
++// RT-02, OpenAI Codex: initialization errors must also be checked in Release.
++// The donor VK_CHECKERROR helper only asserts and disappears with NDEBUG.
++static void CheckInitializationResult(VkResult result)
++{
++    if (result != VK_SUCCESS)
++        throw RgException(RG_GRAPHICS_API_ERROR, "Vulkan initialization error " + std::to_string(result));
++}
++
+ VulkanDevice::VulkanDevice( const RgInstanceCreateInfo* info )
+     : instance( VK_NULL_HANDLE )
+     , device( VK_NULL_HANDLE )
+@@ -51,9 +59,10 @@ VulkanDevice::VulkanDevice( const RgInstanceCreateInfo* info )
+     , currentFrameTime( 0 )
+ {
+     ValidateCreateInfo( info );
+-
+-
+-
++    // RT-02, OpenAI Codex: a throwing constructor never calls its destructor.
++    // Release completed members and owned Vulkan handles before propagating failure.
++    try
++    {
+     // init vulkan instance
+     CreateInstance( *info );
+ 
+@@ -290,11 +299,22 @@ VulkanDevice::VulkanDevice( const RgInstanceCreateInfo* info )
+     framebuffers->Subscribe(decalManager);
+     framebuffers->Subscribe(amdFsr2);
+     framebuffers->Subscribe(restirBuffers);
++    }
++    catch (...)
++    {
++        ReleaseResources();
++        throw;
++    }
+ }
+ 
+ VulkanDevice::~VulkanDevice()
+ {
+-    vkDeviceWaitIdle(device);
++    ReleaseResources();
++}
++
++void VulkanDevice::ReleaseResources() noexcept
++{
++    if (device != VK_NULL_HANDLE) vkDeviceWaitIdle(device);
+ 
+     physDevice.reset();
+     queues.reset();
+@@ -336,7 +356,9 @@ VulkanDevice::~VulkanDevice()
+     cubemapManager.reset();
+     memAllocator.reset();
+ 
+-    vkDestroySurfaceKHR(instance, surface, nullptr);
++    if (instance != VK_NULL_HANDLE && surface != VK_NULL_HANDLE)
++        vkDestroySurfaceKHR(instance, surface, nullptr);
++    surface = VK_NULL_HANDLE;
+     DestroySyncPrimitives();
+ 
+     DestroyDevice();
+@@ -480,7 +502,7 @@ void VulkanDevice::CreateInstance(const RgInstanceCreateInfo &info)
+     instanceInfo.enabledExtensionCount = extensions.size();
+ 
+     VkResult r = vkCreateInstance(&instanceInfo, nullptr, &instance);
+-    VK_CHECKERROR(r);
++    CheckInitializationResult(r);
+ 
+ 
+     if (libconfig.vulkanValidation)
+@@ -498,7 +520,7 @@ void VulkanDevice::CreateInstance(const RgInstanceCreateInfo &info)
+             debugMessengerInfo.pUserData = static_cast<void *>(userPrint.get());
+ 
+             r = svkCreateDebugUtilsMessengerEXT(instance, &debugMessengerInfo, nullptr, &debugMessenger);
+-            VK_CHECKERROR(r);
++            CheckInitializationResult(r);
+         }
+     }
+ }
+@@ -652,7 +674,7 @@ void VulkanDevice::CreateDevice()
+     deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+ 
+     VkResult r = vkCreateDevice(physDevice->Get(), &deviceCreateInfo, nullptr, &device);
+-    VK_CHECKERROR(r);
++    CheckInitializationResult(r);
+ 
+     InitDeviceExtensionFunctions(device);
+ 
+@@ -679,16 +701,16 @@ void VulkanDevice::CreateSyncPrimitives()
+     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+     {
+         r = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+         r = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+         r = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &inFrameSemaphores[i]);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         r = vkCreateFence(device, &fenceInfo, nullptr, &frameFences[i]);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+         r = vkCreateFence(device, &nonSignaledFenceInfo, nullptr, &outOfFrameFences[i]);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         SET_DEBUG_NAME(device, imageAvailableSemaphores[i], VK_OBJECT_TYPE_SEMAPHORE, "Image available semaphore");
+         SET_DEBUG_NAME(device, renderFinishedSemaphores[i], VK_OBJECT_TYPE_SEMAPHORE, "Render finished semaphore");
+@@ -713,7 +735,7 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+         win32Info.hwnd = info.pWin32SurfaceInfo->hwnd;
+ 
+         r = vkCreateWin32SurfaceKHR(instance, &win32Info, nullptr, &surface);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         return surface;
+     }
+@@ -733,7 +755,7 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+         metalInfo.pLayer = info.pMetalSurfaceCreateInfo->pLayer;
+ 
+         r = vkCreateMetalSurfaceEXT(instance, &metalInfo, nullptr, &surface);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         return surface;
+     }
+@@ -754,7 +776,7 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+         wlInfo.surface = info.pWaylandSurfaceCreateInfo->surface;
+ 
+         r = (instance, &wlInfo, nullptr, &surface);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         return surface;
+     }
+@@ -775,7 +797,7 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+         xcbInfo.window = info.pXcbSurfaceCreateInfo->window;
+ 
+         r = vkCreateXcbSurfaceKHR(instance, &xcbInfo, nullptr, &surface);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         return surface;
+     }
+@@ -796,7 +818,7 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+         xlibInfo.window = info.pXlibSurfaceCreateInfo->window;
+ 
+         r = vkCreateXlibSurfaceKHR(instance, &xlibInfo, nullptr, &surface);
+-        VK_CHECKERROR(r);
++        CheckInitializationResult(r);
+ 
+         return surface;
+     }
+@@ -813,21 +835,26 @@ VkSurfaceKHR VulkanDevice::GetSurfaceFromUser(VkInstance instance, const RgInsta
+ 
+ void VulkanDevice::DestroyInstance()
+ {
++    if (instance == VK_NULL_HANDLE) return;
+     if (debugMessenger != VK_NULL_HANDLE)
+     {
+         svkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+     }
+ 
+     vkDestroyInstance(instance, nullptr);
++    instance = VK_NULL_HANDLE;
++    debugMessenger = VK_NULL_HANDLE;
+ }
+ 
+ void VulkanDevice::DestroyDevice()
+ {
+-    vkDestroyDevice(device, nullptr);
++    if (device != VK_NULL_HANDLE) vkDestroyDevice(device, nullptr);
++    device = VK_NULL_HANDLE;
+ }
+ 
+ void VulkanDevice::DestroySyncPrimitives()
+ {
++    if (device == VK_NULL_HANDLE) return;
+     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+     {
+         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+@@ -836,6 +863,9 @@ void VulkanDevice::DestroySyncPrimitives()
+ 
+         vkDestroyFence(device, frameFences[i], nullptr);
+         vkDestroyFence(device, outOfFrameFences[i], nullptr);
++        imageAvailableSemaphores[i] = renderFinishedSemaphores[i] = VK_NULL_HANDLE;
++        inFrameSemaphores[i] = VK_NULL_HANDLE;
++        frameFences[i] = outOfFrameFences[i] = VK_NULL_HANDLE;
+     }
+ }
+ 

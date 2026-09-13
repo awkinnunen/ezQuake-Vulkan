@@ -564,3 +564,39 @@ validation errors. All 53 current visual settings and 55 conditional effects
 survived the public profile load/save. WASD/CapsLock bindings, automatic pickup
 selection 8/8 and built-in crosshair size 2.5 also passed. The latest settings
 include Explosion 11, MSAA 4, model outline opacity 0.5 and contact AO 0.125.
+
+## RT-FOUNDATION-001/002 - Package, device and failure boundaries
+
+OpenAI Codex, 2026-09-13: Debug/Release MSVC x64 runtime adapter, standalone
+triangle harness and patched RTGL1 DLL builds passed. Thirteen package/API
+boundary cases passed; results are in cache/rt-foundation-results.json. Sixteen
+consecutive missing-device-UUID initialization attempts passed in the same process.
+The Debug version ran with Vulkan validation and no VUID or Vulkan error messages;
+cache/rt-rejection-validation.log records all sixteen failures and the final marker.
+
+The local AMD supports Vulkan 1.2.188 but lacks the two RT features and four of
+the seven required device extensions. Unsupported-device exit 2 is expected.
+All 26 required API exports, the additive extension version, file hashes and the
+required shader filenames are checked before the RT instance is created.
+
+RT-disabled host Debug/Release builds passed without recompiling gameplay code.
+The isolated rt-foundation-raster Vulkan Debug smoke test rendered E1M1, captured
+a frame and exited normally with its completion marker; existing cfg files were
+not changed. No RT rendering, successful GPU shutdown/resize, complete effect
+migration or performance result is established by these tests. The RTX 3060 test
+is pending, and steps 1 through 7 are not reported complete.
+
+## RT-GEOMETRY-001: conversion and publication validation
+
+OpenAI Codex, 2026-09-13. `ezquake-rt-cpu-tests` passed in Debug and Release:
+seven fixture groups cover triangulation area/winding and capacity, affine
+transforms, pose interpolation, HUD coordinates, ID generation separation,
+geometry payload/error propagation and overlay blend/depth rules. The hardware
+harness uses the same geometry submission function. Logs are
+`cache/rt-geometry-debug.log` and `cache/rt-geometry-release.log`.
+
+Final source replay: 16 host patches, 78 host paths; two RTGL1 patches, seven
+library paths. All 51 SPIR-V files validate for Vulkan 1.2. The repackaged Release
+runtime passes all 13 package/API boundary tests. None of these results certifies
+RT pixels or completed host integration. GPU and requested-stage status is tracked
+in RT-IMPLEMENTATION-STATUS.md; no later milestone is marked complete.

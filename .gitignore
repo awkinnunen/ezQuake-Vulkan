@@ -24,6 +24,7 @@ TRACKER_*.md
 
 # Runtime test profiles may contain private installed data.
 /cache/
+/runtime/rt-test*/
 
 # Retain the ordered source patches despite the inherited executable-name glob.
 !/patches/*.patch

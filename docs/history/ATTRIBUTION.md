@@ -330,3 +330,27 @@ updates and the documentation export change. Proposed modules and shader/API
 extensions are design work, not implemented source. Host, vkquake-rt and RTGL1
 code retain their existing authorship. No renderer or configuration changes are
 part of this planning step; future imports and adaptations require separate records.
+
+## RT-FOUNDATION-001/002 - Runtime adapter and initialization handling
+
+OpenAI Codex, 2026-09-13, implemented the device probe, manifest/hash/export
+validation, SDL3 harness, generated requirements/inventory, CMake target and
+packaging/boundary tests under the user's instruction to start steps 1 through 7.
+The user will perform the first RTX 3060 test; no user hardware result is recorded.
+The copied src/rt/RTGL1.h is upstream work by Sultim Tsyrendashiev, retaining its
+MIT notice and API declarations. One CP1252 dash in a comment is normalized to
+ASCII for portable patch replay. Generated function declarations derive from that API.
+
+Codex added explicit UUID selection and central initialization cleanup/error
+handling to RTGL1. These are adaptations of the existing library, whose other
+code and notices are preserved. Source-Changes.json and the host/library patches
+record the changed paths. This entry does not attribute an implemented gameplay
+RT renderer or Competitive Visuals port: those are still pending.
+
+## RT-GEOMETRY-001: CPU scene and overlay conversion
+
+OpenAI Codex authored `rt_geometry.h`, `rt_geometry.c`, the instrumented ABI test
+fixtures, CMake target and harness call-site change. RTGL1 API types retain their
+upstream MIT attribution. The matrix/primitive helpers are new code implementing
+the host-to-library conversion; they do not reattribute donor rendering or Quake
+model data. Export: `patches/ezquake-16-rt-geometry.patch`.

@@ -257,7 +257,25 @@ See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
 - [ ] RT-07: validate temporal resets, QW/demos, capture and multiview handling.
 - [ ] RT-08: measure RTX 3060 performance/memory and package the optional runtime.
 
+Implementation update: RT-00 requirements/package/API checks and the RT-01
+standalone test harness are implemented. Central RTGL1 initialization cleanup
+from RT-02 is also implemented. The RTX 3060 is unavailable; the user will perform
+the first GPU test. Semantic inventory mapping and host integration remain open.
+See [RT-IMPLEMENTATION-STATUS.md](RT-IMPLEMENTATION-STATUS.md) for exact status.
+
 Architecture, scope and acceptance gates: [RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md).
 All implementation stages remain open. Earlier RT numbering is superseded.
 All requested effects remain inventoried; missing features must stay visible as
 open work. No raster appearance-matching pass is planned.
+
+### RT CPU preparation follow-up
+
+- [x] RT-GEOMETRY-001: checked fan/strip triangles, affine matrices, pose interpolation,
+  bounded ID packing and scene/overlay submission, tested in Debug and Release.
+- [ ] Connect the tested helpers to actual BSP/model/texture/particle/HUD callbacks.
+- [ ] Add host entity lifetime tracking and renderer lifecycle/switch fallback.
+- [ ] Complete RT feature mapping, donor frame effects, shader extensions and profiles.
+- [ ] User-run RTX 3060 triangle/resize/shutdown test; hardware is not currently available.
+
+This completes no additional GPU milestone. See RT-IMPLEMENTATION-STATUS.md for
+all seven requested steps and their remaining work.

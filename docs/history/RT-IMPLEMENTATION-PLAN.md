@@ -2,7 +2,8 @@
 
 Plan: RT-PLAN-002, revision 1, 2026-09-13.
 Author and source reviewer: OpenAI Codex. Scope and visual policy: the user.
-Status: technical plan only; none of the implementation milestones below is complete.
+Status: implementation started; see [RT-IMPLEMENTATION-STATUS.md](RT-IMPLEMENTATION-STATUS.md).
+No RT milestone has passed its complete acceptance gate; the first GPU test is pending.
 
 ## 1. Objective and accepted visual policy
 

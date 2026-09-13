@@ -1,0 +1,72 @@
+{
+  "base": [
+    "robustBufferAccess",
+    "fullDrawIndexUint32",
+    "imageCubeArray",
+    "independentBlend",
+    "logicOp",
+    "multiDrawIndirect",
+    "drawIndirectFirstInstance",
+    "depthClamp",
+    "depthBiasClamp",
+    "depthBounds",
+    "multiViewport",
+    "samplerAnisotropy",
+    "pipelineStatisticsQuery",
+    "vertexPipelineStoresAndAtomics",
+    "fragmentStoresAndAtomics",
+    "shaderTessellationAndGeometryPointSize",
+    "shaderImageGatherExtended",
+    "shaderStorageImageExtendedFormats",
+    "shaderStorageImageMultisample",
+    "shaderStorageImageReadWithoutFormat",
+    "shaderStorageImageWriteWithoutFormat",
+    "shaderUniformBufferArrayDynamicIndexing",
+    "shaderSampledImageArrayDynamicIndexing",
+    "shaderStorageBufferArrayDynamicIndexing",
+    "shaderStorageImageArrayDynamicIndexing",
+    "shaderClipDistance",
+    "shaderCullDistance",
+    "shaderFloat64",
+    "shaderInt64",
+    "shaderInt16",
+    "shaderResourceResidency",
+    "shaderResourceMinLod",
+    "inheritedQueries"
+  ],
+  "v12": [
+    "samplerMirrorClampToEdge",
+    "runtimeDescriptorArray",
+    "shaderSampledImageArrayNonUniformIndexing",
+    "shaderStorageBufferArrayNonUniformIndexing",
+    "bufferDeviceAddress",
+    "shaderFloat16",
+    "drawIndirectCount"
+  ],
+  "multiview": [
+    "multiview"
+  ],
+  "storage16": [
+    "storageBuffer16BitAccess"
+  ],
+  "sync2": [
+    "synchronization2"
+  ],
+  "pipeline": [
+    "rayTracingPipeline"
+  ],
+  "acceleration": [
+    "accelerationStructure"
+  ],
+  "extensions": [
+    "VK_KHR_SWAPCHAIN_EXTENSION_NAME",
+    "VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME",
+    "VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME",
+    "VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME",
+    "VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME",
+    "VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME",
+    "VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME"
+  ],
+  "sourceCommit": "9efa82daf963e1192daaf2a8596446656f113cd2",
+  "sourceSHA256": "5d7a5300da24f05c532206785340db5710eaca38e1e2f814cc0617d469a2011f"
+}

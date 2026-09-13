@@ -223,16 +223,68 @@
   {
     "id": "MAINT-002",
     "repository": "ezquake-vulkan",
-    "paths": ["src/vk_main.c"]
+    "paths": [
+      "src/vk_main.c"
+    ]
   },
   {
     "id": "MAINT-003",
     "repository": "ezquake-vulkan",
-    "paths": ["src/competitive_visuals.c"]
+    "paths": [
+      "src/competitive_visuals.c"
+    ]
   },
   {
     "id": "FX-001",
     "repository": "ezquake-vulkan",
-    "paths": ["src/cl_tent.c", "src/qmb_particles.h", "src/r_particles_qmb_spawn.c", "src/menu_options.c", "src/competitive_visuals.c"]
+    "paths": [
+      "src/cl_tent.c",
+      "src/qmb_particles.h",
+      "src/r_particles_qmb_spawn.c",
+      "src/menu_options.c",
+      "src/competitive_visuals.c"
+    ]
+  },
+  {
+    "id": "RT-FOUNDATION-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "rt-feature-map.json",
+      "src/rt/RTGL1.h",
+      "src/rt/requirements.json",
+      "src/rt/rt_api.c",
+      "src/rt/rt_api.h",
+      "src/rt/rt_build_identity.h",
+      "src/rt/rt_exports.h",
+      "src/rt/rt_harness.c",
+      "src/rt/rt_probe.c",
+      "src/rt/rt_probe.h",
+      "src/rt/rt_requirements.h"
+    ],
+    "origin": "OpenAI Codex adapter and generator; RTGL1.h preserves upstream MIT notice and API, with one CP1252 comment dash normalized to ASCII."
+  },
+  {
+    "id": "RT-FOUNDATION-002",
+    "repository": "rtgl1",
+    "paths": [
+      "Source/PhysicalDevice.cpp",
+      "Source/RTGL1.cpp",
+      "Source/VulkanDevice.h",
+      "Source/VulkanDevice_Init.cpp"
+    ],
+    "origin": "OpenAI Codex UUID selection and central initialization failure handling; inherited RTGL1 implementation retains upstream authorship."
+  },
+  {
+    "id": "RT-GEOMETRY-001",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/rt/rt_harness.c",
+      "src/rt/rt_geometry.h",
+      "src/rt/rt_geometry.c",
+      "src/rt/rt_geometry_test.c"
+    ],
+    "origin": "OpenAI Codex CPU conversion and instrumented ABI fixtures. RTGL1 data structures retain upstream attribution."
   }
 ]

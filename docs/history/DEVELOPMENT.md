@@ -712,3 +712,46 @@ This step changes documentation and its public export list only. It implements
 no RT backend and changes no engine source or cfg defaults. Document links,
 source/profile identity and the publication allowlist are checked separately
 from runtime tests; earlier raster test evidence does not validate this plan's RT output.
+
+## RT-FOUNDATION-001/002 - Runtime foundation and first hardware test
+
+The user requested summary steps 1 through 7 of RT-PLAN-002, then stated that
+the RTX 3060 machine is unavailable and they will run the first test. OpenAI
+Codex implemented the optional CMake runtime/harness target, pinned API and
+package checks, complete extraction of the library's 45 enabled feature bits
+and seven required device extensions, UUID selection and the triangle/light test.
+The generated 446-entry candidate inventory includes all 108 saved settings and
+Graphics/View menu references; semantic mapping is explicitly still incomplete.
+
+Source review found that RTGL1 initialization failure did not release its owned
+Vulkan handles and that thirteen central initialization checks vanished in Release.
+Codex added central failure cleanup, checked Release errors and C ABI creation
+argument/exception handling. Completed members are cleaned; exception safety
+inside every individual component constructor is not claimed.
+
+Debug/Release adapter, harness and library builds pass. Thirteen boundary cases,
+sixteen rejected-device retries with Debug validation, and the RT-disabled host
+Debug/Release build plus Vulkan smoke test pass. No RT frame has been verified.
+Host renderer dispatch, scene/effect adapters and styling extensions remain open.
+The implementation status document records this partial delivery without marking
+the requested steps complete. Current cfg values and gameplay binaries are unchanged.
+
+Host delta: ordered patch 15. Library delta: rtgl1-ezquake-foundation.patch,
+applied after the earlier Windows-build patch. Original SDK/header notices remain.
+
+## RT-GEOMETRY-001: CPU geometry adapter preparation
+
+OpenAI Codex, 2026-09-13. Added convex-fan/strip triangulation, affine conversion,
+pose interpolation, explicit geometry-ID packing and checked scene/overlay ABI
+submission. The dependency harness now uses the scene submission helper. No
+host renderer callbacks or settings were enabled. Seven instrumented fixture
+groups pass with MSVC Debug and Release, including error propagation and invalid
+input. The initial fixture omitted the error-description callback; fixing the
+fixture completed its mock ABI, after which both builds passed. Pixel output and
+actual BSP/model/particle/HUD connections remain open.
+
+The ordered ezQuake patch series now has 16 steps and replays to all 78 source
+paths. The two RTGL1 patches replay to seven attributed paths. The rebuilt package
+passes 13 boundary tests; all 51 RT shaders pass SPIR-V validation. Publication
+contains source, scripts, profiles and notices; the separate first-test ZIP contains
+no Quake data. User will run the first RTX 3060 image test when the machine is available.

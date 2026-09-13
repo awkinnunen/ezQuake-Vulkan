@@ -2,3 +2,5 @@
 patches/*.patch -whitespace
 # Preserve the upstream README verbatim, including its two trailing spaces.
 docs/UPSTREAM-README.md -whitespace
+# Keep vendored RTGL1 SDK formatting; its identity is hashed by the adapter.
+src/rt/RTGL1.h -whitespace
