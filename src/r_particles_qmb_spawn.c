@@ -921,7 +921,7 @@ void QMB_TeleportSplash(vec3_t org)
 	}
 }
 
-void QMB_DetpackExplosion(vec3_t org)
+void QMB_DetpackExplosion(vec3_t org, qbool shockwave)
 {
 	int i, j;
 	float theta;
@@ -951,8 +951,8 @@ void QMB_DetpackExplosion(vec3_t org)
 		angle[0] += 180 / 5;
 	}
 
-	//VULT PARTICLES
-	if (amf_part_shockwaves.value) {
+	// The Explosion style keeps the fire and rays without the expanding ring.
+	if (shockwave && amf_part_shockwaves.value) {
 		if (amf_part_2dshockwaves.value) {
 			AddParticle(p_2dshockwave, org, 1, 30, 0.5, NULL, vec3_origin);
 		}

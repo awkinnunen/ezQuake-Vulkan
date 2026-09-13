@@ -229,5 +229,10 @@
     "id": "MAINT-003",
     "repository": "ezquake-vulkan",
     "paths": ["src/competitive_visuals.c"]
+  },
+  {
+    "id": "FX-001",
+    "repository": "ezquake-vulkan",
+    "paths": ["src/cl_tent.c", "src/qmb_particles.h", "src/r_particles_qmb_spawn.c", "src/menu_options.c", "src/competitive_visuals.c"]
   }
 ]

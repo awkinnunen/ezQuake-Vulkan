@@ -236,3 +236,9 @@ See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
 - [x] Verify the actual combined profile load, saved values and movement-dependent jump binding.
 - [x] Verify all 13 source patches and source-path attribution.
 - [ ] Complete first public GitHub upload after account sign-in is available.
+
+## FX-001 - Explosion style (2026-09-13)
+
+- [x] Add Explosion without the ring while keeping Big explosion unchanged.
+- [x] Preserve existing config values and support the new value in visual profiles.
+- [x] Rebuild Debug and Release. Runtime validation is recorded in VALIDATION.md.

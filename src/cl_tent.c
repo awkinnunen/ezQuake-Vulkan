@@ -730,8 +730,8 @@ static void CL_Parse_TE_EXPLOSION(vec3_t pos)
 			R_CoronasNew(C_BLUEFLASH, pos);
 		}
 	}
-	else if (r_explosiontype.value == 7 && qmb_initialized && gl_part_explosions.value) {
-		QMB_DetpackExplosion(pos);	// Detpack explosion
+	else if ((r_explosiontype.value == 7 || r_explosiontype.value == 11) && qmb_initialized && gl_part_explosions.value) {
+		QMB_DetpackExplosion(pos, r_explosiontype.value == 7);
 	}
 	else if (r_explosiontype.value == 8 && qmb_initialized) {
 		FuelRodExplosion(pos);
@@ -766,7 +766,7 @@ static void CL_Parse_TE_EXPLOSION(vec3_t pos)
 				VectorCopy(cst_lt.color, dl->color);
 			}
 		}
-		if (amf_coronas.integer && r_explosiontype.integer != 7 && r_explosiontype.integer != 2 && r_explosiontype.integer != 8) {
+		if (amf_coronas.integer && r_explosiontype.integer != 7 && r_explosiontype.integer != 11 && r_explosiontype.integer != 2 && r_explosiontype.integer != 8) {
 			R_CoronasNew(C_FLASH, pos);
 		}
 	}

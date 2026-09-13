@@ -388,7 +388,7 @@ extern cvar_t amf_lightning;
 extern cvar_t r_drawflat;
 
 const char* explosiontype_enum[] =
-{ "fire + sparks", "fire only", "teleport", "blood", "big blood", "dbl gunshot", "blob effect", "big explosion", "plasma", "sparks", "off" };
+{ "fire + sparks", "fire only", "teleport", "blood", "big blood", "dbl gunshot", "blob effect", "big explosion", "plasma", "sparks", "off", "Explosion" };
 
 const char* muzzleflashes_enum[] =
 { "off", "on", "own off" };

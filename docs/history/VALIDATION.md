@@ -541,3 +541,18 @@ ESDF source; none is introduced by the WASD transformation. The isolated fixture
 also lacks an inherited image/skin. These are retained compatibility warnings,
 not a clean full-profile smoke pass. Binding/alias checks and normal exit complete
 without Vulkan validation, recursive alias or host errors. Engine source is unchanged.
+
+## FX-001 - Explosion variant (2026-09-13, OpenAI Codex)
+
+- Debug and Release incremental MSVC builds passed.
+- Vulkan Debug runtime `explosion-variants-debug-3` passed with normal exit 0
+  and no validation errors. Fired rockets using styles 11, 7, then 11.
+- Inspected captures ezquake001.png (7) and ezquake002.png (11): the original
+  shows the expanding white ring, while the new style retains fire/rays without
+  that ring. Captures and installed game assets remain private.
+- Visual profile save/load and full config save retained r_explosionType 11.
+- Initial two fixture runs hit the command-buffer recursion guard. The final
+  run enabled developer checkpoints between waits and completed. No engine
+  change was needed to resolve those test-script failures.
+- All 14 ordered patches replay exactly to 64 changed/new source paths;
+  attribution coverage and git diff --check passed.

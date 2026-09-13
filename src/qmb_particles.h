@@ -36,7 +36,7 @@ void QMB_ParticleExplosion(vec3_t org);
 void QMB_LavaSplash(vec3_t org);
 void QMB_TeleportSplash(vec3_t org);
 
-void QMB_DetpackExplosion(vec3_t org);
+void QMB_DetpackExplosion(vec3_t org, qbool shockwave);
 
 void QMB_InfernoFlame(vec3_t org);
 void QMB_StaticBubble(entity_t *ent);

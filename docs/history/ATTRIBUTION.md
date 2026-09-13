@@ -302,3 +302,11 @@ literal bindings, alias-internal jump rebinding, help text, collision handling,
 verification and documentation. The user's customized legacy controls and
 nQuake helpers retain their prior authorship. No inherited images or engine code
 were changed. See private-wasd-profile.json and scripts/Create-WASDProfile.py.
+
+## FX-001 - Explosion without a shockwave ring
+
+Requested by the user; implemented and documented by OpenAI Codex, 2026-09-13.
+Adds Explosion (r_explosionType 11) using the inherited QMB detpack fire/rays
+with its shockwave disabled. Big explosion (7) retains its original behavior.
+The underlying particle artwork and effect implementation retain upstream
+authorship. Source paths are recorded in Source-Changes.json; delta in patch 14.

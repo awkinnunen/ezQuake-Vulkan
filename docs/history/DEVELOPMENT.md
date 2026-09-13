@@ -658,3 +658,17 @@ text are updated too. Final literal bindings support the config browser and avoi
 empty-key collisions. The existing active/ESDF files are unchanged by this step.
 The new file inherits the approved visual defaults; no engine source changed.
 See private-wasd-profile.json for mapping, provenance and hashes.
+
+## FX-001 - Separate Explosion style (2026-09-13, OpenAI Codex)
+
+The user requested the Big explosion appearance without its expanding ring,
+then clarified that the existing Big explosion should remain available.
+Appended Explosion as value 11 in Graphics > Projectiles > Explosion Type,
+preserving all existing numeric values (including off = 10). Both styles use
+the same fire, spark rays and underwater bubbles. Only value 7 requests the
+optional shockwave; value 11 suppresses both flat and particle ring forms.
+Like value 7, value 11 excludes the separate horizontal corona flash.
+The visual-profile allowlist now accepts values through 11, so save/load does
+not clamp the new selection. Both styles still require initialized QMB assets
+and gl_part_explosions; the inherited fallback remains available otherwise.
+Installed user configs and approved defaults were not changed.

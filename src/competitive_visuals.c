@@ -33,7 +33,7 @@ static const cv_existing_t existing[] = {
  // Retained in the profile allowlist for compatibility; already in Graphics.
  {"r_rocketTrail","Rocket trail","Use Graphics > Projectiles",0,9,1,-1},
  {"r_grenadeTrail","Grenade trail","Use Graphics > Projectiles",0,3,1,-1},
- {"r_explosionType","Explosion style","Use Graphics > Projectiles",0,7,1,-1},
+ {"r_explosionType","Explosion style","Use Graphics > Projectiles",0,11,1,-1},
  {"cl_muzzleflash","Muzzle flashes","Use Graphics > Player & Weapon Model",0,2,1,-1},
  {"r_drawflame","Torch flames","Use Graphics > Environment",0,1,1,-1},
  {"gl_texturemode","Texture filtering","Nearest preserves pixels; trilinear smooths textures and mip transitions.",0,0,0,5}

@@ -1,0 +1,82 @@
+diff --git a/src/cl_tent.c b/src/cl_tent.c
+--- a/src/cl_tent.c
++++ b/src/cl_tent.c
+@@ -730,8 +730,8 @@
+ 			R_CoronasNew(C_BLUEFLASH, pos);
+ 		}
+ 	}
+-	else if (r_explosiontype.value == 7 && qmb_initialized && gl_part_explosions.value) {
+-		QMB_DetpackExplosion(pos);	// Detpack explosion
++	else if ((r_explosiontype.value == 7 || r_explosiontype.value == 11) && qmb_initialized && gl_part_explosions.value) {
++		QMB_DetpackExplosion(pos, r_explosiontype.value == 7);
+ 	}
+ 	else if (r_explosiontype.value == 8 && qmb_initialized) {
+ 		FuelRodExplosion(pos);
+@@ -766,7 +766,7 @@
+ 				VectorCopy(cst_lt.color, dl->color);
+ 			}
+ 		}
+-		if (amf_coronas.integer && r_explosiontype.integer != 7 && r_explosiontype.integer != 2 && r_explosiontype.integer != 8) {
++		if (amf_coronas.integer && r_explosiontype.integer != 7 && r_explosiontype.integer != 11 && r_explosiontype.integer != 2 && r_explosiontype.integer != 8) {
+ 			R_CoronasNew(C_FLASH, pos);
+ 		}
+ 	}
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -33,7 +33,7 @@
+  // Retained in the profile allowlist for compatibility; already in Graphics.
+  {"r_rocketTrail","Rocket trail","Use Graphics > Projectiles",0,9,1,-1},
+  {"r_grenadeTrail","Grenade trail","Use Graphics > Projectiles",0,3,1,-1},
+- {"r_explosionType","Explosion style","Use Graphics > Projectiles",0,7,1,-1},
++ {"r_explosionType","Explosion style","Use Graphics > Projectiles",0,11,1,-1},
+  {"cl_muzzleflash","Muzzle flashes","Use Graphics > Player & Weapon Model",0,2,1,-1},
+  {"r_drawflame","Torch flames","Use Graphics > Environment",0,1,1,-1},
+  {"gl_texturemode","Texture filtering","Nearest preserves pixels; trilinear smooths textures and mip transitions.",0,0,0,5}
+diff --git a/src/menu_options.c b/src/menu_options.c
+--- a/src/menu_options.c
++++ b/src/menu_options.c
+@@ -388,7 +388,7 @@
+ extern cvar_t r_drawflat;
+ 
+ const char* explosiontype_enum[] =
+-{ "fire + sparks", "fire only", "teleport", "blood", "big blood", "dbl gunshot", "blob effect", "big explosion", "plasma", "sparks", "off" };
++{ "fire + sparks", "fire only", "teleport", "blood", "big blood", "dbl gunshot", "blob effect", "big explosion", "plasma", "sparks", "off", "Explosion" };
+ 
+ const char* muzzleflashes_enum[] =
+ { "off", "on", "own off" };
+diff --git a/src/qmb_particles.h b/src/qmb_particles.h
+--- a/src/qmb_particles.h
++++ b/src/qmb_particles.h
+@@ -36,7 +36,7 @@
+ void QMB_LavaSplash(vec3_t org);
+ void QMB_TeleportSplash(vec3_t org);
+ 
+-void QMB_DetpackExplosion(vec3_t org);
++void QMB_DetpackExplosion(vec3_t org, qbool shockwave);
+ 
+ void QMB_InfernoFlame(vec3_t org);
+ void QMB_StaticBubble(entity_t *ent);
+diff --git a/src/r_particles_qmb_spawn.c b/src/r_particles_qmb_spawn.c
+--- a/src/r_particles_qmb_spawn.c
++++ b/src/r_particles_qmb_spawn.c
+@@ -921,7 +921,7 @@
+ 	}
+ }
+ 
+-void QMB_DetpackExplosion(vec3_t org)
++void QMB_DetpackExplosion(vec3_t org, qbool shockwave)
+ {
+ 	int i, j;
+ 	float theta;
+@@ -951,8 +951,8 @@
+ 		angle[0] += 180 / 5;
+ 	}
+ 
+-	//VULT PARTICLES
+-	if (amf_part_shockwaves.value) {
++	// The Explosion style keeps the fire and rays without the expanding ring.
++	if (shockwave && amf_part_shockwaves.value) {
+ 		if (amf_part_2dshockwaves.value) {
+ 			AddParticle(p_2dshockwave, org, 1, 30, 0.5, NULL, vec3_origin);
+ 		}
