@@ -40,6 +40,12 @@ $taskArgs = @('-condebug','-nohome','-basedir','.','-window','-width',"$Width",'
 if(!$NoValidation) { $taskArgs=@('-dev')+$taskArgs }
 $taskAssert = $env:SDL_ASSERT
 if ($PrepareProfile) { & $PrepareProfile $taskProfile }
+# MAINT-005: missing this pack disables QMB initialization and makes supported
+# VX cvars appear unknown. Preserve the real installation's particle resources.
+$taskEffectsPack=Join-Path $env:EZQUAKE_GAME_DIR 'ezquake/ezquake.pk3'
+if ((Test-Path $taskEffectsPack) -and !(Test-Path "$taskProfile/ezquake/ezquake.pk3")) {
+    New-Item -ItemType HardLink -Path "$taskProfile/ezquake/ezquake.pk3" -Target $taskEffectsPack | Out-Null
+}
 try {
     # An assertion must fail automation rather than wait forever in a dialog.
     $env:SDL_ASSERT = 'abort'
@@ -69,6 +75,7 @@ try {
     # KTX can execute its packed server.cfg again after later map changes.
     if ($GameLibrary) { $taskCommandsLog = $taskCommandsLog.Replace('Unknown command "sv_enableprofile"','') }
     if ($taskCommandsLog -match 'Unknown command|Couldn.t load skybox') { throw 'Test commands/assets failed; inspect console log.' }
+    if ($taskCommandsLog -match 'CV_PROFILE load [^\r\n]*: Invalid profile') { throw 'Visual profile was rejected; inspect console log.' }
     if ($taskLog -match 'Validation Error|VUID-|VK_ERROR_DEVICE_LOST|invalid push range|Callback registration failed') { throw 'Vulkan validation/runtime errors; inspect console log.' }
     Write-Output "PASS: $Label ($Renderer $Configuration), completion marker and normal exit 0. Profile: $taskProfile"
 } finally {

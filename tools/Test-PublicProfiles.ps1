@@ -1,4 +1,4 @@
-# PUBLIC-001, OpenAI Codex: exercise exported overlay against the cleaned local config.
+# PUBLIC-001 / MAINT-005, OpenAI Codex: exercise the overlay and restored conditional effects.
 param([string]$Label='public-profiles')
 $ErrorActionPreference='Stop'
 $taskRoot=Split-Path $PSScriptRoot -Parent

@@ -1,5 +1,9 @@
 # Visual effect cost measurements
 
+Historical MAINT-004 profile: bloom 0.03, threshold 1.35, radius 1. MAINT-005
+later restored bloom to 0.1 / 0.7 / 2.75 and restored the wrongly removed conditional
+particle settings. These measurements do not describe the restored defaults.
+
 MAINT-004. Run and documented by OpenAI Codex, 2026-09-13.
 
 Windows x64 Release, AMD Radeon(TM) Graphics integrated GPU, Vulkan API 1.2.188.

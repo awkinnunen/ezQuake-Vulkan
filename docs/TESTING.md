@@ -19,7 +19,9 @@ python ./tools/Prepare-MotionDemo.py 'C:\Demos\your-game.mvd' ./cache/motion.mvd
 The screenshot test deliberately captures immediately after video recreation,
 checks requested/applied MSAA and hardware clamping, and rejects Vulkan validation
 errors. The public-profile test needs an existing nQuake config and verifies all
-53 saved visual values, the actual WASD/jump bindings and crosshair/pickup settings.
+53 saved visual values, all 55 conditional particle settings, the actual WASD/jump
+bindings and crosshair/pickup settings. The installed ezquake.pk3 is required for
+QMB initialization; its absence must not be interpreted as missing cvar support.
 
 The benchmark plays the same 20-second slice three times per case, discards the
 first run, compares frame counts, and records both measured averages. VSync is

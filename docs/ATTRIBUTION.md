@@ -1,5 +1,33 @@
 # Attribution and provenance
 
+## MAINT-005 correction: conditional particle settings (2026-09-13)
+
+OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
+All 55 are registered by InitVXStuff when QMB particle assets initialize. The
+earlier isolated fixture lacked the ezQuake particle resource pack; its unknown
+command messages did not establish missing engine support. Removing those
+settings reset enhanced lightning and other effects. The removal has been reversed
+from the per-file backups, and the destructive cleanup script is disabled.
+
+The user's requested bloom restoration is 0.1 strength, 0.7 threshold and 2.75 radius.
+Lightning is restored to 1 with sparks 0.4. Other current graphics and bindings
+are preserved. The public defaults include a separate 55-setting particle module;
+the visual-only profile still contains 53 values. Runtime fixtures now include
+the installed ezquake.pk3 before initialization. Earlier claims that these 55
+settings were unsupported or safe to remove are superseded by this correction.
+
+Debug weapon/shaft fire and release tests pass with the restored settings.
+The combined public profile test verifies all 53 visual values and all 55 conditional
+values after saving through the real engine. Engine source/binaries are unchanged.
+Earlier performance measurements used the former bloom/particle state and are
+historical evidence, not measurements of the restored defaults.
+
+Menu paths: Options > Graphics > Visual Effects > Effects for Bloom strength,
+threshold and radius; Options > Graphics > Advanced Options > Lighting > Particle
+Shaft for the enhanced lightning switch. Lightning color, size and sparks do not
+yet have dedicated menu rows.
+
+
 This project retains the complete ancestry of tibazera's Vulkan branch at
 `91859a996daede0df166e2a55a5f08d56b052b21`. Original Git authors, committers,
 copyright notices and licenses are retained.

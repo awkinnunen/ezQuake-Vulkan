@@ -59,6 +59,10 @@ exec ezv-wasd-defaults.cfg
 The graphics profile contains all 53 user-approved values, including edge depth
 threshold **16**. Loading `ezv-defaults.cfg` also restarts video to apply MSAA.
 It is a named profile; the engine's factory reset remains a separate action.
+The defaults helper also loads `ezv-particles.cfg`, restoring enhanced lightning
+and the other 55 conditional legacy settings. These require nQuake's
+`ezquake/ezquake.pk3` particle textures. Restored bloom is 0.1 / 0.7 / 2.75
+(strength / threshold / radius).
 The WASD overlay preserves installed nQuake non-letter bindings and communication
 aliases. See [controls](docs/CONTROLS.md). Game data, private full configs and
 custom crosshair images are not bundled.

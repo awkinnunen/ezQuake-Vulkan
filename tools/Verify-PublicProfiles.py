@@ -17,4 +17,8 @@ assert {k: actual.get(k) for k in expected} == expected, 'Graphics defaults chan
 saved = values(profile / 'ezquake/configs/public-result.cfg')
 assert saved['w_switch'] == saved['b_switch'] == '8'
 assert saved['crosshairsize'] == '2.5' and saved['crosshairimage'] == ''
+particles = values(root / 'profiles/qw/ezv-particles.cfg')
+assert len(particles) == 55
+assert {k:saved.get(k) for k in particles} == particles, 'Conditional effects not preserved'
 print('PASS: all 53 approved graphics values survive the public WASD overlay; pickup selection 8/8, built-in crosshairs size 2.5.')
+print('PASS: all 55 supported conditional effects saved, including lightning 1 and sparks 0.4.')

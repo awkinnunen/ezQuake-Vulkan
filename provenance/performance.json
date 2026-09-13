@@ -3,6 +3,12 @@
   "date": "2026-09-13",
   "width": 1280,
   "height": 720,
+  "profileAtMeasurement": {
+    "r_cv_bloom": 0.03,
+    "r_cv_bloomthreshold": 1.35,
+    "r_cv_bloomradius": 1
+  },
+  "profileStatus": "Historical MAINT-004 state; MAINT-005 restored different bloom and conditional effects defaults.",
   "gpu": "AMD Radeon(TM) Graphics",
   "api": "1.2.188",
   "frameCount": 1290,
