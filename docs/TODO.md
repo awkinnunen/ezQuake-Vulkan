@@ -1,3 +1,10 @@
+> Updated 2026-09-15: the current native menu/preset behavior is documented in
+> [Unified menus](history/UNIFIED-MENUS.md). Graphics presets contain 170 values;
+> Quick WASD is default; Quick ESDF and nQuake are alternatives. Earlier menu coordinates and the
+> 53-setting profile counts below are historical. Use the current
+> [TODO](history/TIBAZERA-TODO.md) and
+> [validation evidence](../provenance/unified-menus-validation.json).
+
 # Next work
 
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
@@ -67,3 +74,7 @@ Latest update: Explosion without the ring (11) is implemented alongside Big
 explosion (7). Portable defaults match the latest saved settings. See
 [the RT feasibility assessment](history/RTX-FEASIBILITY.md); RTX 3060 rendering
 validation and the optional RT backend are still future work.
+
+- [x] CFG-PRESETS-002: load the focused graphics preset with Enter/click; F3 keeps preview, Escape cancels. Native input and save regression verified in Debug/Release.
+
+- [x] INPUT-004: nQuake keyboard preset plus Quick WASD/Quick ESDF names; native menu and switch-isolation tests pass in Debug/Release.

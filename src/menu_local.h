@@ -2,6 +2,7 @@
 #ifndef EZQUAKE_MENU_LOCAL_H
 #define EZQUAKE_MENU_LOCAL_H
 void MLocal_Init(void);
+void MLocal_Shutdown(void);
 void MLocal_Connected(void);
 void MLocal_Open(void);
 void MLocal_Draw(void);

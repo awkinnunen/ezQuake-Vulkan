@@ -102,3 +102,14 @@ ARENA-002 follows as `patches/ezquake-08-arena-deathmatch.patch`. It adds the
 deathmatch row and a one-shot `CL_MakeActive` callback for applying chosen
 local rules. The profile delta is recorded separately in
 `runtime/arena-startup-setting.json`; personal config contents are not exported.
+
+
+## MENU-UNIFY-001: current menu ownership (2026-09-15)
+
+The old twelve-row custom Arena menu below is historical. Local Arena now uses
+native settings widgets for preparing a new map/mode/rules/starting bots. Changing
+setup does not modify the current game. Escape > Bots manages the current KTX
+session, including supported remote servers. Server capability, permissions and
+map navigation still determine whether requests succeed. See UNIFIED-MENUS.md.
+Test-UnifiedArena.ps1 and Test-UnifiedOnline.ps1 supersede the old live-action row
+coordinates in Test-LocalArena.ps1.

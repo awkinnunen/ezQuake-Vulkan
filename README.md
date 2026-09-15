@@ -27,13 +27,24 @@ change and the distinction between inherited work, user direction and Codex impl
   MSAA and FXAA. Contextual help, disabled dependencies and video restart feedback.
 - Raster point/spot shadow maps, BSP/authored lights, cached maps and bounded updates.
   Includes the DM6 baked-light stability fix and corrected multiview resource ownership.
-- Named graphics profiles and a `.cfg` browser with a keyboard binding preview.
+- Native graphics categories with live CFG preview, Enter/click to load, Escape to cancel and safe saving.
+  Balanced, Ultra competitive and Athmospheric presets; Quick WASD, Quick ESDF and nQuake controls.
+- Native Local Arena setup and in-game KTX bot controls on local or remote servers.
+- Explicit full-config import with a keyboard binding preview.
 - Local Arena controls for an external KTX game module, and original Quake
   single-player startup/save handling when the required game data is installed.
 - GPU-limit, texture, lighting, skybox, shutdown and screenshot lifecycle fixes.
 - Explosion style without the expanding ring; original Big explosion remains available.
 
 ## Build and run on Windows
+
+For testing without compiling, download the **[Windows x64 beta package](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1)**.
+Extract it separately, run `Start.cmd`, and select your existing nQuake directory.
+Game data is not bundled. First-run defaults precede your normal configs;
+setup preserves `config.cfg`, `autoexec.cfg` and existing preset files.
+Use `Diagnose.cmd` to collect a log for an issue report.
+
+To build from source:
 
 Install Visual Studio 2022 C++ Build Tools, CMake 3.22 or newer, Ninja, Git and
 the Vulkan SDK. Open an **x64 Native Tools Command Prompt** with the SDK's
@@ -66,18 +77,28 @@ exec ezv-defaults.cfg
 exec ezv-wasd-defaults.cfg
 ```
 
-The graphics profile contains **71 values from the user's last saved config on
-2026-09-15**, plus **55 conditional effects** in `ezv-particles.cfg`. Defaults include
-8 shadow lights/updates, caster budget 8192, Baked with shadows, map radius 0.5,
-MSAA 4x, FXAA 5 and SSAO strength 0.4. Internal HDR is off in this saved preset.
-Bloom strength/threshold/radius are 0.15 / 0.6 / 5. Loading `ezv-defaults.cfg`
-restarts video to apply video settings. Engine factory reset remains separate.
-Conditional effects require nQuake's `ezquake/ezquake.pk3` particle textures.
-See [shadow controls and limits](docs/history/DYNAMIC-SHADOWS.md) and
-[validation](docs/history/VALIDATION.md). These effects use ordinary Vulkan.
-The WASD overlay preserves installed nQuake non-letter bindings and communication
-aliases. See [controls](docs/CONTROLS.md). Game data, private full configs and
-custom crosshair images are not bundled.
+**Balanced is the default graphics preset**, preserving 170 graphics values from
+the user's saved configuration on 2026-09-15. Ultra competitive favors readability
+and reduced rendering cost; Athmospheric requests high raster quality, including
+HDR, SSAO, shadows and MSAA. None requires RTX. The older 71-value CV profile and
+55-value particle module remain for compatibility.
+
+Options > Graphics uses native widgets and seven categories. F2 browses presets;
+highlight to preview, then Enter/click to load or Escape to cancel. F3 keeps the
+current preview without navigating to another row. Save creates graphics-only CFGs with
+recoverable backups. F5 applies pending video changes after leaving preview.
+See [unified menus and presets](docs/history/UNIFIED-MENUS.md).
+
+Options > Controls offers **Quick WASD (default)**, **nQuake**, and **Quick ESDF** (E forward, D back, S left,
+F right). `keyboard_preset sdfe` selects the alternative. Graphics selection never
+changes bindings. Portable controls use built-in weapon crosshairs; game resources,
+custom crosshair images and personal full configs are not bundled.
+
+Copying profiles does not overwrite an existing user's full configuration or force
+a preset every launch. Run `exec ezv-wasd-defaults.cfg` once after startup to adopt
+WASD and Balanced, then use normal config saving. Conditional particle effects need
+the installed `ezquake/ezquake.pk3` resources. In-game KTX commands remain subject
+to the connected server's bot support, permissions and map navigation.
 
 ## Status and license
 

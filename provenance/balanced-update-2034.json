@@ -1,0 +1,35 @@
+{
+  "id": "CFG-BALANCED-002",
+  "date": "2026-09-15",
+  "tuningAuthor": "User",
+  "packagingAuthor": "OpenAI Codex",
+  "changes": {
+    "r_cv_midtone": {
+      "before": "1",
+      "after": "0.825"
+    },
+    "r_cv_edgestrength": {
+      "before": "0.4",
+      "after": "0.3"
+    },
+    "r_cv_edgewidth": {
+      "before": "1.4",
+      "after": "2.2"
+    },
+    "gl_gamma": {
+      "before": "0.8",
+      "after": "0.7"
+    }
+  },
+  "values": 170,
+  "previousPresetSHA256": "fe0fbe82f6f20d22e266d5115360b24b98cbbb883e0228ea0d89810bc3bf48d8",
+  "presetSHA256": "50989da73d1df10556d116f718264d5dda4a4cd7d51fc30df64a4c7f77ec23d5",
+  "validation": {
+    "fixture": "balanced-update-2034",
+    "configuration": "Release",
+    "verifier": "Verify-PresetActivation.py",
+    "result": "PASS: all 170 values; Enter/mouse/F3 load, cancellation, invalid-file rejection, bindings/audio isolation",
+    "consoleSHA256": "02c78f55a9492f0b463b538f7b5548da10241f5f272cef9741d3d2bf2b749858",
+    "executableSHA256": "0c714439d37571da527bf50adf5fe151ef74374116a9901470b5afe944b8bb27"
+  }
+}

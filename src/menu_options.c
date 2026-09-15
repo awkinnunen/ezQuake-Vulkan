@@ -52,6 +52,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "hud_common.h"
 #include "r_local.h"
 #include "competitive_visuals.h"
+#include "graphics_menu.h"
 #include "menu_config.h"
 
 extern cvar_t r_farclip, gl_max_size, gl_miptexLevel;
@@ -353,8 +354,18 @@ const char* in_m_os_parameters_enum[] = { "off", "Keep accel settings", "Keep sp
 void Menu_Input_Restart(void) { Cbuf_AddText("in_restart\n"); }
 
 settings_page settbinds;
+static void UpdateControlAliases(void) {
+ int i,keys[2];qbool forward,back;
+ M_FindKeysForCommand("+legacy_fw",keys);forward=keys[0]>=0;
+ M_FindKeysForCommand("+legacy_bw",keys);back=keys[0]>=0;
+ for(i=0;i<settbinds.count;++i){setting *s=&settbinds.settings[i];if(s->type!=stt_bind)continue;
+  if(!strcmp(s->varname,"+forward")||!strcmp(s->varname,"+legacy_fw"))s->varname=forward?"+legacy_fw":"+forward";
+  if(!strcmp(s->varname,"+back")||!strcmp(s->varname,"+legacy_bw"))s->varname=back?"+legacy_bw":"+back";
+ }
+}
 
 void CT_Opt_Binds_Draw (int x2, int y2, int w, int h, CTab_t *tab, CTabPage_t *page) {
+	UpdateControlAliases();
 	Settings_Draw(x2, y2, w, h, &settbinds);
 }
 
@@ -482,18 +493,18 @@ settings_page settfps;
 
 void CT_Opt_FPS_Draw (int x, int y, int w, int h, CTab_t *tab, CTabPage_t *page)
 {
-	Settings_Draw(x, y, w, h, &settfps);
+	Graphics_Draw(x, y, w, h);
 }
 
 int CT_Opt_FPS_Key (int k, wchar unichar, CTab_t *tab, CTabPage_t *page) {
-	return Settings_Key(&settfps, k, unichar);
+	return Graphics_Key(k, unichar);
 }
 
-void OnShow_SettFPS(void) { Settings_OnShow(&settfps); }
+void OnShow_SettFPS(void) { Graphics_OnShow(); }
 
 qbool CT_Opt_FPS_Mouse_Event(const mouse_state_t *ms)
 {
-	return Settings_Mouse_Event(&settfps, ms);
+	return Graphics_Mouse(ms);
 }
 
 
@@ -900,10 +911,14 @@ void Menu_Options_Key(int key, wchar unichar) {
 		M_Menu_Main_f();
 }
 
+void M_Menu_Options_f(void);
+void Graphics_Open(void) { M_Menu_Options_f(); CTab_SetCurrentId(&options_tab,OPTPG_FPS); Graphics_OnShow(); }
+
 void Menu_Options_Draw(void) {
 	int x, y, w, h;
 
 	M_Unscale_Menu();
+	if(CTab_GetCurrentId(&options_tab)!=OPTPG_FPS)Graphics_CancelPreview();
 
     // this will add top, left and bottom padding
     // right padding is not added because it causes annoying scrollbar behaviour
@@ -1171,7 +1186,45 @@ setting settview_arr[] = {
 
 // CONTROLS TAB
 // please try to put mostly binds in here
+/* INPUT-003: explicit layout actions, separate from graphics presets. */
+static void LoadKeyboard(const char *name) {
+ vfsfile_t *f=FS_OpenVFS(va("ezv-%s.cfg",name),"rb",FS_ANY);
+ if(!f){Con_Printf("Keyboard preset missing: ezv-%s.cfg\n",name);return;}VFS_CLOSE(f);
+ /* INPUT-004: stop only our Quick weapon-crosshair hook when choosing nQuake.
+  * Preserve unrelated user hooks and the selected crosshair appearance. */
+ if(!strcmp(name,"nquake")) {
+  char *hook=Cmd_AliasString("f_weaponchange");
+  if(hook&&!strcmp(hook,"legacy_crosshair")) {
+   Cmd_DeleteAlias("f_weaponchange");
+   if(Cvar_Find("crosshair")->value<=0)Cvar_SetByName("crosshair","1");
+  }
+ }
+ /* Release held movement before replacing +/- aliases. */
+ Cbuf_InsertText(va("-forward\n-back\n-moveleft\n-moveright\n-attack\n-jump\nexec ezv-%s.cfg\n",name));
+}
+static void KeyboardWASD(void){LoadKeyboard("wasd");}
+static void KeyboardSDFE(void){LoadKeyboard("sdfe");}
+static void KeyboardNQuake(void){LoadKeyboard("nquake");}
+static void KeyboardCommand(void){
+ const char *name=Cmd_Argv(1);
+ if(!strcasecmp(name,"quick-wasd")||!strcasecmp(name,"wasd"))KeyboardWASD();
+ else if(!strcasecmp(name,"quick-esdf")||!strcasecmp(name,"esdf")||!strcasecmp(name,"sdfe"))KeyboardSDFE();
+ else if(!strcasecmp(name,"nquake"))KeyboardNQuake();
+ else Con_Printf("keyboard_preset quick-wasd | quick-esdf | nquake\n");
+}
+static void ControlsOpen(void){M_Menu_Options_f();CTab_SetCurrentId(&options_tab,OPTPG_BINDS);Settings_OnShow(&settbinds);}
+static void ControlsDeveloper(void){
+ if(!strcmp(Cmd_Argv(1),"key"))Settings_Key(&settbinds,Key_StringToKeynum(Cmd_Argv(2)),0);
+ Con_Printf("CONTROLS_FOCUS %s\n",settbinds.settings[settbinds.marked].label);
+}
 setting settbinds_arr[] = {
+	ADDSET_SEPARATOR("Keyboard presets"),
+	ADDSET_ACTION("Quick WASD (default)",KeyboardWASD,"Load Quick WASD: weapon-specific mouse firing, rocket-jump aliases and team communication. Replaces letter bindings; graphics stay unchanged."),
+	ADDSET_ACTION("Quick ESDF",KeyboardSDFE,"Load Quick ESDF: E forward, D back, S left, F right. Includes weapon-specific mouse firing, rocket jumps and shifted team communication."),
+	ADDSET_ACTION("nQuake",KeyboardNQuake,"Replace all key bindings with nQuake defaults: WASD, Mouse 1 fires the current weapon, Mouse 2 selects lightning, E/Q select rocket/grenade. Includes team and demo keys; graphics and sensitivity stay unchanged."),
+	ADDSET_BIND("Rocket fire","+legacy_rl"),
+	ADDSET_BIND("Lightning fire","+legacy_shaft"),
+	ADDSET_BIND("Grenade fire","+legacy_gl"),
 	ADDSET_BOOL		("Advanced Options", menu_advanced),
 	
 	ADDSET_SEPARATOR("Mouse Settings"),
@@ -1305,26 +1358,27 @@ setting settsystem_arr[] = {
 	ADDSET_BOOL		("Advanced Options", menu_advanced),
 
 	//Video
-	ADDSET_SEPARATOR("Video"),
-	ADDSET_NUMBER	("Gamma", v_gamma, 0.3, 3.0, 0.1),
+	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Image quality, textures, shadows, particles and competitive clarity."),
+	ADDSET_SEPARATOR("Display"),
+
 	ADDSET_ADVANCED_SECTION(),
 	ADDSET_ENUM		("Gamma control", vid_software_palette, vid_software_palette_enum),
 	ADDSET_BASIC_SECTION(),
-	ADDSET_NUMBER	("Contrast", v_contrast, 1, 5, 0.1),
+
 	ADDSET_ADVANCED_SECTION(),
-	ADDSET_NUMBER	("Lightmap Intensity", gl_modulate, 0.5, 3.0, 0.1),
+
 	ADDSET_BOOL		("Clear Video Buffer", gl_clear),
-	ADDSET_NUMBER	("Anisotropy Filter", gl_anisotropy, 0, 16, 1),
-	ADDSET_ENUM		("Quality Mode", gl_texturemode, gl_texturemode_enum),
+
+
 	ADDSET_BASIC_SECTION(),
 
 	ADDSET_SEPARATOR("Screen Settings"),
 	ADDSET_BOOL("Use desktop resolution", vid_usedesktopres),
 	ADDSET_CUSTOM("Resolution", ResolutionRead, ResolutionToggle, "Change your screen resolution."),
-	ADDSET_BOOL("Vertical Sync", r_swapInterval),
+
 	ADDSET_ADVANCED_SECTION(),
 	ADDSET_BOOL("Vsync Lag Fix", vid_vsync_lag_fix),
-	ADDSET_BOOL("Reduce Input Lag (Vulkan)", vid_vulkan_antilag),
+
 	ADDSET_BASIC_SECTION(),
 	ADDSET_CUSTOM("Bit Depth", BitDepthRead, BitDepthToggle, "Choose 16bit or 32bit color mode for your screen."),
 	ADDSET_CUSTOM("Fullscreen", FullScreenRead, FullScreenToggle, "Toggle between fullscreen and windowed mode."),
@@ -1337,13 +1391,13 @@ setting settsystem_arr[] = {
 #endif
 
 	ADDSET_ADVANCED_SECTION(),
-	ADDSET_SEPARATOR("Framebuffer"),
+	ADDSET_SEPARATOR("OpenGL framebuffer (advanced)"),
 	ADDSET_ENUM("Mode", vid_framebuffer, vid_framebuffer_enum),
 	ADDSET_BOOL("HDR", vid_framebuffer_hdr),
 	ADDSET_BOOL("HDR Tonemap", vid_framebuffer_hdr_tonemap),
-	ADDSET_NUMBER("Scale", vid_framebuffer_scale, 0.25, 2.0, 0.25),
-	ADDSET_NUMBER("Multisample", vid_framebuffer_multisample, 0, 16, 1),
-	ADDSET_NUMBER("FXAA", vid_framebuffer_fxaa, 0, 17, 1),
+
+
+
 	ADDSET_ACTION("Apply Changes", RendererRestart, "Restarts the renderer."),
 	ADDSET_BASIC_SECTION(),
 
@@ -1449,9 +1503,13 @@ void Menu_Options_Init(void) {
 
 	Settings_Page_Init(settmisc, settmisc_arr);
 	Settings_Page_Init(settfps, settfps_arr);
+	Graphics_Init(settfps_arr, sizeof(settfps_arr)/sizeof(settfps_arr[0]));
 	Settings_Page_Init(settview, settview_arr);
 	Settings_Page_Init(settplayer, settplayer_arr);
 	Settings_Page_Init(settbinds, settbinds_arr);
+	Cmd_AddCommand("keyboard_preset",KeyboardCommand);
+	if(IsDeveloperMode())Cmd_AddCommand("dev_controls",ControlsDeveloper);
+	Cmd_AddCommand("menu_controls",ControlsOpen);
 	Settings_Page_Init(settsystem, settsystem_arr);
 	Settings_Page_Init(settconfig, settconfig_arr);
 
@@ -1485,6 +1543,7 @@ void Menu_Options_Shutdown(void)
 	MConfig_Shutdown();
 	FL_Shutdown(&configs_filelist);
 	Settings_Shutdown(&settmisc);
+	Graphics_Shutdown();
 	Settings_Shutdown(&settfps);
 	Settings_Shutdown(&settview);
 	Settings_Shutdown(&settplayer);

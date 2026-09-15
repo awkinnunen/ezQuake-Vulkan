@@ -1,0 +1,38 @@
+{
+  "id": "DIST-001",
+  "date": "2026-09-15",
+  "author": "OpenAI Codex",
+  "version": "0.1.0-beta.1",
+  "renderer": "Vulkan raster",
+  "rt": false,
+  "binarySHA256": "eaa4de5d13645c5c3e5b63753cd017d9fe9809a10b036d2bcaf03ffec5e342bb",
+  "validation": [
+    "Packaged executable launches against separate nQuake data without the Vulkan SDK.",
+    "170 Balanced fields loaded as low-priority first-run defaults.",
+    "Existing config values override defaults; autoexec overrides config values.",
+    "Normal startup does not apply package defaults.",
+    "Two setup passes preserve existing personal configs and user-edited presets.",
+    "Vulkan runtime fixtures exit normally without validation errors.",
+    "Debug and Release changed C units compiled and linked; no full clean rebuild."
+  ],
+  "fixtures": [
+    {
+      "name": "distribution-fresh",
+      "consoleSHA256": "c9f3ede610dd8575e1f1591d48d0f4067e03433ca33a5ba922626c72865a59e7"
+    },
+    {
+      "name": "distribution-existing",
+      "consoleSHA256": "e8b0b4e8628dbe5dbfdbd352721852b20aabad5861c27f9f7d307137e9cb3eac"
+    },
+    {
+      "name": "distribution-normal",
+      "consoleSHA256": "e8b0b4e8628dbe5dbfdbd352721852b20aabad5861c27f9f7d307137e9cb3eac"
+    }
+  ],
+  "limitations": [
+    "Windows AMD Vulkan raster only; no exhaustive device/gameplay certification.",
+    "Requires separately installed nQuake assets and existing KTX module for arena play.",
+    "RT startup is still an unresolved experimental branch; not included.",
+    "CFG-PERSIST-001 earlier missing slider changes not reproduced; subsequent explicit save worked."
+  ]
+}

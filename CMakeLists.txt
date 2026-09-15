@@ -837,6 +837,7 @@ set(client
         ${SOURCE_DIR}/menu_ingame.c
         ${SOURCE_DIR}/menu_multiplayer.c
         ${SOURCE_DIR}/menu_options.c
+        ${SOURCE_DIR}/graphics_menu.c
         ${SOURCE_DIR}/menu_proxy.c
         ${SOURCE_DIR}/movie.c
         ${SOURCE_DIR}/mvd_autotrack.c

@@ -38,5 +38,6 @@ extern qbool Menu_Ingame_Mouse_Event(const mouse_state_t *ms);
 extern qbool Menu_Democtrl_Mouse_Event(const mouse_state_t *ms);
 
 extern void Menu_Ingame_Init(void);
+void Menu_Ingame_OnShow(void);
 
 #endif // __MENU_INGAME_H__

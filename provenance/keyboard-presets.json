@@ -1,0 +1,39 @@
+{
+  "id": "INPUT-004",
+  "date": "2026-09-15",
+  "requirementsAuthor": "User",
+  "nQuakeBindingsAuthor": "nQuake contributors",
+  "quickLayoutsOrigin": "User legacy FuhQuake configuration; earlier snippet authors unknown",
+  "implementationAuthor": "OpenAI Codex",
+  "bindings": 102,
+  "helperAliases": 20,
+  "sourceArchiveMembersSHA256": {
+    "nquake_default.cfg": "6b00240868b22ec675d6876210e818eb6a044c51409ebac482820cc10f5c8e9c",
+    "autoexec.cfg": "61ea93a02ef08b03d078c33f8d0e16c6aec4846aaa90c1e4d2b009d548684fe4"
+  },
+  "nQuakePresetSHA256": "993ee9572b284733ce99cf221a2b32c5c778b18960d98a15874db4650ce50e5f",
+  "sourceSHA256": "54539d26c69fd0aa6a8925f565d008814bc2d7edef7235cfd768f3d8370ad29a",
+  "binaries": {
+    "Debug": "6e5beacf7e524adbfe7d3e6a75b8d95c9953f8d0c0fdf08b9e75e5e36c3bb33a",
+    "Release": "f9e5b2e52c1f909cb008ded818692dbba6e35a4f688c2d959289f32acaa5373e"
+  },
+  "fixtures": [
+    {
+      "label": "keyboard-presets-debug",
+      "result": "PASS",
+      "consoleSHA256": "f3da1eda51021b462a792bcfeabb91e66e6202b0930d7d2b3c38ccefde86d902"
+    },
+    {
+      "label": "keyboard-presets-release",
+      "result": "PASS",
+      "consoleSHA256": "e8696e6640ee5531f0619572c03747b10c0672f18bb38607c0a481a9b9c2a7b2"
+    }
+  ],
+  "personalConfigAndAutoexecUnchanged": true,
+  "limitations": [
+    "Windows AMD Vulkan raster; incremental MSVC builds.",
+    "Native menu handlers exercised through developer events, not physical keyboard automation.",
+    "Online team/server commands retain existing server permissions; no automated chat was sent.",
+    "nQuake binds all keys; ezQuake normalizes the later generic SHIFT binding over earlier RSHIFT."
+  ]
+}

@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "menu_proxy.h"
 #include "menu_options.h"
 #include "menu_ingame.h"
+#include "graphics_menu.h"
 #include "menu_multiplayer.h"
 #include "menu_local.h"
 #include "competitive_visuals.h"
@@ -274,6 +275,8 @@ qbool M_Mouse_Select(const menu_window_t *uw, const mouse_state_t *m, int entrie
 //=============================================================================
 
 void M_EnterMenu (int state) {
+	if(state==m_ingame)Menu_Ingame_OnShow();
+	if(state!=m_options)Graphics_CancelPreview();
 	if (key_dest != key_menu) {
 		m_topmenu = state;
 		if (state != m_proxy) {
@@ -314,6 +317,7 @@ static void M_ToggleHeadMenus(int type)
 
 void M_ToggleMenu_f (void) {
 	if (cls.state == ca_active) {
+		Menu_Ingame_OnShow();
 		M_ToggleHeadMenus(m_ingame);
 	}
 	else M_ToggleHeadMenus(m_main);
@@ -324,6 +328,7 @@ void M_EnterProxyMenu (void) {
 }
 
 void M_LeaveMenu (int parent) {
+	Graphics_CancelPreview();
 	if (m_topmenu == m_state) {
 		m_state = m_none;
 		key_dest = key_game;
@@ -336,6 +341,7 @@ void M_LeaveMenu (int parent) {
 // dunno how to call this function
 // must leave all menus instead of calling few functions in row
 void M_LeaveMenus (void) {
+	Graphics_CancelPreview();
 //	m_entersound = true; // fixme: which value we must set ???
 
 	m_topmenu = m_none;
@@ -1320,6 +1326,7 @@ void M_Shutdown(void)
 	Menu_Demo_Shutdown();
 	Menu_Options_Shutdown();
 	Menu_Ingame_Shutdown();
+	MLocal_Shutdown();
 	Menu_MultiPlayer_Shutdown();
 }
 

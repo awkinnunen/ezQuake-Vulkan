@@ -207,3 +207,54 @@ establish a stable regression or its cause. All 26 disabled compatibility images
 match. Reproduction: Benchmark-Shadows.ps1; raw timing and binary hashes are in
 provenance/shadow-performance.json. Profile and repeat before optimizing or
 making a broader performance claim.
+
+
+## Menu/preset implementation audit, 2026-09-15
+
+OpenAI Codex corrected prototype issues before delivery: complete graphics saves
+must accept the inherited empty/vector viewmodel offset and current particle
+trail detail; native disabled rows must distinguish integer storage from cvars;
+layout movement aliases must display their actual keys. New automated fixtures
+cover transaction rollback, complete preset round trips and real KTX requests.
+These findings are fixed implementation defects, not new outstanding beta bugs.
+Existing rendering/RT issues above are unaffected. Full manual UI/input/server
+coverage remains on the TODO; no claim is made that all engine bugs are known.
+
+
+## 2026-09-15: CFG-PRESETS-002 — preset activation
+
+User report: Apply was unclear and graphics presets could not be loaded intuitively.
+OpenAI Codex diagnosed and fixed the native browser: Enter previously only previewed
+the focused file. Moving to Apply could preview other rows along the way; leaving
+the browser then cancelled the preview. Enter or a click now commits the focused
+valid preset and returns to Graphics. F3 keeps the preview without moving focus;
+Escape cancels uncommitted changes. Empty/invalid confirmation cannot report success.
+Pending video changes still require F5 after loading, with an on-screen reminder.
+
+Patch 24 records the implementation separately from patch 23. Debug (800x600) and
+Release (640x480) tests exercise native Enter, mouse down/up, arrows and F3, validate
+all 170 preset values after menu exit, and check cancel/invalid-file behavior plus
+audio/binding isolation. The existing Release save/backup/scope/restart regression
+also passes. See provenance/preset-activation-validation.json for binary/source
+hashes and limitations. Earlier unified-menu evidence describes the preceding build.
+
+
+## CFG-PERSIST-001 — Reported slider changes absent from saved configuration
+
+2026-09-15, user report; investigation by OpenAI Codex. The user increased world
+edge visibility using sliders, but the configuration saved at 20:20 local time
+still contains r_cv_edgestrength 0.4 and r_cv_edgewidth 1.4, identical to Balanced.
+The intended replacement values and the exact interaction sequence are unknown.
+Do not interpret an unchanged file as evidence that the user's changes succeeded.
+
+Not reproduced in isolated Release Vulkan fixtures: world-edge-savequit changes
+opacity/width through native keyboard widget events to 0.5/1.5, closes the menu
+and verifies those values in the configuration written by normal quit.
+world-edge-mouse-restart-quit uses native mouse down/up events to set 0.8/2,
+restarts video with F5, changes tabs, closes the menu and verifies quit saving.
+Both exit normally without Vulkan validation errors. These checks do not explain
+the user's session; no persistence fix is claimed. Capture values immediately
+after the user's adjustment and compare before/after menu exit and config save.
+The r_cv_worldedge value is a palette index, not outline strength.
+
+Follow-up at 20:34 on 2026-09-15: the user saved again; opacity 0.3 and width 2.2 are now present in config.cfg and were packaged into Balanced (CFG-BALANCED-002). The earlier missing-change cause remains unconfirmed.

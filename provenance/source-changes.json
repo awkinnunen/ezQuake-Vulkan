@@ -398,5 +398,54 @@
       "src/vk_shadows.c"
     ],
     "origin": "OpenAI Codex: preserve baked world lighting by excluding already baked static world occluders from map-light mode 1; retain entity shadows and full world occlusion for dynamic/realtime lights. User-reported DM6 movement/radius regression. Upstream authorship retained."
+  },
+  {
+    "id": "MENU-UNIFY-001 / CFG-PRESETS-001 / INPUT-003",
+    "date": "2026-09-15",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/competitive_visuals.c",
+      "src/graphics_menu.c",
+      "src/graphics_menu.h",
+      "src/menu.c",
+      "src/menu_ingame.c",
+      "src/menu_ingame.h",
+      "src/menu_local.c",
+      "src/menu_local.h",
+      "src/menu_options.c",
+      "src/settings_page.c",
+      "src/settings_page.h"
+    ],
+    "origin": "OpenAI Codex: unify native graphics widgets and declarative category presets, preview/apply/cancel and safe save; native Local Arena setup and capability-aware local/online KTX bot actions; WASD default and SDFE alternative. User-directed UI and preset requirements. Upstream authorship retained."
+  },
+  {
+    "id": "CFG-PRESETS-002",
+    "date": "2026-09-15",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/graphics_menu.c"
+    ],
+    "origin": "OpenAI Codex: fix user-reported graphics preset activation. Enter/click commits the focused preset; F3 keeps a preview; reject empty/invalid confirmation; clarify native help and add developer mouse event coverage. Original ezQuake widgets retained."
+  },
+  {
+    "id": "INPUT-004",
+    "date": "2026-09-15",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/menu_options.c"
+    ],
+    "origin": "OpenAI Codex, user-directed: add nQuake keyboard choice and rename custom layouts Quick WASD/Quick ESDF; preserve old command spellings; detach only the Quick weapon-change hook when selecting nQuake; developer native Controls event tests. nQuake binding/alias data retains separate nQuake attribution."
+  },
+  {
+    "id": "DIST-001",
+    "date": "2026-09-15",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/config_manager.c",
+      "src/config_manager.h",
+      "src/host.c"
+    ],
+    "origin": "OpenAI Codex, user-directed Windows test distribution: optional -ezv-first-run default layer before the existing user configuration chain, repeated after startup resets only; ordinary startup and config/autoexec files remain unchanged. Packaging, notices, regression tests and attribution accompany this source change."
   }
 ]

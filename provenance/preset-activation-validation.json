@@ -1,0 +1,45 @@
+{
+  "id": "CFG-PRESETS-002",
+  "date": "2026-09-15",
+  "author": "OpenAI Codex",
+  "requirement": "User reported that graphics presets could not be loaded through Apply.",
+  "sourceSHA256": "e8dfff370ac6af38d8d4674d324761e592dac4185f75670d99dbe3a46a756c00",
+  "executableSHA256": {
+    "Debug": "1c5e090103c7515ac2bfa93380f53f5cdfb83d10b644d6ce23c94f980c31802b",
+    "Release": "0c714439d37571da527bf50adf5fe151ef74374116a9901470b5afe944b8bb27"
+  },
+  "fixtures": [
+    {
+      "label": "preset-activation-debug",
+      "configuration": "Debug",
+      "verifier": "Verify-PresetActivation.py",
+      "consoleSHA256": "01d9f3650f65a3b5024a2ce0b632bc98787e828a35dab38ff336250e5c6480ab"
+    },
+    {
+      "label": "preset-activation-release",
+      "configuration": "Release",
+      "verifier": "Verify-PresetActivation.py",
+      "consoleSHA256": "360390a06929f790d37e15f844bb57d96e611911a8bd06ac4fe3ca9f825beb2b"
+    },
+    {
+      "label": "preset-activation-regression",
+      "configuration": "Release",
+      "verifier": "Verify-UnifiedGraphics.py",
+      "consoleSHA256": "d1fe8f6a0bbba9e37a0a460754a5b0ea5304cc203a185b4ec104953924126405"
+    }
+  ],
+  "coverage": [
+    "Native Enter, mouse down/up, arrow navigation and F3 activate the intended preset.",
+    "Menu exit retains committed values; Escape restores the preview baseline.",
+    "Empty/invalid preview confirmation does not close the browser or report success.",
+    "All 170 graphics values match loaded presets; audio and bindings remain unchanged.",
+    "Existing preview/scope/factory/save/overwrite/backup/restart and control-layout regression passed.",
+    "640x480 screenshot inspected: focused preset and activation help are readable."
+  ],
+  "limits": [
+    "Windows AMD integrated Vulkan raster only; no RTX or other GPU validation.",
+    "Incremental MSVC Debug/Release build of graphics_menu.c and relink; no clean rebuild.",
+    "Developer fixture injects events into native menu handlers; no physical input automation.",
+    "No gameplay/rendering implementation changes; no new long-session or performance claim."
+  ]
+}

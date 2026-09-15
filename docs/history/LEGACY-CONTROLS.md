@@ -144,3 +144,45 @@ the WASD letters. A final literal binding block resolves empty-key collisions
 and keeps the config-browser preview accurate. New profile packaging/remapping:
 OpenAI Codex, 2026-09-13, at user request; inherited script authorship is unchanged.
 Exact source/output hashes and mapping: private-wasd-profile.json.
+
+
+## INPUT-003: WASD default, SDFE alternative (2026-09-15)
+
+The user selected WASD as default. SDFE is the alternative name for the original
+E-forward/D-back/S-left/F-right layout (previously called ESDF in these notes).
+Both are available in native Controls and as portable modules. Switching them
+also moves weapon/rocket-jump aliases and communication bindings; graphics presets
+leave controls untouched. Packaging and migration: OpenAI Codex. The active private
+configuration is backed up before installing the WASD overlay.
+
+
+## INPUT-004 — nQuake, Quick WASD and Quick ESDF (2026-09-15)
+
+At the user's request, Controls now offers Quick WASD (default), Quick ESDF and
+nQuake. The old SDFE label meant the same E-forward/D-back/S-left/F-right layout;
+its displayed name is now Quick ESDF. Commands are keyboard_preset quick-wasd,
+keyboard_preset quick-esdf and keyboard_preset nquake. Existing wasd/sdfe commands
+and ezv-wasd.cfg/ezv-sdfe.cfg filenames remain compatible; esdf is also accepted.
+
+nQuake uses 102 bind declarations and 20 helper aliases extracted from the cached
+official distribution's non-gpl.zip (qw/nquake_default.cfg and qw/autoexec.cfg).
+Original bindings/aliases: nQuake contributors. Quick behavior: the user's legacy
+FuhQuake setup, with earlier snippet authors unknown. Selection code, extraction,
+packaging and tests: OpenAI Codex. Exact source hashes are recorded in
+provenance/keyboard-presets.json. No claim of new authorship over upstream aliases.
+
+nQuake explicitly replaces all bindings, including otherwise unused keys. WASD
+moves; Mouse 1 attacks with the current weapon; Mouse 2 selects lightning; E/Q
+select rocket/grenade; Mouse 4/5 select nailgun/shotgun preferences. Team, timer,
+demo and volume keys retain their original commands. The loader removes only the
+Quick-owned f_weaponchange hook; other hooks survive. A Quick-hidden crosshair
+is made visible when that hook is detached. Existing crosshair appearance is
+otherwise retained. Quick layouts retain their weapon, jump and crosshair aliases.
+
+Selection leaves the 170 graphics values, sensitivity and audio values unchanged.
+The user's config.cfg and autoexec.cfg were neither rewritten nor executed by the
+installation step. No automatic startup-load policy was added in this change.
+Debug/Release fixtures verify native nQuake/Quick ESDF menu activation, Quick WASD,
+legacy command compatibility, exact nQuake binding restoration across repeated
+switches, timer aliases, graphics/input isolation and unrelated alias preservation.
+The native Controls screen was inspected at 640x480. See the provenance record.

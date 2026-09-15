@@ -50,73 +50,36 @@ These are investigations, not a claim that ordinary gameplay is broken.
 - HIST-VISUAL-001: old water/skywind/muzzleflash/luma/outline differences are
   reference observations. OpenGL/Vulkan appearance matching is deferred by the user.
 
-## Menu consistency and usability (MENU-UNIFY-001)
+## Unified menus and graphics presets
 
-Requested by the user, 2026-09-14; task breakdown by OpenAI Codex. Planned work,
-not implemented behavior. Coordinate this with CFG-PRESETS-001 below.
+MENU-UNIFY-001 / CFG-PRESETS-001 / INPUT-003 implemented on 2026-09-15 by
+OpenAI Codex at the user's request. See [UNIFIED-MENUS.md](UNIFIED-MENUS.md).
 
-- [ ] Inventory original ezQuake, Competitive Visuals, new graphics, Local Arena
-  and KTX menus; propose one navigation structure with clear ownership of each
-  setting/action and remove redundant routes where they add confusion.
-- [ ] Use shared menu widgets, fonts, spacing, selection/focus styling, sliders,
-  toggles and keyboard/mouse navigation. New graphics pages should look and behave
-  like the rest of the game menus; retain the established Quake visual character.
-- [ ] Integrate relevant KTX match/mode/bot controls into native game menus and
-  assign them by lifecycle: Local Arena owns preparing and starting a new game
-  (map, mode, initial rules and starting bot setup); the in-game menu owns actions
-  on the running match (including adding/removing bots and other available match
-  management). Local Arena must not remain the destination for running-match
-  administration. Reflect actual server state and distinguish local
-  setup from actions available on a connected server; preserve underlying KTX
-  behavior and account for server capabilities rather than assuming all servers
-  support the same controls.
-- [ ] In-game Escape menu: place running-match bot management in this menu,
-  without routing through the main menu or Local Arena. User example: adding a
-  bot currently requires that detour. Startup and in-game menus have distinct
-  responsibilities but shared styling/widgets. Reuse the underlying bot actions
-  and preserve the active match. Acceptance: while playing, Escape -> Bots ->
-  Add bot -> return to play, with no Local Arena/main-menu visit or match restart.
-- [ ] Apply consistent contextual help, units/ranges, dependency grouping,
-  disabled-state explanations and restart indicators across all settings pages.
-  Show changed values and consistent back/apply/reset actions where appropriate.
-- [ ] Review common flows with keyboard and mouse: find an effect, change a
-  binding, choose a game mode, add bots and return to play. Check readable layouts
-  at multiple resolutions/UI scales and preserve existing config/console access.
+- [x] Native graphics widgets and contextual help; seven categories integrate
+  original ezQuake controls, Competitive Visuals and new Vulkan effects.
+- [x] Remove duplicate image controls from System. Show disabled dependencies
+  and pending video changes; make legacy menu commands open the native Graphics UI.
+- [x] Graphics CFG list, live highlight preview, Apply/Cancel, category scope,
+  factory reset preview, Save and Save As with recoverable backups.
+- [x] Validate declarative presets before applying; never execute scripts,
+  bindings, map changes or server commands while previewing graphics.
+- [x] Complete Balanced, Ultra competitive and Athmospheric presets. Balanced
+  preserves the user's 170 current graphics values; alternatives are Codex tuning.
+- [x] WASD default and SDFE alternative in Controls, including the user's weapon
+  aliases and nQuake communication keys, independently of graphics selection.
+- [x] Native Local Arena owns new-game setup/start; native in-game Bots handles
+  current-match requests without leaving for the main menu. KTX availability uses
+  server-advertised capability and works over an ordinary remote client connection.
+- [x] Preserve explicit legacy full-config import and key-map preview.
+- [ ] Extend category preset editing to HUD/audio and richer control profiles.
+  Those categories currently retain their existing settings and full-config saving.
+- [ ] Per-bot/team rosters, navigation-aware map filtering, more KTX administration.
+- [ ] Broader manual keyboard/mouse usability sessions, UI scales/localization and
+  additional third-party server policies. Automated cases do not cover every flow.
 
-## Menu-aligned config presets (CFG-PRESETS-001)
-
-Design direction: a managed CFG file represents a named preset for a settings
-category; menu categories and preset categories share the same ownership map.
-Provisional groups are Graphics (including Competitive Visuals), Controls, HUD,
-Audio and Local Game/KTX. Final grouping follows the agreed menu structure;
-not every submenu needs a separate file.
-
-- [ ] Define category ownership and a directory/naming convention. Category
-  presets must only change their own settings: selecting graphics must retain
-  bindings, communication aliases, sound and game rules. Allow a complete profile
-  to compose selected category presets with documented load order/precedence.
-- [ ] Add the same preset browser to each relevant menu: browse named CFG presets,
-  show current selection and unsaved modifications, Load, Save, Save As and Reset.
-  Save only the owning category; preserve shipped presets and existing user files
-  when creating variants. Define startup and save-on-exit behavior for mixed presets.
-- [ ] Support live browsing/preview in the game scene or suitable category preview,
-  with Apply/Cancel restoring the exact pre-preview category state. Switching
-  between presets must start from a defined category baseline so omitted settings
-  do not leak from the previous preview. Display effective changes and pending
-  video restarts; do not restart the renderer on every selection movement.
-- [ ] Separate declarative managed presets from legacy CFG scripts. Keep existing
-  explicit full-config loading/import, ESDF/WASD profiles, aliases and includes
-  compatible. Do not execute arbitrary aliases, connection/map commands or KTX
-  match actions merely by highlighting a preset. Preview game-rule values locally;
-  server-changing actions retain an explicit apply/start action.
-- [ ] Verify category isolation, live switching/cancel, load/save round trips,
-  composed profile startup, legacy import, restart-required values and unsaved
-  changes. Add a migration plan with recoverable originals before changing the
-  installed config layout or save-on-exit behavior.
-
-The existing CFG browser previews literal key bindings and loads full configs;
-it does not yet implement live preset application or category-only saving.
-See [CONFIG-BROWSER.md](CONFIG-BROWSER.md) for current behavior.
+Graphics presets live under ezquake/presets/graphics; shipped files are read-only
+in its builtin subdirectory. Old competitive-only profiles remain importable.
+The full-config browser remains explicit and does not execute includes for preview.
 
 ## Renderer and other UI features
 
@@ -149,7 +112,7 @@ See [CONFIG-BROWSER.md](CONFIG-BROWSER.md) for current behavior.
   Transparent transmission and reconstruction of baked indirect light remain
   outside the raster-shadow approximation; see DYNAMIC-SHADOWS.md.
 - [ ] TEMPORAL: establish history/reset handling before temporal visual effects.
-- [ ] SHAFT-UI: dedicated lightning color, size and sparks menu controls.
+- [x] SHAFT-UI: lightning colour, size and sparks controls are under Graphics / Particles and effects.
 - [ ] CFG-PREVIEW: optional Finnish physical-key layout and include-script handling.
   The current browser intentionally previews literal bindings without execution.
 - [ ] ARENA-UI: team rosters, per-bot controls and navigation-aware map filtering.
@@ -200,3 +163,13 @@ There is no playable RT renderer yet. See
 Earlier completed engine, menu, gameplay, config and public-source work is in
 the history archive and [DEVELOPMENT.md](DEVELOPMENT.md). Current performance:
 [RENDERER-PERFORMANCE-OPTIMIZED.md](RENDERER-PERFORMANCE-OPTIMIZED.md).
+
+- [x] CFG-PRESETS-002: load the focused graphics preset with Enter/click; F3 keeps preview, Escape cancels. Native input and save regression verified in Debug/Release.
+
+- [ ] CFG-PERSIST-001: investigate user-reported world-edge slider changes missing from saved config; isolated native keyboard/mouse, F5 and quit-save checks pass. Capture the failing interaction sequence.
+
+- [x] CFG-BALANCED-002: refresh Balanced from the user configuration saved at 20:34; four graphics changes, all 170 values verified by Release preset activation tests.
+
+- [x] INPUT-004: nQuake keyboard preset plus Quick WASD/Quick ESDF names; native menu and switch-isolation tests pass in Debug/Release.
+
+- [x] DIST-001: Windows x64 test package, config-preserving first-run defaults, diagnostics, dependency notices and exact source identity.

@@ -584,7 +584,7 @@ all upstream, earlier Codex and concurrently completed Arena contributions.
 
 OpenAI Codex performed the import, inspections, test fixture and documentation
 under explicit user direction in the separate asset-import task. The user
-provided E:\eQuake, flagged possible modifications and asked to preserve nQuake
+provided a private legacy Quake installation, flagged possible modifications and asked to preserve nQuake
 improvements. Imported id1/pak1.pak and the maps-only pak2.pak; imported the
 12-entry pak3 pak.bak as destination pak3.pak after verifying every entry against
 the installed shareware PAK. The active old replacement-model/sound PAKs and
@@ -1003,3 +1003,113 @@ distinct. Planning documentation only; no menu implementation changed.
 ## SHADOW-001 — dynamic raster point-light shadows
 
 Implemented by OpenAI Codex at the user's request, 2026-09-14. Added world, moving BSP and interpolated alias occluders, selected-light shader illumination, a fence-owned depth atlas, bounded selection/caster budgets and seven live Effects controls. Project profiles enable one 256-pixel light. See DYNAMIC-SHADOWS.md for scope and provenance; RT work remains paused.
+
+
+## 2026-09-15: native menus and category presets
+
+User direction: unify graphics/menu management, split Local Arena setup from
+in-game actions including online play, preserve current graphics as Balanced,
+provide Ultra competitive and Athmospheric, make WASD default with SDFE optional.
+OpenAI Codex implemented MENU-UNIFY-001 / CFG-PRESETS-001 / INPUT-003 in patch 23.
+
+The graphics registry imports native ezQuake controls and the existing CV registry,
+plus registered particle controls. Its 170-value allowlist drives category display,
+transactional preview and safe CFG save/load. Native widgets now support contextual
+dependency policies. Video feedback includes HDR/MSAA, texture reload settings and
+Vulkan latency-extension activation. Preview cancellation restores values rather
+than issuing console scripts. Existing full-config saving is retained.
+
+Local Arena now prepares map/mode/rules and initial bots. The in-game KTX submenu
+uses the server's advertised botcmd capability for local or remote connections,
+while server-side permissions and map support remain authoritative. Controls
+exposes WASD/SDFE and the user's namespaced weapon actions; graphics never changes
+bindings. New alternative presets are Codex tuning, not inherited vkQuake-RT work.
+See UNIFIED-MENUS.md and provenance/unified-menus-validation.json for evidence.
+
+
+## 2026-09-15: CFG-PRESETS-002 — preset activation
+
+User report: Apply was unclear and graphics presets could not be loaded intuitively.
+OpenAI Codex diagnosed and fixed the native browser: Enter previously only previewed
+the focused file. Moving to Apply could preview other rows along the way; leaving
+the browser then cancelled the preview. Enter or a click now commits the focused
+valid preset and returns to Graphics. F3 keeps the preview without moving focus;
+Escape cancels uncommitted changes. Empty/invalid confirmation cannot report success.
+Pending video changes still require F5 after loading, with an on-screen reminder.
+
+Patch 24 records the implementation separately from patch 23. Debug (800x600) and
+Release (640x480) tests exercise native Enter, mouse down/up, arrows and F3, validate
+all 170 preset values after menu exit, and check cancel/invalid-file behavior plus
+audio/binding isolation. The existing Release save/backup/scope/restart regression
+also passes. See provenance/preset-activation-validation.json for binary/source
+hashes and limitations. Earlier unified-menu evidence describes the preceding build.
+
+
+## CFG-BALANCED-002 — saved user tuning, 2026-09-15 20:34
+
+The user's newly saved configuration updates Balanced: world edge width 1.4 to
+2.2, world edge opacity 0.4 to 0.3, midtone response 1 to 0.825, and gl_gamma 0.8
+to 0.7. Tuning: user. Extraction, packaging and verification: OpenAI Codex.
+Only these four of the 170 graphics fields changed; the installed and portable
+Balanced copies match. The previous Balanced file is backed up privately.
+
+Release fixture balanced-update-2034 validates all 170 values through native
+preset activation, cancellation, invalid-file handling and audio/binding isolation.
+See provenance/balanced-update-2034.json for hashes and the exact delta. Earlier
+preset evidence describes the preceding Balanced revision. This successful save
+does not establish the cause of CFG-PERSIST-001's earlier missing changes.
+
+
+## INPUT-004 — nQuake, Quick WASD and Quick ESDF (2026-09-15)
+
+At the user's request, Controls now offers Quick WASD (default), Quick ESDF and
+nQuake. The old SDFE label meant the same E-forward/D-back/S-left/F-right layout;
+its displayed name is now Quick ESDF. Commands are keyboard_preset quick-wasd,
+keyboard_preset quick-esdf and keyboard_preset nquake. Existing wasd/sdfe commands
+and ezv-wasd.cfg/ezv-sdfe.cfg filenames remain compatible; esdf is also accepted.
+
+nQuake uses 102 bind declarations and 20 helper aliases extracted from the cached
+official distribution's non-gpl.zip (qw/nquake_default.cfg and qw/autoexec.cfg).
+Original bindings/aliases: nQuake contributors. Quick behavior: the user's legacy
+FuhQuake setup, with earlier snippet authors unknown. Selection code, extraction,
+packaging and tests: OpenAI Codex. Exact source hashes are recorded in
+provenance/keyboard-presets.json. No claim of new authorship over upstream aliases.
+
+nQuake explicitly replaces all bindings, including otherwise unused keys. WASD
+moves; Mouse 1 attacks with the current weapon; Mouse 2 selects lightning; E/Q
+select rocket/grenade; Mouse 4/5 select nailgun/shotgun preferences. Team, timer,
+demo and volume keys retain their original commands. The loader removes only the
+Quick-owned f_weaponchange hook; other hooks survive. A Quick-hidden crosshair
+is made visible when that hook is detached. Existing crosshair appearance is
+otherwise retained. Quick layouts retain their weapon, jump and crosshair aliases.
+
+Selection leaves the 170 graphics values, sensitivity and audio values unchanged.
+The user's config.cfg and autoexec.cfg were neither rewritten nor executed by the
+installation step. No automatic startup-load policy was added in this change.
+Debug/Release fixtures verify native nQuake/Quick ESDF menu activation, Quick WASD,
+legacy command compatibility, exact nQuake binding restoration across repeated
+switches, timer aliases, graphics/input isolation and unrelated alias preservation.
+The native Controls screen was inspected at 640x480. See the provenance record.
+
+
+## DIST-001 — Windows x64 test distribution, 2026-09-15
+
+User requested a deploy package and GitHub publication. OpenAI Codex packaged the
+Release Vulkan raster client with static runtime libraries, all dependency copyright
+notices, portable graphics/keyboard presets, setup/diagnostic launchers, an exact
+source-commit manifest and a matching source ZIP. Game assets, private configurations,
+KTX binaries, RT harnesses and debug symbols are excluded. Requires existing nQuake
+data. Quick WASD/Quick ESDF/nQuake and the updated Balanced profile are included.
+
+A launcher-managed first-run flag loads ezv-dist-first-run.cfg before the existing
+config chain, including after startup resets. User config and autoexec values win;
+normal launches are unchanged. Setup preserves existing files and installs missing
+namespaced profiles. Normal engine saving retains its existing cfg_save_onquit policy.
+The distribution marker is written only after exit code 0. Diagnose.cmd collects
+qconsole.log and package identity. No autoexec or full user config is rewritten by setup.
+
+Patch 26 records the startup hook. Isolated packaged-binary tests cover fresh,
+existing-config/autoexec, and normal starts, all 170 graphics values and repeated
+setup preservation. Debug/Release compilation and source patch replay pass. See
+provenance/distribution-validation.json. Earlier records describe earlier binaries.
+The public test is version 0.1.0-beta.1; no RTX functionality is claimed.

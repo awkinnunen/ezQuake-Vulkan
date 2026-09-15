@@ -6,6 +6,7 @@
 extern void M_Print_GetPoint(int cx, int cy, int *rx, int *ry, const char *str, qbool red);
 #include "rulesets.h"
 #include "competitive_visuals.h"
+#include "graphics_menu.h"
 #ifdef RENDERER_OPTION_VULKAN
 #include <vulkan/vulkan.h>
 #include "vk_shadows.h"
@@ -49,7 +50,7 @@ static qbool videoApplied;
 static int appliedMSAA, actualMSAA;
 static int appliedHDR, actualHDR;
 void CV_HDRVideoApplied(int requested, int actual) { appliedHDR=requested; actualHDR=actual; }
-void CV_VideoApplied(int requested, int actual) { videoApplied=true; appliedMSAA=requested; actualMSAA=actual; }
+void CV_VideoApplied(int requested, int actual) { videoApplied=true; appliedMSAA=requested; actualMSAA=actual; Graphics_VideoApplied(); }
 static qbool RestartPending(void) {
  cvar_t *v=Cvar_Find("vid_framebuffer_multisample");
  return R_UseVulkan() && videoApplied && ((v && v->integer!=appliedMSAA) || (int)CV_Value(CV_hdr)!=appliedHDR);
@@ -355,8 +356,8 @@ static int ViewFirst(void) {
  while(cursor>=ViewEnd(first)) first=ViewEnd(first);
  return first;
 }
-void CV_Open(void) { general=false; page=0; cursor=0; dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
-void CV_OpenEffects(void) { general=true; page=4; cursor=0; dragging=-1; M_EnterMenu(m_competitive); BuildRows(); }
+void CV_Open(void) { Graphics_OpenClarity(); }
+void CV_OpenEffects(void) { Graphics_Open(); }
 static const char *Help(int index) {
  if(index==CV_RESTART_ROW) return "Apply pending graphics changes by restarting video. The game stays loaded.";
  return index<CV_COUNT?opts[index].help:existing[index-CV_COUNT].help;
@@ -684,9 +685,36 @@ void CV_InitSettings(void) {
 }
 void CV_Init(void) {
  CV_InitSettings();
- Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
- Cmd_AddCommand("menu_visual_effects",CV_OpenEffects);
+ Cmd_AddCommand("menu_competitive",Graphics_OpenClarity); Cmd_AddCommand("cv",Command);
+ Cmd_AddCommand("menu_visual_effects",Graphics_Open);
  if(IsDeveloperMode() || COM_FindParm("-shadow-benchmark")) Cmd_AddCommand("dev_competitive",Developer);
 }
 
 
+
+/* Native graphics metadata uses the same cvars, bounds and dependency rules. */
+qbool CV_RestartPending(void) { return RestartPending(); }
+const char *CV_NativeUnavailable(const setting *s) {
+ int i;if(!s->cvar)return NULL;
+ for(i=0;i<CV_TOTAL;++i)if(Var(i)==s->cvar)return Unavailable(i);
+ return NULL;
+}
+int CV_NativeSettings(setting *out,int capacity) {
+ static char labels[CV_TOTAL][64];
+ static const char *filter[]={"Nearest","GL_NEAREST","Linear","GL_LINEAR","Nearest mip","GL_NEAREST_MIPMAP_NEAREST","Bilinear","GL_LINEAR_MIPMAP_NEAREST","Nearest blend","GL_NEAREST_MIPMAP_LINEAR","Trilinear","GL_LINEAR_MIPMAP_LINEAR"};
+ static const char *msaa[]={"Off","0","2x","2","4x","4","8x","8"};
+ static const char *light[]={"Original","Gradient","Soft Cel"},*tone[]={"Original","Soft shoulder","Filmic"},*ao[]={"Contact","SSAO"},*bloom[]={"Bright pixels","Emissive"},*map[]={"Baked","Baked with shadows","Realtime"};
+ int i,n=0,last=-1;
+ for(i=0;i<sizeof(layout)/sizeof(layout[0]);++i){int index=layout[i].index;setting *s;float lo,hi,step;
+  if(index==CV_RESTART_ROW||!Var(index))continue;
+  if(last!=layout[i].group){if(n>=capacity)break;last=layout[i].group;memset(&out[n],0,sizeof(*out));out[n].type=stt_separator;out[n++].label=groups[last];}
+  if(n>=capacity)break;s=&out[n++];memset(s,0,sizeof(*s));Bounds(index,&lo,&hi,&step);
+  snprintf(labels[index],sizeof(labels[index]),"%s%s",layout[i].depth?"  ":"",index<CV_COUNT?opts[index].label:existing[index-CV_COUNT].label);
+  s->label=labels[index];s->cvar=Var(index);s->description=Help(index);s->min=lo;s->max=hi;s->step=step;s->type=Toggle(index)?stt_bool:stt_num;
+  if(index==CV_light)s->named_ints=light;if(index==CV_tonemap)s->named_ints=tone;if(index==CV_aomode)s->named_ints=ao;if(index==CV_bloomsource)s->named_ints=bloom;if(index==CV_maplights)s->named_ints=map;
+  if(s->named_ints)s->type=stt_named;
+  if(index==EXT(7)){s->type=stt_enum;s->named_ints=msaa;s->min=0;s->max=3;s->step=1;}
+  if(index==EXT(14)){s->type=stt_enum;s->named_ints=filter;s->min=0;s->max=5;s->step=1;}
+ }
+ return n;
+}

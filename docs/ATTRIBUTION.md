@@ -1,3 +1,10 @@
+> Updated 2026-09-15: the current native menu/preset behavior is documented in
+> [Unified menus](history/UNIFIED-MENUS.md). Graphics presets contain 170 values;
+> Quick WASD is default; Quick ESDF and nQuake are alternatives. Earlier menu coordinates and the
+> 53-setting profile counts below are historical. Use the current
+> [TODO](history/TIBAZERA-TODO.md) and
+> [validation evidence](../provenance/unified-menus-validation.json).
+
 # Attribution and provenance
 
 ## Raster follow-up and latest defaults (2026-09-15)
@@ -91,3 +98,44 @@ notice and API; one comment dash was normalized to ASCII for portable patches.
 RTGL1 changes are supplied as attributed patches against the pinned upstream
 source. Existing RTGL1 code and shaders retain their original authorship.
 This foundation is not a completed ezQuake RT gameplay renderer.
+
+
+## 2026-09-15: CFG-PRESETS-002 — preset activation
+
+User report: Apply was unclear and graphics presets could not be loaded intuitively.
+OpenAI Codex diagnosed and fixed the native browser: Enter previously only previewed
+the focused file. Moving to Apply could preview other rows along the way; leaving
+the browser then cancelled the preview. Enter or a click now commits the focused
+valid preset and returns to Graphics. F3 keeps the preview without moving focus;
+Escape cancels uncommitted changes. Empty/invalid confirmation cannot report success.
+Pending video changes still require F5 after loading, with an on-screen reminder.
+
+Patch 24 records the implementation separately from patch 23. Debug (800x600) and
+Release (640x480) tests exercise native Enter, mouse down/up, arrows and F3, validate
+all 170 preset values after menu exit, and check cancel/invalid-file behavior plus
+audio/binding isolation. The existing Release save/backup/scope/restart regression
+also passes. See provenance/preset-activation-validation.json for binary/source
+hashes and limitations. Earlier unified-menu evidence describes the preceding build.
+
+
+## DIST-001 — Windows x64 test distribution, 2026-09-15
+
+User requested a deploy package and GitHub publication. OpenAI Codex packaged the
+Release Vulkan raster client with static runtime libraries, all dependency copyright
+notices, portable graphics/keyboard presets, setup/diagnostic launchers, an exact
+source-commit manifest and a matching source ZIP. Game assets, private configurations,
+KTX binaries, RT harnesses and debug symbols are excluded. Requires existing nQuake
+data. Quick WASD/Quick ESDF/nQuake and the updated Balanced profile are included.
+
+A launcher-managed first-run flag loads ezv-dist-first-run.cfg before the existing
+config chain, including after startup resets. User config and autoexec values win;
+normal launches are unchanged. Setup preserves existing files and installs missing
+namespaced profiles. Normal engine saving retains its existing cfg_save_onquit policy.
+The distribution marker is written only after exit code 0. Diagnose.cmd collects
+qconsole.log and package identity. No autoexec or full user config is rewritten by setup.
+
+Patch 26 records the startup hook. Isolated packaged-binary tests cover fresh,
+existing-config/autoexec, and normal starts, all 170 graphics values and repeated
+setup preservation. Debug/Release compilation and source patch replay pass. See
+provenance/distribution-validation.json. Earlier records describe earlier binaries.
+The public test is version 0.1.0-beta.1; no RTX functionality is claimed.

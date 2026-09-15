@@ -46,6 +46,11 @@ void Settings_Draw(int x, int y, int w, int h, settings_page* page);
 // optonal call at the moment of first display
 void Settings_OnShow(settings_page *tab);
 
+/* MENU-UNIFY-001: policies preserve one set of native widgets across menus. */
+typedef const char *(*settings_policy_f)(const setting *s);
+void Settings_AddPolicy(settings_policy_f policy);
+const char *Settings_Unavailable(const setting *s);
+
 // key press handler
 qbool Settings_Key(settings_page* page, int key, wchar unichar);
 

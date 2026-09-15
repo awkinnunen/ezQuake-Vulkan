@@ -27,6 +27,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "quakedef.h"
 #include "settings.h"
+#include "settings_page.h"
 #include "Ctrl.h"
 #include "Ctrl_EditBox.h"
 #include "EX_FileList.h"
@@ -54,6 +55,12 @@ filelist_t skins_filelist;
 #define ENUM_NAME(setting_pointer,position) (setting_pointer->named_ints[position*2])
 #define ENUM_VALUE(setting_pointer,position) (setting_pointer->named_ints[position*2+1])
 #define ENUM_ITEM_NOT_FOUND	-1
+
+/* MENU-UNIFY-001, OpenAI Codex: optional row policies, shared by native menus. */
+static settings_policy_f policies[8];
+static int policyCount;
+void Settings_AddPolicy(settings_policy_f policy) { int i;for(i=0;i<policyCount;++i)if(policies[i]==policy)return;if(policyCount<8)policies[policyCount++]=policy; }
+const char *Settings_Unavailable(const setting *s) { int i;for(i=0;i<policyCount;++i){const char *why=policies[i](s);if(why)return why;}return NULL; }
 
 static float SliderPos(float min, float max, float val) { return (val-min)/(max-min); }
 
@@ -100,8 +107,13 @@ static int STHeight(setting* s) {
 
 static int Setting_PrintLabel(int x, int y, int w, const char *l, qbool active)
 {
-	int startpos = x + w/2 - min(strlen(l), w/2)*LETW;
-	UI_Print(startpos, y, l, (int) active);
+	char label[256];
+	int chars = min((int)sizeof(label)-1,max(1,w/(2*LETW)));
+	int startpos;
+	snprintf(label,sizeof(label),"%.*s",chars,l);
+	if((int)strlen(l)>chars&&chars>3)strcpy(label+chars-3,"...");
+	startpos = x + w/2 - strlen(label)*LETW;
+	UI_Print(startpos, y, label, (int) active);
 	x = w/2 + x;
 	// if (active) UI_DrawCharacter(x, y, FLASHINGARROW());
 	return x + LETW*2;
@@ -271,6 +283,7 @@ static void Setting_IncreaseEnum(setting* set, int step)
 }
 
 static void Setting_Increase(setting* set) {
+	if (Settings_Unavailable(set)) return;
 	float newval;
 
 	switch (set->type) {
@@ -307,6 +320,7 @@ static void Setting_Increase(setting* set) {
 }
 
 static void Setting_Decrease(setting* set) {
+	if (Settings_Unavailable(set)) return;
 	float newval;
 
 	switch (set->type) {
@@ -345,6 +359,7 @@ static void Setting_Decrease(setting* set) {
 
 static void Setting_Reset(setting* set)
 {
+	if (Settings_Unavailable(set)) return;
 	switch (set->type) {
 		case stt_num:
 		case stt_string:
@@ -540,6 +555,9 @@ static int Setting_DrawHelpBox(int x, int y, int w, int h, settings_page* page, 
 			break;
 	}
 
+	if (s->description) helptext=s->description;
+	if (Settings_Unavailable(s)) { snprintf(buf,sizeof(buf),"%s\n%s",Settings_Unavailable(s),s->description?s->description:""); helptext=buf; }
+	if (!*helptext) helptext=s->cvar?s->cvar->name:"Select this action with Enter.";
 	if (full) {
 		// add some lines for wrapped words, just a rough approximation here
 		maxh = (int) ((((double) strlen(helptext) / (w / LETW - 2)) + 2) * 1.33) * LETW;
@@ -622,6 +640,7 @@ static void Setting_Slider_Click(const settings_page *page, const mouse_state_t 
 	p = (ms->x - Slider_Startpos(page->width)) / UI_SliderWidth();
 	p = bound(0, p, 1);
 
+	if (Settings_Unavailable(s)) return;
 	if (s->type != stt_num && s->type != stt_intnum) return;
 
 	vmin = s->min;
@@ -853,7 +872,12 @@ void Settings_Draw(int x, int y, int w, int h, settings_page* tab)
 		}
 	}
 
-	tab->width = w; tab->height = h;
+	{
+		qbool resized = tab->width != w || tab->height != h;
+		tab->width = w; tab->height = h;
+		/* Keep the focused row visible on first draw and after a resize. */
+		if(resized && h > 0) CheckViewpoint(tab);
+	}
 
 	Settings_AdjustScrollBar(tab);
 	if (tab->height < Settings_PageHeight(tab))
@@ -868,6 +892,16 @@ void Settings_Draw(int x, int y, int w, int h, settings_page* tab)
 
 		if (active && set->type != stt_separator) {
 			UI_DrawGrayBox(x, y, w, ch);
+		}
+		if (Settings_Unavailable(set)) {
+			char grey[256],label[128];int chars=max(1,w/(2*LETW));const char *value="";
+			snprintf(label,sizeof(label),"%.*s",min(chars,127),set->label?set->label:"");
+			snprintf(grey,sizeof(grey),"&c777%s&r",label);
+			UI_Print(x+w/2-strlen(label)*LETW/(set->type==stt_action?2:1),y,grey,false);
+			if(set->type==stt_intnum)value=va("%d",*(int*)set->cvar);
+			else if(set->cvar){value=VARSVAL(set->cvar);if(set->type==stt_bool)value=VARFVAL(set->cvar)?"On":"Off";else if(set->type==stt_named)value=set->named_ints[bound(0,(int)VARFVAL(set->cvar),(int)set->max)];}
+			if(set->cvar){snprintf(grey,sizeof(grey),"&c777%.*s&r",max(1,chars-3),value);UI_Print(x+w/2+LETW*2,y,grey,false);}
+			y+=ch;continue;
 		}
 		switch (set->type) {
 			case stt_bool: if (set->cvar) Setting_DrawBool(x, y, w, set, active); break;

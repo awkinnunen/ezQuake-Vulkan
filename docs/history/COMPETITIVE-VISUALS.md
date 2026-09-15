@@ -248,3 +248,13 @@ overlays and palette overrides; it is a style profile, not All Effects.
 ## Dynamic shadows (SHADOW-001)
 
 Thirteen live controls are on the general Visual Effects / Effects page under Light and shadow maps, with prerequisite help and disabled dependent rows. They are independent of Competitive Visuals styling. The existing Shadow level control still means styled-lighting brightness, and Model shadows still means legacy projected shadows. See DYNAMIC-SHADOWS.md.
+
+
+## Native Graphics integration, 2026-09-15
+
+Current navigation is Options > Graphics > Category: Competitive clarity. Bloom,
+HDR and antialiasing are in Image quality; AO and shadow maps in Lighting and
+shadows; legacy particle controls in Particles and effects. All use native widgets,
+contextual help and dependency states. F2 opens the category-aware preset browser.
+Older screenshots/menu coordinates in this document are historical.
+See UNIFIED-MENUS.md and the new runtime regression fixtures.

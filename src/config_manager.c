@@ -772,6 +772,17 @@ void Cfg_ExecuteDefaultConfig(void)
 	}
 }
 
+/* DIST-001: optional first-run defaults are a lower-priority startup layer.
+ * The launcher supplies this flag only until the first successful exit.
+ * Run again after ResetConfigs clears variables/binds, before user configs. */
+void Cfg_ExecuteDistributionDefaults(void)
+{
+	if (!host_initialized && COM_FindParm("-ezv-first-run")) {
+		Cbuf_AddText("exec ezv-dist-first-run.cfg\n");
+		Cbuf_Execute();
+	}
+}
+
 static void ResetConfigs(qbool explicit_reset, qbool read_legacy_configs)
 {
 	vfsfile_t *v;
@@ -786,6 +797,7 @@ static void ResetConfigs(qbool explicit_reset, qbool read_legacy_configs)
 
 	if (read_legacy_configs) {
 		Cbuf_AddText("cl_warncmd 0\n");
+		Cfg_ExecuteDistributionDefaults();
 		Cfg_ExecuteDefaultConfig();
 		Cbuf_Execute();
 		if ((v = FS_OpenVFS("autoexec.cfg", "rb", FS_ANY))) {

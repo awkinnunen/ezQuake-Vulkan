@@ -745,6 +745,7 @@ void Host_Init (int argc, char **argv, int default_memsize)
 	Browser_Init2();
 	ConfigManager_Init();
 	ResetBinds();
+	Cfg_ExecuteDistributionDefaults();
 	Cfg_ExecuteDefaultConfig();
 	Cbuf_Execute();
 

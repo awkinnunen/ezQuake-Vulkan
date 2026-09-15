@@ -1,0 +1,55 @@
+diff --git a/src/menu_options.c b/src/menu_options.c
+index dfe492d..44d15bf 100644
+--- a/src/menu_options.c
++++ b/src/menu_options.c
+@@ -1190,17 +1190,38 @@ setting settview_arr[] = {
+ static void LoadKeyboard(const char *name) {
+  vfsfile_t *f=FS_OpenVFS(va("ezv-%s.cfg",name),"rb",FS_ANY);
+  if(!f){Con_Printf("Keyboard preset missing: ezv-%s.cfg\n",name);return;}VFS_CLOSE(f);
++ /* INPUT-004: stop only our Quick weapon-crosshair hook when choosing nQuake.
++  * Preserve unrelated user hooks and the selected crosshair appearance. */
++ if(!strcmp(name,"nquake")) {
++  char *hook=Cmd_AliasString("f_weaponchange");
++  if(hook&&!strcmp(hook,"legacy_crosshair")) {
++   Cmd_DeleteAlias("f_weaponchange");
++   if(Cvar_Find("crosshair")->value<=0)Cvar_SetByName("crosshair","1");
++  }
++ }
+  /* Release held movement before replacing +/- aliases. */
+- Cbuf_InsertText(va("-forward\n-back\n-moveleft\n-moveright\n-attack\nexec ezv-%s.cfg\n",name));
++ Cbuf_InsertText(va("-forward\n-back\n-moveleft\n-moveright\n-attack\n-jump\nexec ezv-%s.cfg\n",name));
+ }
+ static void KeyboardWASD(void){LoadKeyboard("wasd");}
+ static void KeyboardSDFE(void){LoadKeyboard("sdfe");}
+-static void KeyboardCommand(void){if(!strcasecmp(Cmd_Argv(1),"wasd"))KeyboardWASD();else if(!strcasecmp(Cmd_Argv(1),"sdfe"))KeyboardSDFE();else Con_Printf("keyboard_preset wasd | sdfe\n");}
++static void KeyboardNQuake(void){LoadKeyboard("nquake");}
++static void KeyboardCommand(void){
++ const char *name=Cmd_Argv(1);
++ if(!strcasecmp(name,"quick-wasd")||!strcasecmp(name,"wasd"))KeyboardWASD();
++ else if(!strcasecmp(name,"quick-esdf")||!strcasecmp(name,"esdf")||!strcasecmp(name,"sdfe"))KeyboardSDFE();
++ else if(!strcasecmp(name,"nquake"))KeyboardNQuake();
++ else Con_Printf("keyboard_preset quick-wasd | quick-esdf | nquake\n");
++}
+ static void ControlsOpen(void){M_Menu_Options_f();CTab_SetCurrentId(&options_tab,OPTPG_BINDS);Settings_OnShow(&settbinds);}
++static void ControlsDeveloper(void){
++ if(!strcmp(Cmd_Argv(1),"key"))Settings_Key(&settbinds,Key_StringToKeynum(Cmd_Argv(2)),0);
++ Con_Printf("CONTROLS_FOCUS %s\n",settbinds.settings[settbinds.marked].label);
++}
+ setting settbinds_arr[] = {
+ 	ADDSET_SEPARATOR("Keyboard presets"),
+-	ADDSET_ACTION("WASD (default)",KeyboardWASD,"Load WASD controls, weapon aliases, crosshairs and team communication keys. Replaces letter bindings; graphics stay unchanged."),
+-	ADDSET_ACTION("SDFE",KeyboardSDFE,"Load the layout one column right: E forward, D back, S left, F right. Also moves team communication and rocket-jump bindings."),
++	ADDSET_ACTION("Quick WASD (default)",KeyboardWASD,"Load Quick WASD: weapon-specific mouse firing, rocket-jump aliases and team communication. Replaces letter bindings; graphics stay unchanged."),
++	ADDSET_ACTION("Quick ESDF",KeyboardSDFE,"Load Quick ESDF: E forward, D back, S left, F right. Includes weapon-specific mouse firing, rocket jumps and shifted team communication."),
++	ADDSET_ACTION("nQuake",KeyboardNQuake,"Replace all key bindings with nQuake defaults: WASD, Mouse 1 fires the current weapon, Mouse 2 selects lightning, E/Q select rocket/grenade. Includes team and demo keys; graphics and sensitivity stay unchanged."),
+ 	ADDSET_BIND("Rocket fire","+legacy_rl"),
+ 	ADDSET_BIND("Lightning fire","+legacy_shaft"),
+ 	ADDSET_BIND("Grenade fire","+legacy_gl"),
+@@ -1487,6 +1508,7 @@ void Menu_Options_Init(void) {
+ 	Settings_Page_Init(settplayer, settplayer_arr);
+ 	Settings_Page_Init(settbinds, settbinds_arr);
+ 	Cmd_AddCommand("keyboard_preset",KeyboardCommand);
++	if(IsDeveloperMode())Cmd_AddCommand("dev_controls",ControlsDeveloper);
+ 	Cmd_AddCommand("menu_controls",ControlsOpen);
+ 	Settings_Page_Init(settsystem, settsystem_arr);
+ 	Settings_Page_Init(settconfig, settconfig_arr);

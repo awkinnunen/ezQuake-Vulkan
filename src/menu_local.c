@@ -5,6 +5,8 @@
 #include "menu.h"
 #include "common_draw.h"
 #include "menu_local.h"
+#include "settings.h"
+#include "settings_page.h"
 #ifndef CLIENTONLY
 #include "server.h"
 
@@ -21,7 +23,10 @@ static qbool choosing_map, pending_start;
 static int dm_mode = 3, pending_mode, pending_dm;
 static char pending_map[64];
 static const int mode_dm_defaults[] = {3, 3, 1, 5};
-static menu_window_t window;
+static settings_page arena_page, map_page;
+static setting map_entries[LOCAL_MAPS+1];
+static int initial_bots=1, pending_bots, pending_skill;
+static void ChooseMap(void);
 static char notice[160];
 static const char *modes[] = { "Free for all", "Duel", "2 on 2", "Clan Arena" };
 static const char *mode_commands[] = { "ffa", "1on1", "2on2", "carena" };
@@ -108,9 +113,11 @@ static void Start(void)
     pending_start = true;
     pending_mode = mode;
     pending_dm = dm_mode;
+    pending_bots = initial_bots; pending_skill = bot_skill;
     strlcpy(pending_map, maps[map_index], sizeof(pending_map));
     Cbuf_InsertText(va("map %s\n", maps[map_index]));
     strlcpy(notice, "Starting with selected rules...", sizeof(notice));
+    M_LeaveMenus();
 }
 
 void MLocal_Connected(void)
@@ -118,161 +125,47 @@ void MLocal_Connected(void)
     if (!pending_start) return;
     pending_start = false;
     if (!LocalConnected() || strcmp(sv.mapname, pending_map)) return;
-    Cbuf_InsertText(va("cmd %s\ncmd dmm%d\n", mode_commands[pending_mode], pending_dm));
+    { char commands[1024]; int i;
+      snprintf(commands,sizeof(commands),"cmd %s\ncmd dmm%d\n",mode_commands[pending_mode],pending_dm);
+      for(i=0;i<pending_bots;++i)strlcat(commands,va("cmd botcmd addbot %d\n",pending_skill),sizeof(commands));
+      Cbuf_InsertText(commands); }
     strlcpy(notice, "Selected rules sent. Add bots when ready.", sizeof(notice));
 }
 
-static void Activate(void)
-{
-    if (cursor == 0) { choosing_map = true; return; }
-    if (cursor == 1) { Start(); return; }
-    if (cursor == 3 && !LocalConnected()) {
-        strlcpy(notice, "Deathmatch applies at next local start.", sizeof(notice)); return;
-    }
-    if (cursor == 4) { bot_skill = bot_skill % 20 + 1; return; }
-    if (cursor == 11) { M_LeaveMenu(m_main); return; }
-    if (cursor == 10) {
-        if (LocalServer()) {
-            Host_EndGame();
-            strlcpy(notice, "Local server stopped.", sizeof(notice));
-        } else strlcpy(notice, "No local KTX server to stop.", sizeof(notice));
-        return;
-    }
-    if (!LocalConnected()) {
-        strlcpy(notice, "Start a local game and wait for connection.", sizeof(notice));
-        return;
-    }
-    switch (cursor) {
-    case 2: Cbuf_InsertText(va("cmd %s\ncmd dmm%d\n", mode_commands[mode], dm_mode)); break;
-    case 3: Cbuf_InsertText(va("cmd dmm%d\n", dm_mode)); break;
-    case 5: Cbuf_InsertText(va("cmd botcmd addbot %d\n", bot_skill)); break;
-    case 6: Cbuf_InsertText("cmd botcmd removebot\n"); break;
-    case 7: Cbuf_InsertText("cmd botcmd removeall\n"); break;
-    case 8: Cbuf_InsertText("cmd ready\n"); M_LeaveMenus(); break;
-    case 9: M_LeaveMenus(); break;
-    }
-    strlcpy(notice, "Request sent. KTX reports results in console.", sizeof(notice));
+static const char *ReadMap(void) { return map_count ? maps[map_index] : "No maps installed"; }
+static const char *ReadMode(void) { return modes[mode]; }
+static void ToggleMode(qbool back) { mode=(mode+(back?3:1))%4; dm_mode=mode_dm_defaults[mode]; }
+static void Back(void) { M_LeaveMenu(m_main); }
+static void SelectMap(void) { map_index=map_page.marked; choosing_map=false; }
+static setting arena_entries[] = {
+ ADDSET_SEPARATOR("Local Arena - new game"),
+ ADDSET_ACTION("Choose map",ChooseMap,"Select an installed map. Selection does not change a running match."),
+ ADDSET_CUSTOM("Game mode",ReadMode,ToggleMode,"Rules for the next local game. Current games are unchanged."),
+ ADDSET_INTNUMBER("Deathmatch rules",dm_mode,1,5,1),
+ ADDSET_INTNUMBER("Starting bots",initial_bots,0,15,1),
+ ADDSET_INTNUMBER("Bot skill",bot_skill,1,20,1),
+ ADDSET_ACTION("Start new local game",Start,"Disconnect from the current game and start the selected map with KTX. Bots require navigation support for the map."),
+ ADDSET_ACTION("Back to main menu",Back,"Return without changing the current game. Esc during play offers match and bot controls."),
+};
+static void ChooseMap(void) {
+ int i;RefreshMaps();memset(map_entries,0,sizeof(map_entries));
+ for(i=0;i<map_count;++i){map_entries[i].type=stt_action;map_entries[i].label=maps[i];map_entries[i].actionfnc=SelectMap;map_entries[i].description="Choose this map for the next local game. Nothing starts until Start new local game.";}
+ if(!map_count){map_entries[0].type=stt_action;map_entries[0].label="No maps installed - F5 rescans";}
+ map_page.count=max(1,map_count);map_page.marked=map_index;map_page.viewpoint=0;Settings_OnShow(&map_page);choosing_map=true;
 }
-
-void MLocal_Draw(void)
-{
-    char text[96];
-    int i, first, split, bots = 0;
-    M_PrintWhite(80, 8, choosing_map ? "CHOOSE MAP" : "LOCAL ARENA");
-    window.x = (menuwidth - 320) / 2 + 24;
-    window.y = m_yofs + 40;
-    window.w = 280;
-    if (choosing_map) {
-        first = (map_index / MAP_ROWS) * MAP_ROWS;
-        window.h = min(MAP_ROWS, map_count - first) * 10;
-        for (i = first; i < min(first + MAP_ROWS, map_count); ++i)
-            M_Print(40, 40 + (i - first) * 10, maps[i]);
-        if (map_count) M_DrawCharacter(24, 40 + (map_index - first) * 10, FLASHINGARROW());
-        M_PrintWhite(24, 24, va("%d maps, %d/%d", map_count, map_count ? map_index + 1 : 0, map_count));
-        M_PrintWhite(24, 174, "Enter: select  Esc: back  F5: scan");
-        M_PrintWhite(24, 184, "PgUp/PgDn: page  Letter: jump");
-        return;
-    }
-    if (LocalServer()) for (i = 0; i < MAX_CLIENTS; ++i)
-        if (svs.clients[i].state != cs_free && svs.clients[i].isBot) ++bots;
-    if (LocalConnected()) {
-        snprintf(text, sizeof(text), "%.12s  %.10s  Bots: %d", sv.mapname, Info_ValueForKey(svs.info, "mode"), bots);
-        if (!strncmp(notice, "Starting...", 11)) strlcpy(notice, "Connected. Apply a mode, then add bots.", sizeof(notice));
-    } else strlcpy(text, LocalServer() ? "Connecting to local server..." : "No local KTX game", sizeof(text));
-    M_PrintWhite(24, 24, text);
-    window.h = LOCAL_ROWS * LOCAL_ROW_HEIGHT;
-    for (i = 0; i < LOCAL_ROWS; ++i) {
-        switch (i) {
-        case 0: snprintf(text, sizeof(text), "Map: %.27s", map_count ? maps[map_index] : "(none)"); break;
-        case 1: strlcpy(text, com_serveractive ? "Restart on selected map" : "Start local server", sizeof(text)); break;
-        case 2: snprintf(text, sizeof(text), "Apply mode: %s", modes[mode]); break;
-        case 3:
-            if (LocalServer()) snprintf(text, sizeof(text), "Deathmatch: %d (live %d)", dm_mode, (int)deathmatch.value);
-            else snprintf(text, sizeof(text), "Deathmatch: %d", dm_mode);
-            break;
-        case 4: snprintf(text, sizeof(text), "New bot skill: %d / 20", bot_skill); break;
-        case 5: strlcpy(text, "Add bot", sizeof(text)); break;
-        case 6: strlcpy(text, "Remove last bot", sizeof(text)); break;
-        case 7: strlcpy(text, "Remove all bots", sizeof(text)); break;
-        case 8: strlcpy(text, "Ready / start match", sizeof(text)); break;
-        case 9: strlcpy(text, "Return to game", sizeof(text)); break;
-        case 10: strlcpy(text, "Stop local server", sizeof(text)); break;
-        default: strlcpy(text, "Back to main menu", sizeof(text)); break;
-        }
-        M_Print(40, 40 + i * LOCAL_ROW_HEIGHT, text);
-    }
-    M_DrawCharacter(24, 40 + cursor * LOCAL_ROW_HEIGHT, FLASHINGARROW());
-    M_PrintWhite(24, 158, "Left/right: edit  Enter: apply");
-    M_PrintWhite(24, 168, "Bot navigation depends on the map.");
-    /* Two bounded lines fit the original 320x200 menu canvas. */
-    split = min(35, strlen(notice));
-    if (strlen(notice) > 35) {
-        while (split > 0 && notice[split] != ' ') --split;
-        if (!split) split = 35;
-    }
-    snprintf(text, sizeof(text), "%.*s", split, notice);
-    M_PrintWhite(24, 180, text);
-    if (strlen(notice) > split) {
-        if (notice[split] == ' ') ++split;
-        snprintf(text, sizeof(text), "%.35s", notice + split);
-        M_PrintWhite(24, 190, text);
-    }
+void MLocal_Draw(void) {
+ M_Unscale_Menu();UI_Print(16,16,va("Local Arena | Selected map: %.48s",ReadMap()),false);
+ UI_Print(16,32,notice[0]?notice:"Setup for a new game. Esc during play: match and bot controls.",false);
+ Settings_Draw(0,48,vid.width,vid.height-48,choosing_map?&map_page:&arena_page);
 }
-
-void MLocal_Key(int key)
-{
-    int i, direction = key == K_LEFTARROW ? -1 : 1;
-    if (key == K_ESCAPE || key == K_MOUSE2) {
-        if (choosing_map) choosing_map = false;
-        else M_LeaveMenu(m_main);
-        return;
-    }
-    if (key == K_F5) { RefreshMaps(); return; }
-    if (choosing_map) {
-        if (!map_count) return;
-        switch (key) {
-        case K_UPARROW: case K_MWHEELUP: map_index = (map_index + map_count - 1) % map_count; break;
-        case K_DOWNARROW: case K_MWHEELDOWN: map_index = (map_index + 1) % map_count; break;
-        case K_PGUP: map_index = max(0, map_index - MAP_ROWS); break;
-        case K_PGDN: map_index = min(map_count - 1, map_index + MAP_ROWS); break;
-        case K_HOME: map_index = 0; break;
-        case K_END: map_index = map_count - 1; break;
-        case K_ENTER: case K_MOUSE1: choosing_map = false; break;
-        default:
-            for (i = 1; i <= map_count; ++i) {
-                int index = (map_index + i) % map_count;
-                if (tolower((unsigned char)maps[index][0]) == key) { map_index = index; break; }
-            }
-        }
-        return;
-    }
-    switch (key) {
-    case K_UPARROW: case K_MWHEELUP: cursor = (cursor + LOCAL_ROWS - 1) % LOCAL_ROWS; break;
-    case K_DOWNARROW: case K_MWHEELDOWN: cursor = (cursor + 1) % LOCAL_ROWS; break;
-    case K_HOME: cursor = 0; break;
-    case K_END: cursor = LOCAL_ROWS - 1; break;
-    case K_LEFTARROW: case K_RIGHTARROW:
-        if (cursor == 2) {
-            mode = (mode + 4 + direction) % 4;
-            dm_mode = mode_dm_defaults[mode];
-        }
-        if (cursor == 3) dm_mode = (dm_mode - 1 + 5 + direction) % 5 + 1;
-        if (cursor == 4) bot_skill = bound(1, bot_skill + direction, 20);
-        break;
-    case K_ENTER: case K_MOUSE1: Activate(); break;
-    }
+void MLocal_Key(int key) {
+ if(key==K_ESCAPE||key==K_MOUSE2){if(choosing_map)choosing_map=false;else Back();return;}
+ if(key==K_F5){if(choosing_map)ChooseMap();else RefreshMaps();return;}
+ Settings_Key(choosing_map?&map_page:&arena_page,key,0);cursor=arena_page.marked;
 }
-
-qbool MLocal_Mouse(const mouse_state_t *ms)
-{
-    int first = (map_index / MAP_ROWS) * MAP_ROWS, selected = map_index - first;
-    if (choosing_map && map_count) {
-        M_Mouse_Select(&window, ms, min(MAP_ROWS, map_count - first), &selected);
-        map_index = first + selected;
-    } else if (!choosing_map) M_Mouse_Select(&window, ms, LOCAL_ROWS, &cursor);
-    if (ms->button_up == 1) MLocal_Key(K_MOUSE1);
-    if (ms->button_up == 2) MLocal_Key(K_MOUSE2);
-    return true;
+qbool MLocal_Mouse(const mouse_state_t *ms) {
+ mouse_state_t m=*ms;if(ms->button_up==2){MLocal_Key(K_ESCAPE);return true;}
+ m.y-=48;m.y_old-=48;return Settings_Mouse_Event(choosing_map?&map_page:&arena_page,&m);
 }
 
 static void DeveloperCommand(void)
@@ -292,6 +185,8 @@ static void DeveloperCommand(void)
     if (!strcmp(Cmd_Argv(1), "key") && m_state == m_local) MLocal_Key(Key_StringToKeynum(Cmd_Argv(2)));
     if (!strcmp(Cmd_Argv(1), "map") && m_state == m_local)
         for (i = 0; i < map_count; ++i) if (!strcmp(maps[i], Cmd_Argv(2))) map_index = i;
+    if (!strcmp(Cmd_Argv(1), "start")) Start();
+    if (!strcmp(Cmd_Argv(1), "bots")) initial_bots=bound(0,atoi(Cmd_Argv(2)),15);
     if (LocalServer()) for (i = 0; i < MAX_CLIENTS; ++i)
         if (svs.clients[i].state != cs_free && svs.clients[i].isBot) ++bots;
     Con_Printf("LOCAL_MENU maps=%d selected=%s row=%d connected=%d bots=%d skill=%d server=%d notice=%s\n",
@@ -315,10 +210,17 @@ static void DeveloperCommand(void)
 
 void MLocal_Init(void)
 {
+    Settings_Page_Init(arena_page,arena_entries);
+    arena_entries[3].description="KTX deathmatch rule set for the next local game (1-5).";
+    arena_entries[4].description="Number of bots to request after connecting. KTX checks map and mode support.";
+    arena_entries[5].description="Skill of starting bots, from 1 to 20. Change live bots through the in-game menu.";
+    map_entries[0]=arena_entries[1];Settings_Init(&map_page,map_entries,1,"arena_maps");
     Cmd_AddCommand("menu_local", MLocal_Open);
     Cmd_AddCommand("dev_local_menu", DeveloperCommand);
 }
+void MLocal_Shutdown(void) { Settings_Shutdown(&arena_page);Settings_Shutdown(&map_page); }
 #else
+void MLocal_Shutdown(void) {}
 void MLocal_Connected(void) {}
 void MLocal_Init(void) {}
 void MLocal_Open(void) {}

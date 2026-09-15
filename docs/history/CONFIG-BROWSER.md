@@ -84,3 +84,13 @@ old ESDF/weapon/RJ/crosshair controls with the installed nQuake helpers, and
 nquake-before-legacy.cfg preserves the pre-import configuration. Unlike the
 partial qw/legacy-controls.cfg overlay, these files are suitable for browser
 loading. See LEGACY-CONTROLS.md for their bindings and rollback semantics.
+
+
+## 2026-09-15: graphics presets and Controls
+
+The native Graphics menu now has a separate declarative preset browser with live
+preview, category scope, Apply/Cancel and safe saving. Balanced, Ultra competitive
+and Athmospheric are complete graphics profiles. Controls offers WASD (default)
+and SDFE independently. This supersedes earlier statements that all CFG browsing
+was limited to a static keyboard preview. The original full-config browser retains
+that explicit import workflow. See UNIFIED-MENUS.md for paths and save behavior.
