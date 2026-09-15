@@ -23,8 +23,10 @@ change and the distinction between inherited work, user direction and Codex impl
 
 - Competitive Visuals: texture detail control, soft cel shading, lighting,
   team-aware silhouettes and restrained rim lighting with powerup/ruleset gates.
-- Separate general effects: bloom, contact AO, exposure, tone mapping, sharpening,
+- Separate general effects: optional floating-point HDR, scene SSAO, bloom, exposure, tone mapping, sharpening,
   MSAA and FXAA. Contextual help, disabled dependencies and video restart feedback.
+- Raster point/spot shadow maps, BSP/authored lights, cached maps and bounded updates.
+  Includes the DM6 baked-light stability fix and corrected multiview resource ownership.
 - Named graphics profiles and a `.cfg` browser with a keyboard binding preview.
 - Local Arena controls for an external KTX game module, and original Quake
   single-player startup/save handling when the required game data is installed.
@@ -64,14 +66,15 @@ exec ezv-defaults.cfg
 exec ezv-wasd-defaults.cfg
 ```
 
-The graphics profile contains all 53 user-approved values, including edge depth
-threshold **16**, MSAA **4**, model outline opacity **0.5**, contact AO **0.125**,
-and Explosion **11** (without the ring). Loading `ezv-defaults.cfg` also restarts video to apply MSAA.
-It is a named profile; the engine's factory reset remains a separate action.
-The defaults helper also loads `ezv-particles.cfg`, restoring enhanced lightning
-and the other 55 conditional legacy settings. These require nQuake's
-`ezquake/ezquake.pk3` particle textures. Restored bloom is 0.1 / 0.7 / 2.75
-(strength / threshold / radius).
+The graphics profile contains **71 values from the user's last saved config on
+2026-09-15**, plus **55 conditional effects** in `ezv-particles.cfg`. Defaults include
+8 shadow lights/updates, caster budget 8192, Baked with shadows, map radius 0.5,
+MSAA 4x, FXAA 5 and SSAO strength 0.4. Internal HDR is off in this saved preset.
+Bloom strength/threshold/radius are 0.15 / 0.6 / 5. Loading `ezv-defaults.cfg`
+restarts video to apply video settings. Engine factory reset remains separate.
+Conditional effects require nQuake's `ezquake/ezquake.pk3` particle textures.
+See [shadow controls and limits](docs/history/DYNAMIC-SHADOWS.md) and
+[validation](docs/history/VALIDATION.md). These effects use ordinary Vulkan.
 The WASD overlay preserves installed nQuake non-letter bindings and communication
 aliases. See [controls](docs/CONTROLS.md). Game data, private full configs and
 custom crosshair images are not bundled.

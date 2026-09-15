@@ -35,10 +35,16 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "tr_types.h"
 #include "glsl/constants.glsl"
 #include "vk_local.h"
+#include "vk_shadows.h"
 
 vk_options_t vk_options;
 static qbool vk_recreate_swapchain_requested;
 static qbool vk_recreate_surface_requested;
+// PERF-OPT-001, OpenAI Codex, 2026-09-14: defer the initial scene pass until
+// after the normals prepass. Keep command-buffer and render-pass state separate.
+static qbool vk_scene_pass_started;
+static qbool vk_scene_clear_color;
+static VkClearValue vk_scene_clear_values[5];
 // A freshly (re)created swapchain/MSAA image's real Vulkan layout is
 // VK_IMAGE_LAYOUT_UNDEFINED -- it has never been rendered to or presented.
 // vk_renderpass_main_noclear's LOAD op (picked whenever clear_color below
@@ -228,6 +234,8 @@ static void VK_RecordScreenshot(VkCommandBuffer commandBuffer)
 
 static void VK_Screenshot(byte* buffer, size_t size)
 {
+ extern void CL_LinkEntities(void);
+ extern void CL_SpawnWarn_UpdateWarning(void);
  VkBuffer stagingBuffer = VK_NULL_HANDLE;
  VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
  uint32_t width = vk_options.swapChain.imageSize.width;
@@ -255,7 +263,23 @@ static void VK_Screenshot(byte* buffer, size_t size)
   // Console/movie captures need a fresh complete frame. Use normal drawing,
   // without SCR_CheckAutoScreenshot recursively requesting another capture.
   renderer.ScreenDrawStart();
-  SCR_UpdateScreenPlayerView(UPDATESCREEN_POSTPROCESS);
+  if(CL_MultiviewEnabled()) {
+   qbool next=true,first=true;
+   while(next) {
+    next=CL_MultiviewAdvanceView();
+    if(!first){buffers.EndFrame();buffers.StartFrame();}first=false;
+    CL_LinkEntities();CL_SpawnWarn_UpdateWarning();SCR_CalcRefdef();
+    SCR_UpdateScreenPlayerView((next?0:UPDATESCREEN_POSTPROCESS)|UPDATESCREEN_3D_ONLY);
+    SCR_SaveAutoID();CL_MultiviewFrameFinish();
+   }
+   buffers.EndFrame();next=true;
+   while(next){next=CL_MultiviewAdvanceView();SCR_RestoreAutoID();SCR_UpdateScreenPlayerView(UPDATESCREEN_2D_ONLY);SCR_DrawMultiviewIndividualElements();CL_MultiviewFrameFinish();}
+  } else {
+   // Rebuild the entity list just like an ordinary frame. R_RenderView appends
+   // statics; reusing the previous list duplicates their draws and dirties caches.
+   CL_LinkEntities();
+   SCR_UpdateScreenPlayerView(UPDATESCREEN_POSTPROCESS);
+  }
   SCR_UpdateScreenHudOnly();
   renderer.PostProcessScreen();
   VID_RenderFrameEnd();
@@ -317,14 +341,8 @@ static size_t VK_ScreenshotHeight(void)
 
 static void VK_ClearRenderingSurface(qbool clear_color)
 {
-	// By the time R_Clear() calls this (from R_RenderView(), after
-	// R_BeginRendering() -> renderer.BeginFrame() already ran), the render
-	// pass for this frame has already begun with its loadOp baked in --
-	// Vulkan render passes can't change that mid-recording. VK_BeginFrame()
-	// (vk_main.c) makes the equivalent decision itself, before beginning the
-	// render pass, by picking between vk_renderpass_main (CLEAR) and
-	// vk_renderpass_main_noclear (LOAD) via VK_FrameRenderPass(). Nothing
-	// left to do here.
+	// VK_BeginFrame latches the equivalent clear/load decision once, including
+	// swapchain initialization. A deferred scene pass uses that same decision.
 	(void)clear_color;
 }
 
@@ -494,8 +512,6 @@ void VK_BeginFrame(void)
 {
 	VkResult result;
 	VkCommandBufferBeginInfo beginInfo = { 0 };
-	VkRenderPassBeginInfo renderPassInfo = { 0 };
-	VkClearValue clearValues[2] = { 0 };
 	VkCommandBuffer commandBuffer;
 	uint32_t frameIndex;
 	VkFence frameFence;
@@ -667,23 +683,48 @@ void VK_BeginFrame(void)
 		--vk_force_clear_frames_remaining;
 	}
 
-	clearValues[0].color.float32[0] = vk_options.clearColor[0];
-	clearValues[0].color.float32[1] = vk_options.clearColor[1];
-	clearValues[0].color.float32[2] = vk_options.clearColor[2];
-	clearValues[0].color.float32[3] = vk_options.clearColor[3] ? vk_options.clearColor[3] : 1.0f;
-	clearValues[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
-	clearValues[1].depthStencil.stencil = 0;
-
-	// Real gamma/contrast/FXAA (VK_PostProcessActive) route the main pass into
-	// the offscreen target instead of the swapchain image directly; the
-	// composite pass that reads it back and writes the swapchain image runs
-	// at the end of VK_EndFrame, after this render pass ends.
+	// Latch the actual clear values too: R_Clear can update the background
+	// color later in the frame (for example when entering fog).
+	vk_scene_clear_values[0].color.float32[0] = vk_options.clearColor[0];
+	vk_scene_clear_values[0].color.float32[1] = vk_options.clearColor[1];
+	vk_scene_clear_values[0].color.float32[2] = vk_options.clearColor[2];
+	vk_scene_clear_values[0].color.float32[3] = vk_options.clearColor[3] ? vk_options.clearColor[3] : 1.0f;
+	if (VK_HDRActive()) {
+        int channel;
+        for (channel=0; channel<3; ++channel) {
+            float c=max(0.0f,vk_scene_clear_values[0].color.float32[channel]);
+            vk_scene_clear_values[0].color.float32[channel]=c<=0.04045f ? c/12.92f : powf((c+0.055f)/1.055f,2.4f);
+        }
+    }
+	vk_scene_clear_values[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
+	vk_scene_clear_values[1].depthStencil.stencil = 0;
 	vk_options.swapChain.postProcessActive = VK_PostProcessActive();
+	vk_scene_clear_color = clear_color || vk_options.swapChain.postProcessActive;
+	vk_scene_pass_started = false;
+	vk_options.frame.active = true;
+	vk_options.frame.hudStarted = false;
 
+	// The single-view normals/AO prepass runs before any scene draws. Starting
+	// the main pass now would clear, store and resolve MSAA color only to end
+	// it immediately for that prepass. Retain the existing multiview ordering.
+	VK_ShadowBeginCommands();
+	if ((!VK_WorldOutlineActive() && !VK_ShadowEnabled()) || cl_multiview.integer) {
+		VK_BeginScenePass();
+	}
+}
+
+void VK_BeginScenePass(void)
+{
+	VkCommandBuffer commandBuffer = VK_CurrentCommandBuffer();
+	VkRenderPassBeginInfo renderPassInfo = { 0 };
+
+	if (commandBuffer == VK_NULL_HANDLE || vk_scene_pass_started || vk_options.frame.hudStarted) {
+		return;
+	}
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	// An offscreen image ended the preceding frame as a sampled texture.
-	// Discard it before the new scene instead of assuming PRESENT layout.
-	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color || vk_options.swapChain.postProcessActive);
+	// First use honors the frame's latched clear (including offscreen targets).
+	// A resumed pass LOADs color and clears depth, exactly as before this change.
+	renderPassInfo.renderPass = VK_FrameRenderPass(vk_scene_clear_color);
 	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
 		VK_PostProcessFramebuffer(vk_options.frame.imageIndex) : vk_options.swapChain.framebuffers[vk_options.frame.imageIndex];
 	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
@@ -693,12 +734,20 @@ void VK_BeginFrame(void)
 	renderPassInfo.renderArea.offset.x = 0;
 	renderPassInfo.renderArea.offset.y = 0;
 	renderPassInfo.renderArea.extent = vk_options.swapChain.imageSize;
-	renderPassInfo.clearValueCount = sizeof(clearValues) / sizeof(clearValues[0]);
-	renderPassInfo.pClearValues = clearValues;
+	renderPassInfo.clearValueCount = sizeof(vk_scene_clear_values) / sizeof(vk_scene_clear_values[0]);
+	renderPassInfo.pClearValues = vk_scene_clear_values;
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-	vk_options.frame.active = true;
-	vk_options.frame.hudStarted = false;
+	vk_scene_pass_started = true;
+}
+
+void VK_EndScenePass(void)
+{
+	if (vk_scene_pass_started) {
+		vkCmdEndRenderPass(VK_CurrentCommandBuffer());
+		vk_scene_pass_started = false;
+		vk_scene_clear_color = false;
+	}
 }
 
 VkCommandBuffer VK_CurrentCommandBuffer(void)
@@ -714,7 +763,9 @@ static void VK_Begin2DRendering(void)
  VkCommandBuffer commandBuffer=VK_CurrentCommandBuffer();
  VkRenderPassBeginInfo pass={0};
  if(!commandBuffer||vk_options.frame.hudStarted) return;
- vkCmdEndRenderPass(commandBuffer);
+ // Menus, loading screens and early scene exits still need initialized color.
+ VK_BeginScenePass();
+ VK_EndScenePass();
  if(vk_options.swapChain.postProcessActive) {
   VK_PostProcessTransitionForSampling(commandBuffer,vk_options.frame.imageIndex);
   pass.renderPass=VK_PostProcessRenderPass();
@@ -1035,6 +1086,7 @@ qbool VK_Initialise(SDL_Window* window)
 		return false;
 	}
 
+	VK_ConfigureSceneFormat();
 	if (!VK_RenderPassCreate()) {
 		VK_Shutdown(r_shutdown_full);
 		return false;
@@ -1078,9 +1130,15 @@ void VK_AbandonActiveFrame(void)
 	if (vk_options.frame.active && vk_options.frame.commandBuffers) {
 		VkCommandBuffer commandBuffer = vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
 
+		if (vk_options.frame.hudStarted || vk_scene_pass_started) {
+			vkCmdEndRenderPass(commandBuffer);
+		}
 		vkEndCommandBuffer(commandBuffer);
 		vk_options.frame.active = false;
 	}
+	vk_scene_pass_started = false;
+	vk_scene_clear_color = false;
+	vk_options.frame.hudStarted = false;
 }
 
 void VK_Shutdown(r_shutdown_mode_t mode)

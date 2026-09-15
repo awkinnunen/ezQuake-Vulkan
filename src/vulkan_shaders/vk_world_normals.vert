@@ -5,8 +5,9 @@ layout(location = 0) in vec3 inPosition;
 layout(push_constant) uniform PushConstants {
 	mat4 mvp;
 	vec4 cameraPosition;
-	float surfaceType;
-	float zFar;
+	vec4 worldRow0;
+	vec4 worldRow1;
+	vec4 worldRow2;
 } pushConstants;
 
 // World-space position (not view-space -- vk_world.c's mvp push constant is
@@ -28,6 +29,7 @@ void main()
 	clip.z = clip.z * 0.5 + clip.w * 0.5;
 
 	gl_Position = clip;
-	outWorldPos = inPosition;
-	outSurfaceType = pushConstants.surfaceType;
+	vec4 p=vec4(inPosition,1.0);
+	outWorldPos = vec3(dot(pushConstants.worldRow0,p),dot(pushConstants.worldRow1,p),dot(pushConstants.worldRow2,p));
+	outSurfaceType = max(0.0,-pushConstants.cameraPosition.w);
 }

@@ -1,0 +1,1295 @@
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+index fc313b5..032839c 100644
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -68,7 +68,7 @@ static int dragging = -1;
+ #define EXT(n) (CV_COUNT+(n))
+ static const char *groups[]={"World readability","Surface colours","Light response","Cel shading",
+  "Player rim","Outline mode","World edges","Model edges","Edge colours",
+- "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering","Dynamic light shadows"};
++ "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering","Light and shadow maps"};
+ typedef struct { int index, page, group, depth; } cv_row_t;
+ static const cv_row_t layout[]={
+  {CV_enable,1,0,0},{CV_detail,1,0,1},{CV_contrast,1,0,1},{CV_pattern,1,0,1},{CV_distance,1,0,1},{CV_saturation,1,0,1},
+@@ -84,7 +84,7 @@ static const cv_row_t layout[]={
+  {CV_bloom,4,9,0},{CV_bloomsource,4,9,1},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
+  {CV_ao,4,10,0},{CV_aoradius,4,10,1},{CV_aomode,4,10,1},{CV_aoquality,4,10,1},{CV_aobias,4,10,1},{EXT(4),4,10,0},
+  {CV_shadows,4,14,0},{CV_shadowquality,4,14,1},{CV_shadowsoft,4,14,1},{CV_shadowdistance,4,14,1},
+- {CV_shadowlights,4,14,1},{CV_shadowbias,4,14,1},{CV_shadowstrength,4,14,1},
++ {CV_shadowlights,4,14,1},{CV_shadowbias,4,14,1},{CV_shadowstrength,4,14,1},{CV_shadowcache,4,14,1},{CV_shadowupdates,4,14,1},{CV_shadowcasters,4,14,1},{CV_maplights,4,14,1},{CV_maplightscale,4,14,2},{CV_mapambient,4,14,2},
+  {EXT(5),4,11,0},{EXT(6),4,11,0},
+  {CV_hdr,5,12,0},{CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
+  {EXT(7),5,13,0},{EXT(8),5,13,0},{EXT(14),5,13,0},{CV_RESTART_ROW,5,13,0}
+@@ -111,12 +111,13 @@ static const char *Unavailable(int index) {
+   if((index==CV_bands||index==CV_softness) && CV_Value(CV_light)<1.5) return "Select Soft Cel to use cel bands.";
+  }
+  if(index>=CV_rimwidth && index<=CV_rimteam && CV_Value(CV_rim)<=0) return "Increase Player rim first.";
+- if(index>=CV_shadows && index<=CV_shadowstrength) {
++ if(index>=CV_shadows && index<=CV_mapambient) {
+   if(ExistingValue("r_fullbright")) return "Disable fullbright lighting first.";
+-  if(ExistingValue("cl_multiview")) return "Dynamic shadows require a single view.";
+   if(!ExistingValue("r_dynamic")||ExistingValue("gl_flashblend")) return "Enable dynamic lights and disable flashblend.";
+   if(index!=CV_shadows && !CV_Value(CV_shadows)) return "Enable Dynamic shadows first.";
+  }
++ if(index==CV_maplightscale && !CV_Value(CV_maplights))return "Enable Map lighting mode first.";
++ if(index==CV_mapambient && CV_Value(CV_maplights)<2)return "Select realtime Map lighting mode (2) first.";
+  if(index==CV_bloomsource && !actualHDR) return "Enable Linear HDR and Restart video first. SDR uses bright pixels.";
+  if(index==CV_bloomsource||index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
+  if((index==CV_aoradius || index==CV_aomode || index==CV_aoquality || index==CV_aobias) && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
+@@ -520,12 +521,12 @@ static void Command(void) {
+ static qbool photoActive;
+ static double photoTime;
+ static int photoActorStart,photoBrush=-1;
+-static dlight_t photoLights[2];
++static dlight_t photoLights[8];
+ static vec3_t photoOrigin, photoAngles;
+ static qbool PhotoAllowed(void) {
+ #ifndef CLIENTONLY
+  const netadr_t *address=&cls.netchan.remote_address;
+- return IsDeveloperMode() && COM_FindParm("-visual-tests") && sv.state==ss_active &&
++ return (IsDeveloperMode() || COM_FindParm("-shadow-benchmark")) && COM_FindParm("-visual-tests") && sv.state==ss_active &&
+   cls.state==ca_active && r_refdef2.allow_cheats &&
+   (address->type==NA_LOOPBACK || (address->type==NA_IP && address->ip[0]==127));
+ #else
+@@ -544,10 +545,10 @@ void CV_TestView(void) {
+ }
+ void CV_TestLights(void) {
+  int i;
+- if(!photoActive||!PhotoAllowed()||(!photoLights[0].radius&&!photoLights[1].radius)) return;
++ if(!photoActive||!PhotoAllowed()) return;
+  CV_TestView();
+  memset(cl_dlight_active,0,sizeof(cl_dlight_active));
+- for(i=0;i<2;++i) if(photoLights[i].radius>0) {
++ for(i=0;i<8;++i) if(photoLights[i].radius>0) {
+   cl_dlights[i]=photoLights[i];cl_dlights[i].die=cl.time+600;
+   cl_dlight_active[0]|=1u<<i;
+  }
+@@ -563,7 +564,7 @@ static void PhotoCommand(void) {
+  } else if(!strcmp(action,"camera") && Cmd_Argc()==9) {
+   for(i=0;i<3;++i) { photoOrigin[i]=(float)atof(Cmd_Argv(3+i)); photoAngles[i]=(float)atof(Cmd_Argv(6+i)); }
+  } else if(!strcmp(action,"light") && photoActive && Cmd_Argc()==8) {
+-  dlight_t *light=&photoLights[bound(0,atoi(Cmd_Argv(3)),1)];
++  dlight_t *light=&photoLights[bound(0,atoi(Cmd_Argv(3)),7)];
+   for(i=0;i<3;++i) light->origin[i]=(float)atof(Cmd_Argv(4+i));
+   light->radius=bound(0,(float)atof(Cmd_Argv(7)),1024);light->die=cl.time+600;light->type=lt_white;light->decay=0;
+  } else if(!strcmp(action,"actor") && photoActive && Cmd_Argc()==7) {
+@@ -627,8 +628,11 @@ static void PhotoCommand(void) {
+   photoOrigin[0],photoOrigin[1],photoOrigin[2],photoAngles[0],photoAngles[1],photoAngles[2],cl.num_statics,cl.time);
+ #endif
+ }
++static double shadowBenchStart;
+ static void Developer(void) {
+  if(!developer.value) return;
++ if(!strcmp(Cmd_Argv(1),"benchstart")){shadowBenchStart=Sys_DoubleTime();return;}
++ if(!strcmp(Cmd_Argv(1),"benchend")){Con_Printf("SHADOW_BENCH elapsed=%.6f frames=%s\n",Sys_DoubleTime()-shadowBenchStart,Cmd_Argv(2));return;}
+ #ifdef RENDERER_OPTION_VULKAN
+  if(!strcmp(Cmd_Argv(1),"shadows") && R_UseVulkan()) VK_ShadowStatus();
+ #endif
+@@ -682,5 +686,7 @@ void CV_Init(void) {
+  CV_InitSettings();
+  Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
+  Cmd_AddCommand("menu_visual_effects",CV_OpenEffects);
+- if(IsDeveloperMode()) Cmd_AddCommand("dev_competitive",Developer);
++ if(IsDeveloperMode() || COM_FindParm("-shadow-benchmark")) Cmd_AddCommand("dev_competitive",Developer);
+ }
++
++
+diff --git a/src/competitive_visuals.h b/src/competitive_visuals.h
+index 2f4f8da..de103ca 100644
+--- a/src/competitive_visuals.h
++++ b/src/competitive_visuals.h
+@@ -47,13 +47,19 @@
+  X(aoquality,"SSAO samples","16",8,32,8,4,"Hemisphere sampling quality: 8 to 32 taps. Higher quality costs more GPU time.") \
+  X(aobias,"SSAO bias","0.5",.1,2,.1,4,"World-unit offset to suppress self-shadowing on flat surfaces. Requires SSAO.") \
+  X(bloomsource,"Bloom source","1",0,1,1,4,"Bright pixels or emissive surfaces only. Requires bloom and active HDR for Emissive.") \
+- X(shadows,"Dynamic shadows","0",0,1,1,4,"Point-light shadows from world, doors and models. Requires dynamic lights; single view only.") \
++ X(shadows,"Shadow maps","0",0,1,1,4,"Point-light shadows from world, doors and models. Requires dynamic lights; single view only.") \
+  X(shadowquality,"Shadow resolution","256",128,512,128,4,"Pixels per cube face: 128 to 512. Higher values sharpen shadows and cost more GPU time.") \
+  X(shadowsoft,"Shadow softness","1",0,2,.25,4,"Shadow filter radius in pixels. Zero gives hard edges; larger values soften edges.") \
+  X(shadowdistance,"Shadow distance","768",128,2048,64,4,"Maximum distance to a light's influence sphere. Farther lights keep ordinary lighting.") \
+- X(shadowlights,"Shadow lights","1",1,2,1,4,"Maximum shadowed point lights: one or two. Each requires six face renders per frame.") \
++ X(shadowlights,"Shadow lights","4",1,8,1,4,"Maximum shadowed lights: 1 to 8. Point lights have six faces; spotlights have one.") \
+  X(shadowbias,"Shadow bias","0.5",.05,4,.05,4,"World-unit offset against self-shadow artifacts. Too much separates shadows from surfaces.") \
+- X(shadowstrength,"Shadow strength","1",0,1,.05,4,"How strongly occluders block the selected dynamic lights. Baked lighting stays unchanged.")
++ X(shadowstrength,"Shadow strength","1",0,1,.05,4,"How strongly occluders block the selected dynamic lights. Baked lighting stays unchanged.") \
++ X(shadowcache,"Cache shadow maps","1",0,1,1,4,"Reuse depth while the light and its casters are unchanged. Disable to compare performance.") \
++ X(shadowupdates,"Shadow updates","4",1,8,1,4,"New maps per view and frame. Deferred dirty lights are unshadowed; round-robin scheduling prevents starvation.") \
++ X(shadowcasters,"Caster budget","4096",64,8192,64,4,"Maximum surfaces and models per light. Overflow falls back to a complete unshadowed light.") \
++ X(maplights,"Map lighting mode","0",0,2,1,4,"0 baked lighting; 1 shadow baked lights; 2 replace baked lighting with bounded realtime map lights.") \
++ X(maplightscale,"Map light radius","1",.25,4,.25,4,"Scale radii of BSP and optional lights/<map>.vklights lights. Changes invalidate cached depth.") \
++ X(mapambient,"Realtime ambient","0.1",0,1,.05,4,"Base illumination when Map lighting mode is 2. This mode replaces the original lightmaps.")
+ #define CV_ENUM(id,label,def,lo,hi,step,page,help) CV_##id,
+ typedef enum { CV_OPTIONS(CV_ENUM) CV_COUNT } cv_id;
+ #undef CV_ENUM
+@@ -77,3 +83,5 @@ void CV_Draw(void);
+ void CV_Key(int key);
+ qbool CV_Mouse(const mouse_state_t *ms);
+ #endif
++
++
+diff --git a/src/vk_aliasmodel.c b/src/vk_aliasmodel.c
+index 966c0c7..3e3e640 100644
+--- a/src/vk_aliasmodel.c
++++ b/src/vk_aliasmodel.c
+@@ -149,24 +149,8 @@ static VkShaderModule VK_AliasCreateShaderModule(const unsigned char* bytes, uns
+ 
+ static void VK_AliasSetViewportScissor(VkCommandBuffer commandBuffer)
+ {
+-	VkViewport viewport;
+-	VkRect2D scissor;
+-
+-	VK_InitialiseStructure(viewport);
+-	viewport.x = 0.0f;
+-	viewport.y = 0.0f;
+-	viewport.width = (float)vk_options.swapChain.imageSize.width;
+-	viewport.height = (float)vk_options.swapChain.imageSize.height;
+-	viewport.minDepth = 0.0f;
+-	viewport.maxDepth = 1.0f;
+-
+-	VK_InitialiseStructure(scissor);
+-	scissor.offset.x = 0;
+-	scissor.offset.y = 0;
+-	scissor.extent = vk_options.swapChain.imageSize;
+-
+-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
++ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
++ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
+ }
+ 
+ static qbool VK_AliasEnsureDrawCapacity(void)
+@@ -386,7 +370,7 @@ static qbool VK_AliasCreatePipeline(int blendMode)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -581,7 +565,7 @@ static void VK_AliasQueuePreparedDraw(
+ 	draw = &aliasDraws[aliasDrawCount++];
+ 	CV_PlayerParams(&draw->cv, ent, ent->effects, render_effects, modelView);
+ 	if(mode==VK_ALIAS_MODE_NORMAL && !(render_effects&(RF_WEAPONMODEL|RF_ADDITIVEBLEND|RF_ALPHABLEND)) && color[3]>=1)
+-		VK_ShadowAddAlias(firstVertex,vertexCount,modelView,lerpfrac,textureReady?texture:solidwhite_texture);
++		VK_ShadowAddAlias(firstVertex,vertexCount,modelView,lerpfrac,textureReady?texture:solidwhite_texture,model->radius);
+ 	draw->firstVertex = (uint32_t)firstVertex;
+ 	draw->vertexCount = (uint32_t)vertexCount;
+ 	memcpy(draw->mvp, mvp, sizeof(draw->mvp));
+@@ -880,7 +864,7 @@ void VK_RenderAliasModels(qbool postscene)
+ 				aliasOpaquePipeline;
+ 
+ 			if (pipeline != lastPipeline) {
+-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
++				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
+ 				lastPipeline = pipeline;
+ 			}
+ 		}
+diff --git a/src/vk_buffers.c b/src/vk_buffers.c
+index bcc392a..83966f8 100644
+--- a/src/vk_buffers.c
++++ b/src/vk_buffers.c
+@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ #include "quakedef.h"
+ 
+ #include "vk_local.h"
++#include "vk_shadows.h"
+ #include "r_local.h"
+ #include "r_buffers.h"
+ 
+@@ -52,14 +53,15 @@ typedef struct vk_buffer_s {
+ // geometry, worse at higher framerates since frames overlap more). The fix is
+ // to duplicate the dynamic buffer storage per frame-in-flight and select the
+ // live copy with the same index used for that frame's fence.
+-static vk_buffer_t bufferData[r_buffer_count][VK_MAX_FRAMES_IN_FLIGHT];
++static vk_buffer_t bufferData[r_buffer_count][VK_MAX_FRAMES_IN_FLIGHT*4];
+ 
+ static void VK_BufferResize(r_buffer_id id, int size, void* data);
+ static void VK_BufferUpdateSection(r_buffer_id id, ptrdiff_t offset, int size, const void* data);
+ 
+ static vk_buffer_t* VK_BufferCurrentSlot(r_buffer_id id)
+ {
+-	return &bufferData[id][vk_options.frame.currentFrame];
++	int view=(bufferData[id][0].usage==bufferusage_once_per_frame || bufferData[id][0].usage==bufferusage_reuse_per_frame)?VK_ShadowViewIndex():0;
++	return &bufferData[id][vk_options.frame.currentFrame+view*VK_MAX_FRAMES_IN_FLIGHT];
+ }
+ 
+ static void VK_BufferDestroyCopies(r_buffer_id id)
+@@ -71,7 +73,7 @@ static void VK_BufferDestroyCopies(r_buffer_id id)
+ 		return;
+ 	}
+ 
+-	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; ++i) {
++	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT*4; ++i) {
+ 		vk_buffer_t* slot = &bufferData[id][i];
+ 
+ 		if (slot->handle != VK_NULL_HANDLE) {
+@@ -219,8 +221,9 @@ static qbool VK_BufferCreate(r_buffer_id id, buffertype_t type, const char* name
+ 	// Recreate every frame's copy with the same size/initial contents so the
+ 	// buffer reads correctly regardless of which frame-in-flight slot is
+ 	// currently live.
+-	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; ++i) {
++	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT*4; ++i) {
+ 		vk_buffer_t* slot = &bufferData[id][i];
++		if(i>=VK_MAX_FRAMES_IN_FLIGHT && VK_BufferMemoryIsDeviceLocal(usage)) break;
+ 		qbool created = (usage == bufferusage_once_per_frame || usage == bufferusage_reuse_per_frame) ?
+ 			VK_CreateBufferResourceWithSelector(size, bufferUsage, memoryStyle, VK_BufferPreferredMemoryType, &slot->handle, &slot->memory) :
+ 			VK_CreateBufferResource(size, bufferUsage, memoryStyle, &slot->handle, &slot->memory);
+diff --git a/src/vk_competitive.c b/src/vk_competitive.c
+index f3a2bcf..bbfb475 100644
+--- a/src/vk_competitive.c
++++ b/src/vk_competitive.c
+@@ -10,7 +10,7 @@
+ static VkDescriptorSetLayout cvLayout;
+ static VkDescriptorPool cvPool;
+ static VkDeviceSize cvStride;
+-static struct { VkBuffer buffer; VkDeviceMemory memory; byte *mapped; VkDescriptorSet set; uint32_t used; } frames[VK_MAX_FRAMES_IN_FLIGHT];
++static struct { VkBuffer buffer; VkDeviceMemory memory; byte *mapped; VkDescriptorSet set[4]; uint32_t used; } frames[VK_MAX_FRAMES_IN_FLIGHT];
+ typedef char cv_params_size_check[(sizeof(cv_params_t)==224)?1:-1];
+ 
+ VkDescriptorSetLayout VK_CVLayout(void) {
+@@ -29,31 +29,35 @@ VkDescriptorSetLayout VK_CVLayout(void) {
+ void VK_CVBeginFrame(void) {
+  uint32_t i=vk_options.frame.currentFrame;
+  cv_params_t params;
++ VK_WorldBeginFrame();
+  VK_ShadowFrameResources();
+  if(!cvPool) {
+-  VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_MAX_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_MAX_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_MAX_FRAMES_IN_FLIGHT}};
++  VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_MAX_FRAMES_IN_FLIGHT*4},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_MAX_FRAMES_IN_FLIGHT*4},{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_MAX_FRAMES_IN_FLIGHT*4}};
+   VkDescriptorPoolCreateInfo info={0}; VkPhysicalDeviceProperties props;
+   vkGetPhysicalDeviceProperties(vk_options.physicalDevice,&props);
+   if(props.limits.maxBoundDescriptorSets<5) Sys_Error("Vulkan: Competitive Visuals pipelines require 5 descriptor sets");
+   cvStride=(sizeof(cv_params_t)+props.limits.minUniformBufferOffsetAlignment-1)&~(props.limits.minUniformBufferOffsetAlignment-1);
+-  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;info.maxSets=VK_MAX_FRAMES_IN_FLIGHT;info.poolSizeCount=3;info.pPoolSizes=sizes;
++  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;info.maxSets=VK_MAX_FRAMES_IN_FLIGHT*4;info.poolSizeCount=3;info.pPoolSizes=sizes;
+   if(vkCreateDescriptorPool(vk_options.logicalDevice,&info,NULL,&cvPool)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals pool failed");
+  }
+  if(!frames[i].buffer) {
+-  VkDescriptorSetAllocateInfo alloc={0};VkDescriptorBufferInfo buf={0};VkWriteDescriptorSet write={0};VkDescriptorSetLayout layout=VK_CVLayout();
++
+   if(!VK_CreateBufferResource(cvStride*CV_DRAWS,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,&frames[i].buffer,&frames[i].memory)) Sys_Error("Vulkan: Competitive Visuals buffer failed");
+   if(vkMapMemory(vk_options.logicalDevice,frames[i].memory,0,VK_WHOLE_SIZE,0,(void**)&frames[i].mapped)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals map failed");
++ }
++ for(int v=0;v<4;++v) {
++  VkDescriptorSetAllocateInfo alloc={0};VkDescriptorBufferInfo buf={0};VkWriteDescriptorSet write={0};VkDescriptorSetLayout layout=VK_CVLayout();
+   alloc.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;alloc.descriptorPool=cvPool;alloc.descriptorSetCount=1;alloc.pSetLayouts=&layout;
+-  if(vkAllocateDescriptorSets(vk_options.logicalDevice,&alloc,&frames[i].set)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals descriptor failed");
++  if(!frames[i].set[v] && vkAllocateDescriptorSets(vk_options.logicalDevice,&alloc,&frames[i].set[v])!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals descriptor failed");
+   buf.buffer=frames[i].buffer;buf.range=sizeof(cv_params_t);
+-  write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=frames[i].set;write.dstBinding=0;
++  write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=frames[i].set[v];write.dstBinding=0;
+   write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;write.descriptorCount=1;write.pBufferInfo=&buf;
+   vkUpdateDescriptorSets(vk_options.logicalDevice,1,&write,0,NULL);
+   VkDescriptorImageInfo shadowImage={0};VkDescriptorBufferInfo shadowBuffer={0};VkWriteDescriptorSet shadowWrites[2]={{0}};
+-  VK_ShadowDescriptors(&shadowImage,&shadowBuffer);
++  VK_ShadowDescriptors(v,&shadowImage,&shadowBuffer);
+   shadowWrites[0].sType=shadowWrites[1].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+-  shadowWrites[0].dstSet=shadowWrites[1].dstSet=frames[i].set;
++  shadowWrites[0].dstSet=shadowWrites[1].dstSet=frames[i].set[v];
+   shadowWrites[0].dstBinding=1;shadowWrites[0].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;shadowWrites[0].descriptorCount=1;shadowWrites[0].pImageInfo=&shadowImage;
+   shadowWrites[1].dstBinding=2;shadowWrites[1].descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;shadowWrites[1].descriptorCount=1;shadowWrites[1].pBufferInfo=&shadowBuffer;
+   vkUpdateDescriptorSets(vk_options.logicalDevice,2,shadowWrites,0,NULL);
+@@ -63,13 +67,13 @@ void VK_CVBeginFrame(void) {
+  frames[i].used=1; CV_Params(&params);memcpy(frames[i].mapped,&params,sizeof(params));
+ }
+ void VK_CVBind(VkCommandBuffer command, VkPipelineLayout layout, uint32_t set, const void *params) {
+- uint32_t i=vk_options.frame.currentFrame,offset=0;
++ uint32_t i=vk_options.frame.currentFrame,offset=0;int v=VK_ShadowViewIndex();
+  if(params) {
+   if(frames[i].used>=CV_DRAWS) Sys_Error("Vulkan: Competitive Visuals draw capacity exceeded");
+   offset=(uint32_t)(cvStride*frames[i].used++);
+   memcpy(frames[i].mapped+offset,params,sizeof(cv_params_t));
+  }
+- vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,set,1,&frames[i].set,1,&offset);
++ vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,set,1,&frames[i].set[v],1,&offset);
+ }
+ void VK_CVShutdown(void) {
+  VK_ShadowShutdown();
+diff --git a/src/vk_draw.c b/src/vk_draw.c
+index ad484c6..da264ad 100644
+--- a/src/vk_draw.c
++++ b/src/vk_draw.c
+@@ -26,6 +26,7 @@ of the License, or (at your option) any later version.
+ #include "tr_types.h"
+ #include "glsl/constants.glsl"
+ #include "vk_local.h"
++#include "vk_shadows.h"
+ #include "competitive_visuals.h"
+ 
+ void Atlas_SolidTextureCoordinates(texture_ref* ref, float* s, float* t);
+@@ -1075,6 +1076,7 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
+  }
+ 
+ 	VK_HudSetViewportScissor(commandBuffer);
++ {VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);vkCmdSetScissor(commandBuffer,0,1,&scissor);}
+ 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipeline);
+ 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+ 	vkCmdPushConstants(commandBuffer, worldOutlinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+diff --git a/src/vk_main.c b/src/vk_main.c
+index 15c94d1..1657194 100644
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -234,6 +234,8 @@ static void VK_RecordScreenshot(VkCommandBuffer commandBuffer)
+ 
+ static void VK_Screenshot(byte* buffer, size_t size)
+ {
++ extern void CL_LinkEntities(void);
++ extern void CL_SpawnWarn_UpdateWarning(void);
+  VkBuffer stagingBuffer = VK_NULL_HANDLE;
+  VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+  uint32_t width = vk_options.swapChain.imageSize.width;
+@@ -261,7 +263,23 @@ static void VK_Screenshot(byte* buffer, size_t size)
+   // Console/movie captures need a fresh complete frame. Use normal drawing,
+   // without SCR_CheckAutoScreenshot recursively requesting another capture.
+   renderer.ScreenDrawStart();
+-  SCR_UpdateScreenPlayerView(UPDATESCREEN_POSTPROCESS);
++  if(CL_MultiviewEnabled()) {
++   qbool next=true,first=true;
++   while(next) {
++    next=CL_MultiviewAdvanceView();
++    if(!first){buffers.EndFrame();buffers.StartFrame();}first=false;
++    CL_LinkEntities();CL_SpawnWarn_UpdateWarning();SCR_CalcRefdef();
++    SCR_UpdateScreenPlayerView((next?0:UPDATESCREEN_POSTPROCESS)|UPDATESCREEN_3D_ONLY);
++    SCR_SaveAutoID();CL_MultiviewFrameFinish();
++   }
++   buffers.EndFrame();next=true;
++   while(next){next=CL_MultiviewAdvanceView();SCR_RestoreAutoID();SCR_UpdateScreenPlayerView(UPDATESCREEN_2D_ONLY);SCR_DrawMultiviewIndividualElements();CL_MultiviewFrameFinish();}
++  } else {
++   // Rebuild the entity list just like an ordinary frame. R_RenderView appends
++   // statics; reusing the previous list duplicates their draws and dirties caches.
++   CL_LinkEntities();
++   SCR_UpdateScreenPlayerView(UPDATESCREEN_POSTPROCESS);
++  }
+   SCR_UpdateScreenHudOnly();
+   renderer.PostProcessScreen();
+   VID_RenderFrameEnd();
+diff --git a/src/vk_renderpass.c b/src/vk_renderpass.c
+index e2b0e2f..c2e8865 100644
+--- a/src/vk_renderpass.c
++++ b/src/vk_renderpass.c
+@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ 
+ #include "vk_local.h"
+ #include "competitive_visuals.h"
++#include "vk_shadows.h"
+ 
+ static VkFormat sceneFormat;
+ VkFormat VK_SceneFormat(void) { return sceneFormat; }
+@@ -59,13 +60,13 @@ void VK_ConfigureSceneFormat(void)
+ }
+ 
+ // Specialization is immutable per pipeline; HUD shaders have no constant 31.
+-VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline)
++static VkResult ScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline, qbool shadows)
+ {
+ 	VkGraphicsPipelineCreateInfo copy = *info;
+ 	VkPipelineShaderStageCreateInfo stages[2];
+-	VkBool32 flags[2] = {VK_HDRActive(), VK_FALSE};
+-	VkSpecializationMapEntry entries[2] = {{31, 0, sizeof(VkBool32)}, {32, sizeof(VkBool32), sizeof(VkBool32)}};
+-	VkSpecializationInfo spec = {2, entries, sizeof(flags), flags};
++	VkBool32 flags[3] = {VK_HDRActive(), VK_FALSE, shadows};
++	VkSpecializationMapEntry entries[3] = {{31, 0, sizeof(VkBool32)}, {32, sizeof(VkBool32), sizeof(VkBool32)}, {33, 2*sizeof(VkBool32), sizeof(VkBool32)}};
++	VkSpecializationInfo spec = {3, entries, sizeof(flags), flags};
+ 	VkPipelineColorBlendStateCreateInfo blend;
+ 	VkPipelineColorBlendAttachmentState attachments[2];
+ 	uint32_t i;
+@@ -90,6 +91,28 @@ VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipe
+ 	return vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &copy, NULL, pipeline);
+ }
+ 
++// SHADOW-002: specialization removes the shadow loop and its register cost when off.
++static struct {VkPipeline on,off;} shadowVariants[64];
++static int shadowVariantCount;
++VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info,VkPipeline *pipeline) {return ScenePipeline(info,pipeline,true);}
++VkResult VK_CreateShadowScenePipeline(const VkGraphicsPipelineCreateInfo *info,VkPipeline *pipeline) {
++ VkResult result;VkPipeline off;
++ if(shadowVariantCount==64) return VK_ERROR_TOO_MANY_OBJECTS;
++ result=ScenePipeline(info,&off,false);if(result!=VK_SUCCESS)return result;
++ result=ScenePipeline(info,pipeline,true);
++ if(result!=VK_SUCCESS){vkDestroyPipeline(vk_options.logicalDevice,off,NULL);return result;}
++ shadowVariants[shadowVariantCount].on=*pipeline;shadowVariants[shadowVariantCount++].off=off;return result;
++}
++VkPipeline VK_ShadowScenePipeline(VkPipeline pipeline) {
++ int i;if(VK_ShadowWorkPending())return pipeline;
++ for(i=0;i<shadowVariantCount;++i)if(shadowVariants[i].on==pipeline)return shadowVariants[i].off;
++ return pipeline;
++}
++void VK_ShadowPipelineShutdown(void) {
++ int i;for(i=0;i<shadowVariantCount;++i)vkDestroyPipeline(vk_options.logicalDevice,shadowVariants[i].off,NULL);
++ shadowVariantCount=0;
++}
++
+ typedef enum {
+ 	vk_renderpass_main,
+ 	// Same attachments/subpass/dependency as vk_renderpass_main, except the
+diff --git a/src/vk_shadows.c b/src/vk_shadows.c
+index d1edda9..608e5f3 100644
+--- a/src/vk_shadows.c
++++ b/src/vk_shadows.c
+@@ -1,5 +1,5 @@
+ /* SHADOW-001, OpenAI Codex, 2026-09-14. GPL-2.0-or-later.
+- * Bounded point-light shadow atlas; per-frame resources are fence-owned.
++ * SHADOW-002, OpenAI Codex: cached point/spot maps, BSP lights and per-view resources.
+  */
+ #ifdef RENDERER_OPTION_VULKAN
+ #include <vulkan/vulkan.h>
+@@ -8,6 +8,7 @@
+ #include "r_buffers.h"
+ #include "r_matrix.h"
+ #include "r_local.h"
++#include "r_lighting.h"
+ #include "r_texture.h"
+ #include "vk_local.h"
+ #include "competitive_visuals.h"
+@@ -15,25 +16,38 @@
+ #include <stddef.h>
+ #include <math.h>
+ 
+-#define SHADOW_LIGHTS 2
+-#define SHADOW_CASTERS 1024
++#define SHADOW_LIGHTS 8
++#define SHADOW_VIEWS 4
++#define SHADOW_CASTERS 8192
+ #define SHADOW_ALIAS 256
+-#define SHADOW_WIDTH 1536
+-#define SHADOW_HEIGHT 2048
+-typedef struct {float inverse[16],viewport[4],settings[4],positions[2][4],colors[2][4],camera[4];} shadow_uniform_t;
+-typedef struct {float world[16],light[4],params[4];} shadow_push_t;
+-typedef char shadow_uniform_size[(sizeof(shadow_uniform_t)==176)?1:-1];
+-typedef char shadow_push_size[(sizeof(shadow_push_t)==96)?1:-1];
+-typedef struct {unsigned first,count;float modelview[16],lerp;texture_ref texture;} shadow_alias_t;
+-typedef struct {unsigned first,count;float world[16];texture_ref texture; qbool alias;float lerp;} shadow_caster_t;
++#define SHADOW_WIDTH 3072
++#define SHADOW_HEIGHT 4096
++typedef struct {float inverse[16],viewport[4],settings[4],positions[SHADOW_LIGHTS][4],colors[SHADOW_LIGHTS][4],camera[4],directions[SHADOW_LIGHTS][4],modes[4];} shadow_uniform_t;
++typedef struct {float world[16],light[4],params[4],direction[4];} shadow_push_t;
++typedef char shadow_uniform_size[(sizeof(shadow_uniform_t)==512)?1:-1];
++typedef char shadow_push_size[(sizeof(shadow_push_t)==112)?1:-1];
++typedef struct {unsigned first,count;float modelview[16],lerp,radius;texture_ref texture;} shadow_alias_t;
++typedef struct {unsigned first,count;float world[16];texture_ref texture; qbool alias;float lerp;float center[3],radius;} shadow_caster_t;
+ static struct {VkImage image;VkDeviceMemory memory;VkImageView view;VkFramebuffer framebuffer;
+- VkBuffer buffer;VkDeviceMemory bufferMemory;shadow_uniform_t *mapped;qbool initialized;} frames[VK_MAX_FRAMES_IN_FLIGHT];
++ VkBuffer buffer;VkDeviceMemory bufferMemory;shadow_uniform_t *mapped;qbool initialized; unsigned width,height; unsigned long long hashes[SHADOW_LIGHTS]; unsigned ages[SHADOW_LIGHTS];} frames[VK_MAX_FRAMES_IN_FLIGHT*SHADOW_VIEWS];
++static int viewIndex, nextView;
++int VK_ShadowViewIndex(void){return viewIndex;}
++static int Slot(void){return vk_options.frame.currentFrame*SHADOW_VIEWS+viewIndex;}
+ static VkRenderPass pass;
+ static VkSampler sampler;
+ static VkPipelineLayout pipelineLayout;
+ static VkPipeline pipelines[2];
+ static VkFormat format;
+-static int selected[2]={-1,-1},selectedCount;
++#define MAP_LIGHTS 256
++#define LIGHT_CANDIDATES (MAX_DLIGHTS+MAP_LIGHTS)
++typedef struct {dlight_t light;float direction[3],cone;int style;} map_light_t;
++static map_light_t mapLights[MAP_LIGHTS],lightData[LIGHT_CANDIDATES];
++static int mapLightCount;static model_t *lightWorld;
++static unsigned updateCursor[VK_MAX_FRAMES_IN_FLIGHT*SHADOW_VIEWS];
++static int selected[SHADOW_LIGHTS],selectedCount,selectedHistory[SHADOW_VIEWS][SHADOW_LIGHTS];
++static unsigned lastCached,lastCulled,lastDeferred;
++static int viewLights[SHADOW_VIEWS];
++static shadow_caster_t *worldCasters; static int worldCasterCount; static model_t *casterWorld;
+ static shadow_alias_t aliases[SHADOW_ALIAS];
+ static int aliasCount;
+ static qbool aliasOverflow;
+@@ -60,13 +74,13 @@ static void CreatePass(void) {
+  if(pass) return;
+  format=VK_FORMAT_D32_SFLOAT;vkGetPhysicalDeviceFormatProperties(vk_options.physicalDevice,format,&props);
+  if((props.optimalTilingFeatures&(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))!=(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) format=VK_FORMAT_D16_UNORM;
+- a.format=format;a.samples=VK_SAMPLE_COUNT_1_BIT;a.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;a.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
++ a.format=format;a.samples=VK_SAMPLE_COUNT_1_BIT;a.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;a.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+  a.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
+- a.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;a.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++ a.initialLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;a.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  sub.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sub.pDepthStencilAttachment=&ref;
+  deps[0].srcSubpass=VK_SUBPASS_EXTERNAL;deps[0].dstSubpass=0;
+  deps[0].srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;
+- deps[0].dstStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
++ deps[0].dstStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  deps[1].srcSubpass=0;deps[1].dstSubpass=VK_SUBPASS_EXTERNAL;
+  deps[1].srcStageMask=deps[0].dstStageMask;deps[1].srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  deps[1].dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+@@ -77,61 +91,138 @@ static void CreatePass(void) {
+  samp.addressModeU=samp.addressModeV=samp.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  Check(vkCreateSampler(vk_options.logicalDevice,&samp,NULL,&sampler),"sampler");
+ }
++static void DestroyFrame(int i) {
++ if(frames[i].mapped) vkUnmapMemory(vk_options.logicalDevice,frames[i].bufferMemory);
++ if(frames[i].buffer) vkDestroyBuffer(vk_options.logicalDevice,frames[i].buffer,NULL);
++ if(frames[i].bufferMemory) vkFreeMemory(vk_options.logicalDevice,frames[i].bufferMemory,NULL);
++ if(frames[i].framebuffer) vkDestroyFramebuffer(vk_options.logicalDevice,frames[i].framebuffer,NULL);
++ if(frames[i].view) vkDestroyImageView(vk_options.logicalDevice,frames[i].view,NULL);
++ if(frames[i].image) vkDestroyImage(vk_options.logicalDevice,frames[i].image,NULL);
++ if(frames[i].memory) vkFreeMemory(vk_options.logicalDevice,frames[i].memory,NULL);
++ memset(&frames[i],0,sizeof(frames[i]));
++}
+ void VK_ShadowFrameResources(void) {
+- int i=vk_options.frame.currentFrame;VkImageViewCreateInfo view={0};VkFramebufferCreateInfo fb={0};
+- CreatePass();
+- if(!frames[i].image) {
+-  if(!VK_CreateImageResource(SHADOW_WIDTH,SHADOW_HEIGHT,1,VK_SAMPLE_COUNT_1_BIT,format,VK_IMAGE_TILING_OPTIMAL,
+-   VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,&frames[i].image,&frames[i].memory)) Sys_Error("Vulkan: shadow atlas allocation failed");
+-  view.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;view.image=frames[i].image;view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.format=format;
+-  view.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;view.subresourceRange.levelCount=view.subresourceRange.layerCount=1;
+-  Check(vkCreateImageView(vk_options.logicalDevice,&view,NULL,&frames[i].view),"image view");
+-  fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;fb.renderPass=pass;fb.attachmentCount=1;fb.pAttachments=&frames[i].view;
+-  fb.width=SHADOW_WIDTH;fb.height=SHADOW_HEIGHT;fb.layers=1;
+-  Check(vkCreateFramebuffer(vk_options.logicalDevice,&fb,NULL,&frames[i].framebuffer),"framebuffer");
+-  if(!VK_CreateBufferResource(sizeof(shadow_uniform_t),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,&frames[i].buffer,&frames[i].bufferMemory)) Sys_Error("Vulkan: shadow uniform allocation failed");
+-  Check(vkMapMemory(vk_options.logicalDevice,frames[i].bufferMemory,0,VK_WHOLE_SIZE,0,(void**)&frames[i].mapped),"uniform map");
++ int v; unsigned resolution=(unsigned)CV_Value(CV_shadowquality),width=VK_ShadowEnabled()?resolution*6:1,height=VK_ShadowEnabled()?resolution*8:1;
++ CreatePass(); viewIndex=nextView=0;selectedCount=0;memset(viewLights,0,sizeof(viewLights));
++ for(v=0;v<SHADOW_VIEWS;++v) {
++  int i=vk_options.frame.currentFrame*SHADOW_VIEWS+v;
++  unsigned w=(v==0 || v<cl_multiview.integer)?width:1,h=(v==0 || v<cl_multiview.integer)?height:1;
++  VkImageViewCreateInfo view={0};VkFramebufferCreateInfo fb={0};
++  if(frames[i].image && frames[i].width!=w) DestroyFrame(i);
++  if(!frames[i].image) {
++   frames[i].width=w;frames[i].height=h;
++   if(!VK_CreateImageResource(w,h,1,VK_SAMPLE_COUNT_1_BIT,format,VK_IMAGE_TILING_OPTIMAL,
++    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,&frames[i].image,&frames[i].memory)) Sys_Error("Vulkan: shadow atlas allocation failed");
++   view.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;view.image=frames[i].image;view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.format=format;
++   view.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;view.subresourceRange.levelCount=view.subresourceRange.layerCount=1;
++   Check(vkCreateImageView(vk_options.logicalDevice,&view,NULL,&frames[i].view),"image view");
++   fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;fb.renderPass=pass;fb.attachmentCount=1;fb.pAttachments=&frames[i].view;
++   fb.width=w;fb.height=h;fb.layers=1;
++   Check(vkCreateFramebuffer(vk_options.logicalDevice,&fb,NULL,&frames[i].framebuffer),"framebuffer");
++   if(!VK_CreateBufferResource(sizeof(shadow_uniform_t),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,&frames[i].buffer,&frames[i].bufferMemory)) Sys_Error("Vulkan: shadow uniform allocation failed");
++   Check(vkMapMemory(vk_options.logicalDevice,frames[i].bufferMemory,0,VK_WHOLE_SIZE,0,(void**)&frames[i].mapped),"uniform map");
++  }
++  memset(frames[i].mapped,0,sizeof(shadow_uniform_t));
+  }
+- memset(frames[i].mapped,0,sizeof(shadow_uniform_t));
+- selectedCount=0;
+ }
+-void VK_ShadowDescriptors(VkDescriptorImageInfo *image,VkDescriptorBufferInfo *buffer) {
+- int i=vk_options.frame.currentFrame;
++void VK_ShadowDescriptors(int v,VkDescriptorImageInfo *image,VkDescriptorBufferInfo *buffer) {
++ int i=vk_options.frame.currentFrame*SHADOW_VIEWS+v;
+  image->sampler=sampler;image->imageView=frames[i].view;image->imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  buffer->buffer=frames[i].buffer;buffer->offset=0;buffer->range=sizeof(shadow_uniform_t);
+ }
+-qbool VK_ShadowEnabled(void){return R_UseVulkan()&&CV_Value(CV_shadows)>0&&r_dynamic.value>0&&!gl_flashblend.integer&&!cl_multiview.integer&&!r_fullbright.value;}
++qbool VK_ShadowEnabled(void){return R_UseVulkan()&&CV_Value(CV_shadows)>0&&r_dynamic.value>0&&!gl_flashblend.integer&&!r_fullbright.value;}
++// Read existing BSP light entities and optional additive lights/<map>.vklights.
++// The optional file uses the same quoted key/value entity syntax; no asset changes.
++typedef struct {char classname[64],target[64],name[64];vec3_t origin,color;float radius,cone;int style;qbool hasOrigin;} light_entity_t;
++static void ParseLights(const char *data) {
++ light_entity_t *entities=Q_calloc(4096,sizeof(*entities));int count=0,i,j;
++ while(data && (data=COM_Parse(data)) && count<4096) {
++  light_entity_t e={0};char key[128];e.radius=300;e.cone=40;VectorSet(e.color,1,1,1);
++  if(strcmp(com_token,"{"))break;
++  while((data=COM_Parse(data)) && strcmp(com_token,"}")) {
++   strlcpy(key,com_token,sizeof(key));data=COM_Parse(data);if(!data)break;
++   if(!strcmp(key,"classname"))strlcpy(e.classname,com_token,sizeof(e.classname));
++   else if(!strcmp(key,"origin"))e.hasOrigin=sscanf(com_token,"%f %f %f",&e.origin[0],&e.origin[1],&e.origin[2])==3;
++   else if(!strcmp(key,"target"))strlcpy(e.target,com_token,sizeof(e.target));
++   else if(!strcmp(key,"targetname"))strlcpy(e.name,com_token,sizeof(e.name));
++   else if(!strcmp(key,"style"))e.style=bound(0,atoi(com_token),255);
++   else if(!strcmp(key,"light"))e.radius=(float)atof(com_token);
++   else if(!strcmp(key,"_light")){float a,b,c,d;if(sscanf(com_token,"%f %f %f %f",&a,&b,&c,&d)==4){VectorSet(e.color,a/255,b/255,c/255);e.radius=d;}else e.radius=(float)atof(com_token);}
++   else if(!strcmp(key,"_color"))sscanf(com_token,"%f %f %f",&e.color[0],&e.color[1],&e.color[2]);
++   else if(!strcmp(key,"_cone"))e.cone=bound(5,(float)atof(com_token),160);
++  }
++  entities[count++]=e;
++ }
++ for(i=0;i<count && mapLightCount<MAP_LIGHTS;++i) {
++  light_entity_t *e=&entities[i];map_light_t *l;
++  if(strncmp(e->classname,"light",5) || !e->hasOrigin || e->radius<16)continue;
++  l=&mapLights[mapLightCount++];memset(l,0,sizeof(*l));l->light.type=lt_custom;l->style=e->style;
++  VectorCopy(e->origin,l->light.origin);l->light.radius=bound(16,e->radius,4096);
++  for(j=0;j<3;++j)l->light.color[j]=(int)(bound(0,e->color[j],4)*255);
++  if(e->target[0])for(j=0;j<count;++j)if(!strcmp(e->target,entities[j].name)&&entities[j].hasOrigin){
++   VectorSubtract(entities[j].origin,e->origin,l->direction);
++   if(VectorNormalize(l->direction)>0)l->cone=cosf(e->cone*(float)M_PI/360);break;
++  }
++ }
++ Q_free(entities);
++}
++static void MapLights(void) {
++ if(lightWorld!=cl.worldmodel) {
++  char path[MAX_QPATH],map[MAX_QPATH];byte *data;int length;lightWorld=cl.worldmodel;mapLightCount=0;
++  if(!lightWorld)return;
++  COM_FileBase(lightWorld->name,map);
++  data=FS_LoadHeapFile(lightWorld->name,&length);
++  if(data && length>=sizeof(dheader_t)) {
++   dheader_t *header=(dheader_t*)data;
++   int offset=LittleLong(header->lumps[LUMP_ENTITIES].fileofs),size=LittleLong(header->lumps[LUMP_ENTITIES].filelen);
++   if(offset>=0 && size>=0 && offset<=length && size<=length-offset) {
++    char *entities=Q_malloc((size_t)size+1);memcpy(entities,data+offset,size);entities[size]=0;
++    ParseLights(entities);Q_free(entities);
++   }
++  }
++  Q_free(data);
++  snprintf(path,sizeof(path),"lights/%s.vklights",map);
++  data=FS_LoadHeapFile(path,NULL);if(data){ParseLights((const char*)data);Q_free(data);}
++  Con_Printf("SHADOW_MAP lights=%d map=%s\n",mapLightCount,map);
++ }
++}
+ void VK_ShadowSelect(void) {
+- int old[2]={selected[0],selected[1]},i,k;float scores[MAX_DLIGHTS]={0};
+- CV_TestLights();
+- selectedCount=aliasCount=0;aliasOverflow=false;selected[0]=selected[1]=-1;
+- if(previousWorld!=cl.worldmodel || cl.time<previousTime || cl.time-previousTime>1) old[0]=old[1]=-1;
++ int old[SHADOW_LIGHTS],i,k;
++ viewIndex=bound(0,nextView,SHADOW_VIEWS-1);++nextView;float scores[LIGHT_CANDIDATES]={0};
++ memcpy(old,selectedHistory[viewIndex],sizeof(old));
++ CV_TestLights();MapLights();
++ memset(lightData,0,sizeof(lightData));
++ for(i=0;i<MAX_DLIGHTS;++i)lightData[i].light=cl_dlights[i];
++ for(i=0;i<mapLightCount;++i){lightData[MAX_DLIGHTS+i]=mapLights[i];lightData[MAX_DLIGHTS+i].light.radius*=CV_Value(CV_maplightscale);}
++ selectedCount=aliasCount=0;aliasOverflow=false;memset(selected,255,sizeof(selected));
++ if(previousWorld!=cl.worldmodel || cl.time<previousTime || cl.time-previousTime>1) {memset(old,255,sizeof(old));memset(selectedHistory,255,sizeof(selectedHistory));}
+  previousWorld=cl.worldmodel;previousTime=cl.time;
+- if(!VK_ShadowEnabled()||!frames[vk_options.frame.currentFrame].mapped) return;
+- for(i=0;i<MAX_DLIGHTS;++i) {
++ if(!VK_ShadowEnabled()||!frames[Slot()].mapped) return;
++ for(i=0;i<MAX_DLIGHTS+(CV_Value(CV_maplights)>0?mapLightCount:0);++i) {
+   vec3_t d;float distance;
+-  if(!(cl_dlight_active[i/32]&(1u<<(i%32))) || cl_dlights[i].radius<16) continue;
+-  VectorSubtract(cl_dlights[i].origin,r_refdef.vieworg,d);distance=VectorLength(d);
+-  if(distance>CV_Value(CV_shadowdistance)+cl_dlights[i].radius) continue;
+-  scores[i]=cl_dlights[i].radius/(distance+64);
+-  if(i==old[0]||i==old[1]) scores[i]*=1.15f;
++  if((i<MAX_DLIGHTS && !(cl_dlight_active[i/32]&(1u<<(i%32)))) || lightData[i].light.radius<16) continue;
++  VectorSubtract(lightData[i].light.origin,r_refdef.vieworg,d);distance=VectorLength(d);
++  if(distance>CV_Value(CV_shadowdistance)+lightData[i].light.radius) continue;
++  scores[i]=lightData[i].light.radius/(distance+64);
++  for(k=0;k<SHADOW_LIGHTS;++k) if(i==old[k]) {scores[i]*=1.15f;break;}
+  }
+- for(k=0;k<(int)CV_Value(CV_shadowlights);++k) {
++ for(k=0;k<bound(1,(int)CV_Value(CV_shadowlights),SHADOW_LIGHTS);++k) {
+   int best=-1;float score=0;
+-  for(i=0;i<MAX_DLIGHTS;++i) if(scores[i]>score){best=i;score=scores[i];}
++  for(i=0;i<LIGHT_CANDIDATES;++i) if(scores[i]>score){best=i;score=scores[i];}
+   if(best<0) break;
+   selected[selectedCount++]=best;scores[best]=0;
+  }
++ memcpy(selectedHistory[viewIndex],selected,sizeof(selected));viewLights[viewIndex]=selectedCount;
+ }
+ qbool VK_ShadowManagedLight(int index) {int i;if(!R_UseVulkan()) return false;for(i=0;i<selectedCount;++i) if(index==selected[i]) return true;return false;}
+ qbool VK_ShadowCasterRelevant(entity_t *ent) {
+  int i;if(!R_UseVulkan()||!ent||ent->renderfx&RF_WEAPONMODEL) return false;
+- for(i=0;i<selectedCount;++i){vec3_t d;VectorSubtract(ent->origin,cl_dlights[selected[i]].origin,d);if(VectorLength(d)<cl_dlights[selected[i]].radius+(ent->model?ent->model->radius:128)) return true;}
++ for(i=0;i<selectedCount;++i){vec3_t d;VectorSubtract(ent->origin,lightData[selected[i]].light.origin,d);if(VectorLength(d)<lightData[selected[i]].light.radius+(ent->model?ent->model->radius:128)) return true;}
+  return false;
+ }
+-void VK_ShadowAddAlias(unsigned first,unsigned count,const float *mv,float lerp,texture_ref texture) {
++void VK_ShadowAddAlias(unsigned first,unsigned count,const float *mv,float lerp,texture_ref texture,float radius) {
+  shadow_alias_t *a;if(!selectedCount) return;if(aliasCount==SHADOW_ALIAS){aliasOverflow=true;return;}
+- a=&aliases[aliasCount++];a->first=first;a->count=count;a->lerp=lerp;a->texture=texture;memcpy(a->modelview,mv,64);
++ a=&aliases[aliasCount++];a->first=first;a->count=count;a->lerp=lerp;a->radius=radius;a->texture=texture;memcpy(a->modelview,mv,64);
+ }
+ static void WorldMatrix(const float *mv,float *world) {
+  float view[16];int axis,col,k;R_GetModelviewMatrix(view);R_SetIdentityMatrix(world);
+@@ -205,8 +296,10 @@ static qbool AddModel(model_t *model,const float *world,const vec3_t light,float
+    }
+    for(axis=0;axis<3;++axis){float d=max(max(mins[axis]-light[axis],light[axis]-maxs[axis]),0);distance+=d*d;}
+    if(distance>radius*radius) continue;
+-   if(casterCount==SHADOW_CASTERS) return false;
++   if(casterCount>=bound(64,(int)CV_Value(CV_shadowcasters),SHADOW_CASTERS)) return false;
+    c=&casters[casterCount++];memset(c,0,sizeof(*c));memcpy(c->world,world,64);
++   for(axis=0;axis<3;++axis) c->center[axis]=(mins[axis]+maxs[axis])*.5f;
++   {vec3_t ext;VectorSubtract(maxs,c->center,ext);c->radius=VectorLength(ext);}
+    c->first=poly->vbo_start;c->count=poly->numverts;c->texture=tex->gl_texturenum;
+    if(!VK_TextureReady(c->texture)) c->texture=solidwhite_texture;
+   }
+@@ -214,10 +307,36 @@ static qbool AddModel(model_t *model,const float *world,const vec3_t light,float
+  return true;
+ }
+ static qbool GatherCasters(int lightIndex) {
+- float identity[16];int i;dlight_t *light=&cl_dlights[lightIndex];
++ float identity[16];int i;dlight_t *light=&lightData[lightIndex].light;
+  casterCount=0;if(aliasOverflow) return false;
+  R_SetIdentityMatrix(identity);
+- if(!AddModel(cl.worldmodel,identity,light->origin,light->radius)) return false;
++ if(casterWorld!=cl.worldmodel) {
++  Q_free(worldCasters);worldCasters=NULL;worldCasterCount=0;casterWorld=cl.worldmodel;
++  /* Cache world-space polygon bounds once per map, independently of light budget. */
++  {int s; for(s=0;s<cl.worldmodel->nummodelsurfaces;++s) {
++   msurface_t *surf=&cl.worldmodel->surfaces[cl.worldmodel->firstmodelsurface+s];glpoly_t *p;
++   if(surf->flags&(SURF_DRAWSKY|SURF_DRAWTURB)) continue;
++   for(p=surf->polys;p;p=p->next) if(p->numverts>=3) ++worldCasterCount;
++  }}
++  worldCasters=Q_calloc(worldCasterCount,sizeof(*worldCasters));
++  {int s,n=0; for(s=0;s<cl.worldmodel->nummodelsurfaces;++s) {
++   msurface_t *surf=&cl.worldmodel->surfaces[cl.worldmodel->firstmodelsurface+s];glpoly_t *p;
++   if(surf->flags&(SURF_DRAWSKY|SURF_DRAWTURB)) continue;
++   for(p=surf->polys;p;p=p->next) if(p->numverts>=3) {
++    int a,v; vec3_t mn={1e30f,1e30f,1e30f},mx={-1e30f,-1e30f,-1e30f},ext;shadow_caster_t *c=&worldCasters[n++];
++    c->first=p->vbo_start;c->count=p->numverts;c->texture=surf->texinfo->texture->gl_texturenum;memcpy(c->world,identity,64);
++    for(v=0;v<p->numverts;++v) for(a=0;a<3;++a){mn[a]=min(mn[a],p->verts[v][a]);mx[a]=max(mx[a],p->verts[v][a]);}
++    for(a=0;a<3;++a)c->center[a]=(mn[a]+mx[a])*.5f;
++    VectorSubtract(mx,c->center,ext);c->radius=VectorLength(ext);
++   }
++  }}
++ }
++ for(i=0;i<worldCasterCount;++i) {
++  vec3_t d;shadow_caster_t *c=&worldCasters[i];VectorSubtract(c->center,light->origin,d);
++  if(DotProduct(d,d)>(light->radius+c->radius)*(light->radius+c->radius))continue;
++  if(casterCount>=bound(64,(int)CV_Value(CV_shadowcasters),SHADOW_CASTERS))return false;
++  casters[casterCount++]=*c;
++ }
+  for(i=0;i<cl_visents.count;++i) {
+   entity_t *ent=&cl_visents.list[i].ent;float old[16],mv[16],world[16];
+   if(!ent->model||ent->model->type!=mod_brush||(ent->alpha>0&&ent->alpha<1)) continue;
+@@ -225,91 +344,141 @@ static qbool GatherCasters(int lightIndex) {
+   if(!AddModel(ent->model,world,light->origin,light->radius)) return false;
+  }
+  for(i=0;i<aliasCount;++i) {
+-  shadow_caster_t *c;
+-  if(casterCount==SHADOW_CASTERS) return false;
+-  c=&casters[casterCount++];c->alias=true;c->first=aliases[i].first;c->count=aliases[i].count;c->texture=aliases[i].texture;c->lerp=aliases[i].lerp;
++  shadow_caster_t candidate={0},*c=&candidate;vec3_t distance;
+   WorldMatrix(aliases[i].modelview,c->world);
++  VectorCopy(c->world+12,c->center);c->radius=aliases[i].radius;
++  VectorSubtract(c->center,light->origin,distance);
++  if(DotProduct(distance,distance)>(light->radius+c->radius)*(light->radius+c->radius))continue;
++  if(casterCount>=bound(64,(int)CV_Value(CV_shadowcasters),SHADOW_CASTERS)) return false;
++  c->alias=true;c->first=aliases[i].first;c->count=aliases[i].count;c->texture=aliases[i].texture;c->lerp=aliases[i].lerp;
++  casters[casterCount++]=candidate;
+  }
+  return true;
+ }
+-qbool VK_ShadowWorkPending(void) {return selectedCount>0;}
++qbool VK_ShadowWorkPending(void) {return VK_ShadowEnabled() && (selectedCount>0 || CV_Value(CV_maplights)>1);}
+ void VK_ShadowBeginCommands(void) {
+- int slot=vk_options.frame.currentFrame;
+- VkCommandBuffer command=VK_CurrentCommandBuffer();
+- lastDraws=lastFaces=lastOverflow=0;
+- if(!command||!frames[slot].mapped) return;
+-  if(!frames[slot].initialized) {
+-   VkImageMemoryBarrier barrier={0};barrier.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+-   barrier.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+-   barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;barrier.srcQueueFamilyIndex=barrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;
+-   barrier.image=frames[slot].image;barrier.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;barrier.subresourceRange.levelCount=barrier.subresourceRange.layerCount=1;
+-   vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
++ int v;VkCommandBuffer command=VK_CurrentCommandBuffer();
++ lastDraws=lastFaces=lastOverflow=lastCached=lastCulled=lastDeferred=0;
++ for(v=0;v<SHADOW_VIEWS;++v) {
++  int slot=vk_options.frame.currentFrame*SHADOW_VIEWS+v;
++  if(command && frames[slot].mapped && !frames[slot].initialized) {
++   VkImageMemoryBarrier b={0};VkClearDepthStencilValue clear={1,0};
++   b.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
++   b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;
++   b.image=frames[slot].image;b.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;b.subresourceRange.levelCount=b.subresourceRange.layerCount=1;
++   vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&b);
++   vkCmdClearDepthStencilImage(command,b.image,b.newLayout,&clear,1,&b.subresourceRange);
++   b.oldLayout=b.newLayout;b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
++   vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&b);
+    frames[slot].initialized=true;
+   }
++ }
++}
++static unsigned long long Hash(const void *p,size_t size,unsigned long long h) {
++ const byte *b=p;while(size--) {h^=*b++;h*=1099511628211ULL;}return h;
++}
++static qbool FaceRelevant(const shadow_caster_t *c,const float *light,int face) {
++ float d[3],x,y,z,r=c->radius;VectorSubtract(c->center,light,d);
++ switch(face){case 0:x=-d[2];y=-d[1];z=d[0];break;case 1:x=d[2];y=-d[1];z=-d[0];break;
++ case 2:x=d[0];y=d[2];z=d[1];break;case 3:x=d[0];y=-d[2];z=-d[1];break;
++ case 4:x=d[0];y=-d[1];z=d[2];break;default:x=-d[0];y=-d[1];z=-d[2];break;}
++ return z+r>=1 && fabsf(x)-z<=r*1.414214f && fabsf(y)-z<=r*1.414214f;
++}
++static qbool SpotRelevant(const shadow_caster_t *c,const float *light,const float *direction) {
++ vec3_t d,up={0,0,1},right;float x,y,z,scale,r=c->radius;
++ if(fabsf(direction[2])>.99f)VectorSet(up,0,1,0);
++ CrossProduct(direction,up,right);VectorNormalize(right);CrossProduct(right,direction,up);
++ VectorSubtract(c->center,light,d);scale=direction[3]/sqrtf(max(.0001f,1-direction[3]*direction[3]));
++ x=DotProduct(d,right)*scale;y=DotProduct(d,up)*scale;z=DotProduct(d,direction);
++ return z+r>=1 && fabsf(x)-z<=r*sqrtf(1+scale*scale) && fabsf(y)-z<=r*sqrtf(1+scale*scale);
+ }
+ void VK_ShadowRender(void) {
+- int slot=vk_options.frame.currentFrame,i,face,j;
++ int slot=Slot(),i,face,j,updates=0;
+  VkCommandBuffer command=VK_CurrentCommandBuffer();shadow_uniform_t uniform={0};float view[16],projection[16],vp[16];
+- VkRenderPassBeginInfo begin={0};VkClearValue clear={0};
+- lastDraws=lastFaces=lastOverflow=0;
++ VkRenderPassBeginInfo begin={0};VkClearValue clear={0};qbool begun=false;
++ VkPipeline boundPipeline=VK_NULL_HANDLE;VkBuffer boundVertex=VK_NULL_HANDLE;VkDescriptorSet boundMaterial=VK_NULL_HANDLE;
++ lastDraws=lastFaces=lastOverflow=lastCached=lastCulled=lastDeferred=0;
+  if(!frames[slot].mapped||!command) return;
+- if(!selectedCount) return;
++ if(!VK_ShadowWorkPending() || frames[slot].width==1) return;
+  R_GetModelviewMatrix(view);R_GetProjectionMatrix(projection);R_MultiplyMatrix(view,projection,vp);
+  if(!Inverse(vp,uniform.inverse)) Sys_Error("Vulkan: singular shadow receiver view");
+- uniform.viewport[0]=(float)vk_options.swapChain.imageSize.width;uniform.viewport[1]=(float)vk_options.swapChain.imageSize.height;
++ {VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
++ uniform.viewport[0]=viewport.width;uniform.viewport[1]=viewport.height;uniform.modes[2]=viewport.x;uniform.modes[3]=viewport.y;}
+  VectorCopy(r_refdef.vieworg,uniform.camera);
+- uniform.viewport[2]=1.0f/SHADOW_WIDTH;uniform.viewport[3]=1.0f/SHADOW_HEIGHT;
++ uniform.modes[0]=CV_Value(CV_maplights);uniform.modes[1]=CV_Value(CV_mapambient);
++ uniform.viewport[2]=1.0f/frames[slot].width;uniform.viewport[3]=1.0f/frames[slot].height;
+  uniform.settings[0]=(float)selectedCount;uniform.settings[1]=(float)(int)CV_Value(CV_shadowquality);uniform.settings[2]=CV_Value(CV_shadowbias);uniform.settings[3]=CV_Value(CV_shadowsoft);
+  Pipeline(false);Pipeline(true);
+  clear.depthStencil.depth=1;begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;begin.renderPass=pass;begin.framebuffer=frames[slot].framebuffer;
+- begin.renderArea.extent.width=SHADOW_WIDTH;begin.renderArea.extent.height=SHADOW_HEIGHT;begin.clearValueCount=1;begin.pClearValues=&clear;
+- vkCmdBeginRenderPass(command,&begin,VK_SUBPASS_CONTENTS_INLINE);
+- for(i=0;i<selectedCount;++i) {
+-  dlight_t *light=&cl_dlights[selected[i]];qbool complete=GatherCasters(selected[i]);
++ begin.renderArea.extent.width=frames[slot].width;begin.renderArea.extent.height=frames[slot].height;begin.clearValueCount=1;begin.pClearValues=&clear;
++ for(int order=0;order<selectedCount;++order) {
++  i=(order+updateCursor[slot])%selectedCount;
++  dlight_t *light=&lightData[selected[i]].light;qbool complete=GatherCasters(selected[i]);
+   VectorCopy(light->origin,uniform.positions[i]);uniform.positions[i][3]=light->radius;
+   for(j=0;j<3;++j) uniform.colors[i][j]=light->type==lt_custom?light->color[j]/255.0f:dlightcolor[bound(0,light->type,NUM_DLIGHTTYPES-1)][j]/128.0f;
++  if(selected[i]>=MAX_DLIGHTS) {
++   float style=d_lightstylevalue[lightData[selected[i]].style]/256.0f;
++   for(j=0;j<3;++j)uniform.colors[i][j]*=style;
++  }
++  VectorCopy(lightData[selected[i]].direction,uniform.directions[i]);uniform.directions[i][3]=lightData[selected[i]].cone;
++  /* Negative cone identifies an omnidirectional map light. */
++  if(selected[i]>=MAX_DLIGHTS && !uniform.directions[i][3])uniform.directions[i][3]=-1;
+   uniform.colors[i][3]=complete?CV_Value(CV_shadowstrength):0;
+-  if(!complete){++lastOverflow;continue;} // Complete unshadowed light, never a partial occluder map.
+-  for(face=0;face<6;++face) {
+-   int tile=i*6+face;VkViewport viewport={(float)(tile%3*512),(float)(tile/3*512),uniform.settings[1],uniform.settings[1],0,1};
+-   VkRect2D scissor={{tile%3*512,tile/3*512},{(uint32_t)uniform.settings[1],(uint32_t)uniform.settings[1]}};
++  if(!complete){frames[slot].hashes[i]=0;++lastOverflow;continue;} // Complete unshadowed light, never a partial occluder map.
++  {
++   unsigned long long hash=Hash(uniform.positions[i],16,1469598103934665603ULL);
++   hash=Hash(&uniform.settings[1],4,hash);hash=Hash(uniform.directions[i],16,hash);hash=Hash(&cl.worldmodel,sizeof(cl.worldmodel),hash);
++   for(j=0;j<casterCount;++j){shadow_caster_t c=casters[j];int a;for(a=0;a<16;++a)c.world[a]=roundf(c.world[a]*4096)/4096;hash=Hash(&c,sizeof(c),hash);}
++   if(CV_Value(CV_shadowcache) && frames[slot].hashes[i]==hash){++lastCached;frames[slot].ages[i]=0;continue;}
++   /* Dirty maps never use stale depth. Deferred lights stay fully illuminated. */
++   if(updates>=(int)CV_Value(CV_shadowupdates)){uniform.colors[i][3]=0;++lastDeferred;continue;}
++   ++updates;frames[slot].hashes[i]=hash;frames[slot].ages[i]=0;
++  }
++  if(!begun){vkCmdBeginRenderPass(command,&begin,VK_SUBPASS_CONTENTS_INLINE);begun=true;}
++  for(face=0;face<(uniform.directions[i][3]>0?1:6);++face) {
++   int tile=i*6+face;VkViewport viewport={(float)(tile%6*(int)uniform.settings[1]),(float)(tile/6*(int)uniform.settings[1]),uniform.settings[1],uniform.settings[1],0,1};
++   VkRect2D scissor={{tile%6*(int)uniform.settings[1],tile/6*(int)uniform.settings[1]},{(uint32_t)uniform.settings[1],(uint32_t)uniform.settings[1]}};
++   VkClearAttachment attachment={VK_IMAGE_ASPECT_DEPTH_BIT,0,{{0}}};VkClearRect rect={scissor,0,1};attachment.clearValue.depthStencil.depth=1;
++   vkCmdClearAttachments(command,1,&attachment,1,&rect);
+    vkCmdSetViewport(command,0,1,&viewport);vkCmdSetScissor(command,0,1,&scissor);++lastFaces;
+    for(j=0;j<casterCount;++j) {
+     shadow_caster_t *c=&casters[j];shadow_push_t push={0};VkDeviceSize offset=0;
+     VkBuffer vertex=VK_BufferHandle(c->alias?r_buffer_aliasmodel_vertex_data:r_buffer_brushmodel_vertex_data);
+-    VkDescriptorSet material=VK_TextureDescriptorSet(c->texture);
++    VkDescriptorSet material;
++    if(uniform.directions[i][3]>0 ? !SpotRelevant(c,light->origin,uniform.directions[i]) : !FaceRelevant(c,light->origin,face)){++lastCulled;continue;}
++    material=VK_TextureDescriptorSet(c->texture);
+     if(!vertex||!material) continue;
+-    memcpy(push.world,c->world,64);memcpy(push.light,uniform.positions[i],16);push.params[0]=(float)face;push.params[3]=c->lerp;
+-    vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelines[c->alias]);
+-    vkCmdBindVertexBuffers(command,0,1,&vertex,&offset);
+-    vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material,0,NULL);
++    memcpy(push.world,c->world,64);memcpy(push.light,uniform.positions[i],16);memcpy(push.direction,uniform.directions[i],16);push.params[0]=(float)face;push.params[3]=c->lerp;
++    if(boundPipeline!=pipelines[c->alias]){vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelines[c->alias]);boundPipeline=pipelines[c->alias];}
++    if(boundVertex!=vertex){vkCmdBindVertexBuffers(command,0,1,&vertex,&offset);boundVertex=vertex;}
++    if(boundMaterial!=material){vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material,0,NULL);boundMaterial=material;}
+     vkCmdPushConstants(command,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);
+     vkCmdDraw(command,c->count,1,c->first,0);++lastDraws;
+    }
+   }
+  }
+- vkCmdEndRenderPass(command);frames[slot].initialized=true;
++ ++updateCursor[slot];if(begun)vkCmdEndRenderPass(command);frames[slot].initialized=true;
+  memcpy(frames[slot].mapped,&uniform,sizeof(uniform));
+ }
+ void VK_ShadowStatus(void) {
+- Con_Printf("SHADOW_STATE enabled=%d lights=%d ids=%d,%d faces=%u draws=%u overflow=%u size=%g alias=%d\n",VK_ShadowEnabled(),selectedCount,selected[0],selected[1],lastFaces,lastDraws,lastOverflow,CV_Value(CV_shadowquality),aliasCount);
++ Con_Printf("SHADOW_STATE enabled=%d lights=%d ids=%d,%d faces=%u draws=%u overflow=%u size=%g alias=%d cached=%u culled=%u deferred=%u view=%d maplights=%d views=%d,%d,%d,%d\n",VK_ShadowEnabled(),selectedCount,selected[0],selected[1],lastFaces,lastDraws,lastOverflow,CV_Value(CV_shadowquality),aliasCount,lastCached,lastCulled,lastDeferred,viewIndex,mapLightCount,viewLights[0],viewLights[1],viewLights[2],viewLights[3]);
++
+ }
+ void VK_ShadowShutdown(void) {
+  int i;
+- for(i=0;i<VK_MAX_FRAMES_IN_FLIGHT;++i) {
+-  if(frames[i].mapped) vkUnmapMemory(vk_options.logicalDevice,frames[i].bufferMemory);
+-  if(frames[i].buffer) vkDestroyBuffer(vk_options.logicalDevice,frames[i].buffer,NULL);
+-  if(frames[i].bufferMemory) vkFreeMemory(vk_options.logicalDevice,frames[i].bufferMemory,NULL);
+-  if(frames[i].framebuffer) vkDestroyFramebuffer(vk_options.logicalDevice,frames[i].framebuffer,NULL);
+-  if(frames[i].view) vkDestroyImageView(vk_options.logicalDevice,frames[i].view,NULL);
+-  if(frames[i].image) vkDestroyImage(vk_options.logicalDevice,frames[i].image,NULL);
+-  if(frames[i].memory) vkFreeMemory(vk_options.logicalDevice,frames[i].memory,NULL);
+- }
++ VK_ShadowPipelineShutdown();
++ for(i=0;i<VK_MAX_FRAMES_IN_FLIGHT*SHADOW_VIEWS;++i) DestroyFrame(i);
++ Q_free(worldCasters);worldCasters=NULL;worldCasterCount=0;casterWorld=NULL;lightWorld=NULL;
+  for(i=0;i<2;++i) if(pipelines[i]) vkDestroyPipeline(vk_options.logicalDevice,pipelines[i],NULL);
+  if(pipelineLayout) vkDestroyPipelineLayout(vk_options.logicalDevice,pipelineLayout,NULL);
+  if(pass) vkDestroyRenderPass(vk_options.logicalDevice,pass,NULL);
+  if(sampler) vkDestroySampler(vk_options.logicalDevice,sampler,NULL);
+  memset(frames,0,sizeof(frames));memset(pipelines,0,sizeof(pipelines));pipelineLayout=VK_NULL_HANDLE;pass=VK_NULL_HANDLE;sampler=VK_NULL_HANDLE;
+- selectedCount=0;selected[0]=selected[1]=-1;previousWorld=NULL;
++ selectedCount=0;memset(selected,255,sizeof(selected));previousWorld=NULL;
+ }
+ #endif
++
++
++
++
++
+diff --git a/src/vk_shadows.h b/src/vk_shadows.h
+index 870edad..205fcbe 100644
+--- a/src/vk_shadows.h
++++ b/src/vk_shadows.h
+@@ -4,6 +4,10 @@
+ qbool VK_ShadowManagedLight(int index);
+ qbool VK_ShadowCasterRelevant(entity_t *ent);
+ #ifdef VK_VERSION_1_0
++void VK_WorldBeginFrame(void);
++VkResult VK_CreateShadowScenePipeline(const VkGraphicsPipelineCreateInfo *info,VkPipeline *pipeline);
++VkPipeline VK_ShadowScenePipeline(VkPipeline pipeline);
++void VK_ShadowPipelineShutdown(void);
+ void VK_ShadowFrameResources(void);
+ void VK_ShadowSelect(void);
+ void VK_ShadowRender(void);
+@@ -11,8 +15,10 @@ void VK_ShadowBeginCommands(void);
+ qbool VK_ShadowEnabled(void);
+ qbool VK_ShadowWorkPending(void);
+ void VK_ShadowShutdown(void);
+-void VK_ShadowDescriptors(VkDescriptorImageInfo *image, VkDescriptorBufferInfo *buffer);
+-void VK_ShadowAddAlias(unsigned first, unsigned count, const float *modelview, float lerp, texture_ref texture);
++void VK_SceneViewport(VkViewport *viewport,VkRect2D *scissor);
++int VK_ShadowViewIndex(void);
++void VK_ShadowDescriptors(int view,VkDescriptorImageInfo *image, VkDescriptorBufferInfo *buffer);
++void VK_ShadowAddAlias(unsigned first, unsigned count, const float *modelview, float lerp, texture_ref texture, float radius);
+ void VK_ShadowStatus(void);
+ #endif
+ #endif
+diff --git a/src/vk_sprite3d.c b/src/vk_sprite3d.c
+index b0a4bd8..f0aab79 100644
+--- a/src/vk_sprite3d.c
++++ b/src/vk_sprite3d.c
+@@ -21,6 +21,7 @@ of the License, or (at your option) any later version.
+ #include "r_texture.h"
+ #include "tr_types.h"
+ #include "vk_local.h"
++#include "vk_shadows.h"
+ 
+ extern const unsigned char vk_sprite3d_vert_spv[];
+ extern const unsigned int vk_sprite3d_vert_spv_len;
+@@ -138,24 +139,8 @@ static VkPrimitiveTopology VK_SpriteTopology(r_primitive_id primitive)
+ 
+ static void VK_SpriteSetViewportScissor(VkCommandBuffer commandBuffer)
+ {
+-	VkViewport viewport;
+-	VkRect2D scissor;
+-
+-	VK_InitialiseStructure(viewport);
+-	viewport.x = 0.0f;
+-	viewport.y = 0.0f;
+-	viewport.width = (float)vk_options.swapChain.imageSize.width;
+-	viewport.height = (float)vk_options.swapChain.imageSize.height;
+-	viewport.minDepth = 0.0f;
+-	viewport.maxDepth = 1.0f;
+-
+-	VK_InitialiseStructure(scissor);
+-	scissor.offset.x = 0;
+-	scissor.offset.y = 0;
+-	scissor.extent = vk_options.swapChain.imageSize;
+-
+-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
++ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
++ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
+ }
+ 
+ static qbool VK_SpriteCreatePipeline(r_primitive_id primitive, vk_sprite_pipeline_id_t pipelineId)
+diff --git a/src/vk_world.c b/src/vk_world.c
+index 93a8542..5430325 100644
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -477,26 +477,25 @@ static VkShaderModule VK_WorldCreateShaderModule(const unsigned char* bytes, uns
+ 	return shaderModule;
+ }
+ 
++// SHADOW-002 / MULTIVIEW-001: consume the engine's actual per-view rectangle.
++void VK_SceneViewport(VkViewport *viewport,VkRect2D *scissor) {
++ int rectangle[4],width=vk_options.swapChain.imageSize.width,height=vk_options.swapChain.imageSize.height;
++ memset(viewport,0,sizeof(*viewport));memset(scissor,0,sizeof(*scissor));
++ viewport->width=(float)width;viewport->height=(float)height;viewport->maxDepth=1;
++ scissor->extent=vk_options.swapChain.imageSize;
++ if(CL_MultiviewEnabled()) {
++  R_GetViewport(rectangle);
++  viewport->x=(float)rectangle[0];viewport->y=(float)(height-rectangle[1]-rectangle[3]);
++  viewport->width=(float)max(1,rectangle[2]);viewport->height=(float)max(1,rectangle[3]);
++  scissor->offset.x=bound(0,(int)viewport->x,width-1);scissor->offset.y=bound(0,(int)viewport->y,height-1);
++  scissor->extent.width=bound(1,rectangle[2],width-scissor->offset.x);scissor->extent.height=bound(1,rectangle[3],height-scissor->offset.y);
++ }
++}
++
+ static void VK_WorldSetViewportScissor(VkCommandBuffer commandBuffer)
+ {
+-	VkViewport viewport;
+-	VkRect2D scissor;
+-
+-	VK_InitialiseStructure(viewport);
+-	viewport.x = 0.0f;
+-	viewport.y = 0.0f;
+-	viewport.width = (float)vk_options.swapChain.imageSize.width;
+-	viewport.height = (float)vk_options.swapChain.imageSize.height;
+-	viewport.minDepth = 0.0f;
+-	viewport.maxDepth = 1.0f;
+-
+-	VK_InitialiseStructure(scissor);
+-	scissor.offset.x = 0;
+-	scissor.offset.y = 0;
+-	scissor.extent = vk_options.swapChain.imageSize;
+-
+-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
++ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
++ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
+ }
+ 
+ static qbool VK_WorldEnsureDrawCapacity(void)
+@@ -852,7 +851,7 @@ static qbool VK_WorldCreateFlatPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, &worldFlatPipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldFlatPipeline) != VK_SUCCESS) {
+ 		worldFlatPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1042,7 +1041,7 @@ static qbool VK_WorldCreateTexturedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, &worldTexturedPipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldTexturedPipeline) != VK_SUCCESS) {
+ 		worldTexturedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1248,7 +1247,7 @@ static qbool VK_WorldCreateOverlayPipeline(qbool luma)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1444,7 +1443,7 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
+ 		worldAlphaTexturedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1641,7 +1640,7 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, &worldLightmappedPipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldLightmappedPipeline) != VK_SUCCESS) {
+ 		worldLightmappedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1819,7 +1818,7 @@ static qbool VK_WorldCreateNormalsPipeline(void)
+ 	pipelineInfo.renderPass = renderPass;
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (VK_CreateScenePipeline(&pipelineInfo, &worldNormalsPipeline) != VK_SUCCESS) {
++	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldNormalsPipeline) != VK_SUCCESS) {
+ 		worldNormalsPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1925,6 +1924,8 @@ void VK_PrepareModelRendering(qbool vid_restart)
+ 	}
+ }
+ 
++void VK_WorldBeginFrame(void) {worldFlatSkyUpdatedThisFrame[vk_options.frame.currentFrame]=false;}
++
+ void VK_PreRenderView(void)
+ {
+ 	worldDrawCount = 0;
+@@ -2091,7 +2092,7 @@ static qbool VK_WorldDrawOverlay(VkCommandBuffer commandBuffer, const vk_world_d
+ 		return false;
+ 	}
+ 
+-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
++	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
+ 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOverlayPipelineLayout, 0, 2, descriptorSets, 0, NULL);
+ 	vkCmdPushConstants(commandBuffer, worldOverlayPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(*push), push);
+ 	vkCmdDrawIndexed(commandBuffer, draw->indexCount, 1, draw->firstIndex, 0, 0);
+@@ -2111,7 +2112,7 @@ static void VK_WorldBindIfChanged(VkCommandBuffer commandBuffer, VkPipeline pipe
+ 		(memcmp(lastSets, descriptorSets, descriptorSetCount * sizeof(VkDescriptorSet)) != 0);
+ 
+ 	if (pipelineChanged) {
+-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
++		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
+ 		*lastPipeline = pipeline;
+ 	}
+ 	// A pipeline change invalidates descriptor-set compatibility guarantees even
+@@ -2168,7 +2169,7 @@ static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer ver
+ 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+ 
+ 	VK_WorldSetViewportScissor(commandBuffer);
+-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldNormalsPipeline);
++	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(worldNormalsPipeline));
+ 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
+ 	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+ 
+@@ -2244,7 +2245,7 @@ void VK_RenderView(void)
+ 	// VK_BeginFrame's fence wait for vk_options.frame.currentFrame has
+ 	// already returned, so that submission has retired and it's safe to
+ 	// allow one fresh vkUpdateDescriptorSets for this new frame.
+-	worldFlatSkyUpdatedThisFrame[vk_options.frame.currentFrame] = false;
++	/* Reset once after the frame fence, not between multiview views. */
+ 	int texturedDraws = 0;
+ 	int lightmappedDraws = 0;
+ 	int blendedDraws = 0;
+@@ -2396,6 +2397,13 @@ void VK_RenderView(void)
+ 		worldOutline = VK_DrawWorldNormalsPass(commandBuffer, vertexBuffer, indexBuffer);
+ 	}
+ 	VK_BeginScenePass();
++ if(CL_MultiviewEnabled()) {
++  VkViewport viewport;VkRect2D scissor;VkClearAttachment clear={0};VkClearRect rect;
++  VK_SceneViewport(&viewport,&scissor);rect.rect=scissor;rect.baseArrayLayer=0;rect.layerCount=1;
++  clear.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;clear.clearValue.depthStencil.depth=glConfig.reversed_depth?0:1;
++  vkCmdClearAttachments(commandBuffer,1,&clear,1,&rect);
++ }
++
+ 
+ 	VK_WorldSetViewportScissor(commandBuffer);
+ 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
+@@ -2566,7 +2574,7 @@ void VK_RenderView(void)
+ 						&lastBoundPipeline, lastBoundDescriptorSets, &lastBoundDescriptorSetCount);
+ 				}
+ 				else if (worldFlatPipeline != lastBoundPipeline) {
+-					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldFlatPipeline);
++					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(worldFlatPipeline));
+ 					lastBoundPipeline = worldFlatPipeline;
+ 					lastBoundDescriptorSetCount = 0;
+ 				}
+diff --git a/src/vulkan_shaders/vk_alias_model.frag b/src/vulkan_shaders/vk_alias_model.frag
+index 4fe46dd..4234204 100644
+--- a/src/vulkan_shaders/vk_alias_model.frag
++++ b/src/vulkan_shaders/vk_alias_model.frag
+@@ -82,12 +82,11 @@ void shadeScene()
+ 	if (inTextured > 0.5) {
+ 		float mixAmount = max(inMinLumaMix, texColour.a);
+ 
+-		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(inColor.rgb, true), mixAmount), inColor.a);
++		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(pushConstants.weapon<.5?shadowLighting(inColor.rgb):inColor.rgb, true), mixAmount), inColor.a);
+ 	}
+ 	else {
+-		fragColour = vec4(cvLighting(inColor.rgb, true), inColor.a);
++		fragColour = vec4(cvLighting(pushConstants.weapon<.5?shadowLighting(inColor.rgb):inColor.rgb, true), inColor.a);
+ 	}
+-	if(pushConstants.weapon<.5) fragColour.rgb += texColour.rgb*shadowIrradiance()*max(inMinLumaMix,texColour.a);
+ 	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
+ 	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
+ }
+diff --git a/src/vulkan_shaders/vk_shadow.vert b/src/vulkan_shaders/vk_shadow.vert
+index e523008..0067fa8 100644
+--- a/src/vulkan_shaders/vk_shadow.vert
++++ b/src/vulkan_shaders/vk_shadow.vert
+@@ -5,10 +5,10 @@ layout(location=0) in vec3 position;
+ layout(location=1) in vec2 uv;
+ layout(location=2) in vec3 direction;
+ layout(location=0) out vec2 texCoord;
+-layout(push_constant) uniform ShadowPush {mat4 world;vec4 light;vec4 params;} pc;
++layout(push_constant) uniform ShadowPush {mat4 world;vec4 light;vec4 params;vec4 direction;} pc;
+ void main() {
+  vec3 d=(pc.world*vec4(position+direction*pc.params.w,1)).xyz-pc.light.xyz;
+- vec3 q=shadowFace(d,int(pc.params.x));
++ vec3 q=pc.direction.w>0?shadowSpot(d,pc.direction):shadowFace(d,int(pc.params.x));
+  float a=pc.light.w/(pc.light.w-1.0);
+  gl_Position=vec4(q.xy,a*q.z-a,q.z);
+  texCoord=uv;
+diff --git a/src/vulkan_shaders/vk_shadow_face.glsl b/src/vulkan_shaders/vk_shadow_face.glsl
+index a95ace6..2e66067 100644
+--- a/src/vulkan_shaders/vk_shadow_face.glsl
++++ b/src/vulkan_shaders/vk_shadow_face.glsl
+@@ -14,3 +14,11 @@ int shadowFaceIndex(vec3 d) {
+  return d.z>=0?4:5;
+ }
+ float shadowDepth(float z,float farPlane) {return farPlane/(farPlane-1.0)*(1.0-1.0/z);}
++
++// Spot basis and projection shared by rasterization and receiver lookup.
++vec3 shadowSpot(vec3 d,vec4 direction) {
++ vec3 f=normalize(direction.xyz),up=abs(f.z)>.99?vec3(0,1,0):vec3(0,0,1);
++ vec3 right=normalize(cross(f,up));up=cross(right,f);
++ float scale=direction.w/sqrt(max(0.0001,1.0-direction.w*direction.w));
++ return vec3(dot(d,right)*scale,-dot(d,up)*scale,dot(d,f));
++}
+diff --git a/src/vulkan_shaders/vk_shadows.glsl b/src/vulkan_shaders/vk_shadows.glsl
+index b892cfe..3a5af5b 100644
+--- a/src/vulkan_shaders/vk_shadows.glsl
++++ b/src/vulkan_shaders/vk_shadows.glsl
+@@ -5,29 +5,37 @@ layout(set=CV_SET,binding=2,std140) uniform ShadowLights {
+  mat4 inverseViewProjection;
+  vec4 viewport;
+  vec4 settings; // count, face size, world bias, PCF radius
+- vec4 positions[2]; // world xyz, radius
+- vec4 colors[2]; // rgb, shadow strength (zero = unshadowed budget fallback)
++ vec4 positions[8]; // world xyz, radius
++ vec4 colors[8]; // rgb, shadow strength (zero = unshadowed budget fallback)
+  vec4 camera;
++ vec4 directions[8];
++ vec4 modes;
+ } sl;
+-vec3 shadowIrradiance() {
+- if(sl.settings.x<0.5) return vec3(0);
+- vec4 h=sl.inverseViewProjection*vec4(gl_FragCoord.x/sl.viewport.x*2.0-1.0,
+-  1.0-gl_FragCoord.y/sl.viewport.y*2.0,gl_FragCoord.z*2.0-1.0,1.0);
++layout(constant_id=33) const bool shadowFeature=true;
++vec3 shadowLighting(vec3 baked) {
++ if(!shadowFeature) return baked;
++ if(sl.settings.x<0.5) return sl.modes.x>1.5?vec3(sl.modes.y):baked;
++ vec4 h=sl.inverseViewProjection*vec4((gl_FragCoord.x-sl.modes.z)/sl.viewport.x*2.0-1.0,
++  1.0-(gl_FragCoord.y-sl.modes.w)/sl.viewport.y*2.0,gl_FragCoord.z*2.0-1.0,1.0);
+  vec3 p=h.xyz/h.w;
+  vec3 n=normalize(cross(dFdx(p),dFdy(p)));
+  if(dot(n,p-sl.camera.xyz)>0) n=-n;
+- vec3 light=vec3(0);
+- for(int i=0;i<2;++i) {
++ vec3 light=vec3(0);float mapTotal=0,mapVisible=0;
++ for(int i=0;i<8;++i) {
+   if(i>=int(sl.settings.x)) break;
+   vec3 d=p-sl.positions[i].xyz;
+   float distanceToLight=length(d),radius=sl.positions[i].w;
+   if(distanceToLight>=radius || distanceToLight<1.0) continue;
+   float diffuse=max(0.0,dot(n,-d/distanceToLight));
++  bool mapLight=sl.directions[i].w!=0.0;
++  float cone=1.0;
++  if(sl.directions[i].w>0)cone=smoothstep(sl.directions[i].w,mix(sl.directions[i].w,1.0,.2),dot(d/distanceToLight,sl.directions[i].xyz));
++  if(cone<=0)continue;
+   float visible=1.0;
+   if(sl.colors[i].w>0.0) {
+-   int face=shadowFaceIndex(d),tile=i*6+face;
+-   vec3 q=shadowFace(d,face);
+-   vec2 base=vec2(tile%3,tile/3)*512.0;
++   int face=sl.directions[i].w>0?0:shadowFaceIndex(d),tile=i*6+face;
++   vec3 q=sl.directions[i].w>0?shadowSpot(d,sl.directions[i]):shadowFace(d,face);
++   vec2 base=vec2(tile%6,tile/6)*sl.settings.y;
+    vec2 pixel=base+(q.xy/q.z*.5+.5)*sl.settings.y;
+    float reference=shadowDepth(max(1.0,q.z-sl.settings.z*(1.0+2.0*(1.0-diffuse))),radius);
+    float sum=0;
+@@ -37,7 +45,13 @@ vec3 shadowIrradiance() {
+    }
+    visible=mix(1.0,sum/9.0,sl.colors[i].w);
+   }
+-  light+=sl.colors[i].rgb*(radius-distanceToLight)/128.0*diffuse*visible;
++  vec3 energy=sl.colors[i].rgb*(radius-distanceToLight)/128.0*diffuse*cone;
++  if(mapLight && sl.modes.x<1.5){float weight=dot(energy,vec3(.2126,.7152,.0722));mapTotal+=weight;mapVisible+=weight*visible;}
++  else light+=energy*visible;
+  }
+- return light;
++ if(sl.modes.x>1.5)return vec3(sl.modes.y)+light;
++ return baked*(mapTotal>0?mix(1.0,mapVisible/mapTotal,min(1.0,mapTotal)):1.0)+light;
+ }
++
++vec3 shadowIrradiance(){return shadowLighting(vec3(0));}
++
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.frag b/src/vulkan_shaders/vk_world_lightmapped.frag
+index ce9ecac..3646209 100644
+--- a/src/vulkan_shaders/vk_world_lightmapped.frag
++++ b/src/vulkan_shaders/vk_world_lightmapped.frag
+@@ -79,7 +79,7 @@ void shadeScene()
+ 	vec4 texColour = texture(worldTexture[0], texCoord);
+ 	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
+ 	vec4 lightColour = texture(lightmapTexture[0], inLightmapCoord);
+-	lightColour.rgb = cvLighting(lightColour.rgb + shadowIrradiance(), false);
++	lightColour.rgb = cvLighting(shadowLighting(lightColour.rgb), false);
+ 
+ 	if (texColour.a < 0.5) {
+ 		discard;

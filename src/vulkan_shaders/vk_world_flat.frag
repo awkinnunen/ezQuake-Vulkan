@@ -1,5 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#include "vk_hdr.glsl"
+#extension GL_GOOGLE_include_directive : require
 
 layout(location = 0) in vec3 inFlatColor;
 layout(location = 1) in vec3 inDirection;
@@ -19,6 +21,7 @@ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
 #define CV_SET 4
 #define CV_WORLD_FRAGMENT
 #include "vk_competitive.glsl"
+#include "vk_shadows.glsl"
 #include "vk_skybox_uv.glsl"
 
 layout(location = 0) out vec4 fragColour;
@@ -108,12 +111,13 @@ vec3 sampleSkyboxFace(int face, vec2 uv)
 	return texture(skyboxFace5, uv).rgb;
 }
 
-void main()
+void shadeScene()
 {
 	vec3 base = (pushConstants.surfaceType > 0.5 || worldFlag(VK_WORLD_DRAWFLAT_COLOR))
 		? pushConstants.color.rgb
 		: max(inFlatColor, vec3(0.08));
 
+	base = hdrMaterial(base);
 	// True r_drawflat surfaces (not sky/turb, no fallback) still get shaded
 	// by the surface's real lightmap, same as GLC/GLM's drawflat mode -- a
 	// solid, completely unlit fill would otherwise flatten all depth cues.
@@ -126,7 +130,7 @@ void main()
 			vec3 dir = normalize(inDirection);
 			int face = skyboxAxis(dir);
 
-			base = sampleSkyboxFace(face, skyboxUv(face, dir));
+			base = hdrMaterial(sampleSkyboxFace(face, skyboxUv(face, dir)));
 		}
 		else if (pushConstants.useSkyTexture > 0.5) {
 			const float len = 3.09375;
@@ -138,9 +142,17 @@ void main()
 			vec4 skyColour = texture(skyTexture, skyCoord);
 			vec4 cloudColour = texture(skyCloudTexture, cloudCoord);
 
-			base = mix(skyColour.rgb, cloudColour.rgb, cloudColour.a);
+			base = mix(hdrMaterial(skyColour.rgb), hdrMaterial(cloudColour.rgb), cloudColour.a);
 		}
 	}
 
 	fragColour = vec4(base, 1.0);
+}
+
+// HDR-001: emission follows the same coverage as color, independently of albedo.
+layout(location=1) out vec4 fragEmission;
+void main() {
+ shadeScene();
+ if(pushConstants.surfaceType<.5) fragColour.rgb += fragColour.rgb*shadowIrradiance();
+ fragEmission=vec4(vec3(0), fragColour.a);
 }

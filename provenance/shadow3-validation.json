@@ -1,0 +1,132 @@
+{
+  "author": "OpenAI Codex",
+  "date": "2026-09-15",
+  "runs": {
+    "maplight-before-dm6": {
+      "changedPixelsVsBaked": {
+        "232/0.25": 276,
+        "232/1": 440991,
+        "232/4": 478757,
+        "202/0.25": 404,
+        "202/1": 426642,
+        "202/4": 479064,
+        "172/0.25": 1018,
+        "172/1": 392166,
+        "172/4": 479051
+      },
+      "maximumChannelError": {
+        "232/0.25": 1,
+        "232/1": 48,
+        "232/4": 55,
+        "202/0.25": 1,
+        "202/1": 52,
+        "202/4": 54,
+        "172/0.25": 1,
+        "172/1": 51,
+        "172/4": 42
+      },
+      "logSHA256": "85020377e189a39d5ee53089e8da5e477f5a9376814209f7950b54ef0ba76ed7"
+    },
+    "maplight-fixed-dm6": {
+      "changedPixelsVsBaked": {
+        "232/0.25": 0,
+        "232/1": 0,
+        "232/4": 1,
+        "202/0.25": 0,
+        "202/1": 0,
+        "202/4": 0,
+        "172/0.25": 0,
+        "172/1": 0,
+        "172/4": 0
+      },
+      "maximumChannelError": {
+        "232/0.25": 0,
+        "232/1": 0,
+        "232/4": 1,
+        "202/0.25": 0,
+        "202/1": 0,
+        "202/4": 0,
+        "172/0.25": 0,
+        "172/1": 0,
+        "172/4": 0
+      },
+      "logSHA256": "6fcf84a718a124e3e01efb4d1513cb2203bbe2c5d92ed854359a17a1c0e40c72"
+    },
+    "maplight-fixed-e1m1": {
+      "changedPixelsVsBaked": {
+        "480/0.25": 0,
+        "480/1": 0,
+        "480/4": 1,
+        "510/0.25": 0,
+        "510/1": 0,
+        "510/4": 0,
+        "540/0.25": 0,
+        "540/1": 0,
+        "540/4": 1
+      },
+      "maximumChannelError": {
+        "480/0.25": 0,
+        "480/1": 0,
+        "480/4": 1,
+        "510/0.25": 0,
+        "510/1": 0,
+        "510/4": 0,
+        "540/0.25": 0,
+        "540/1": 0,
+        "540/4": 1
+      },
+      "logSHA256": "39885a1e8724f5033b307343a7a91387a4894036ae5eb96b22c0228311990ebb"
+    }
+  },
+  "finalExecutables": {
+    "Debug": "769da102e2ac125fee46a9dfdcceb149c63686f6639c560837e5cf2e5b5b174d",
+    "Release": "3ad9dd5a5af381bd7a785dc7a5d9c074d969a5e5ee96486db7efe8f2ed0c1053"
+  },
+  "scope": "E1M1 and DM6, three camera positions each, map radius 0.25/1/4, eight lights/updates, HDR/MSAA. No entity rendering: static world matches baked reference within isolated one-level 8-bit rounding (maximum four pixels allowed). Dynamic caster and realtime-lighting coverage uses shadow3-regression separately.",
+  "casterAndRealtimeRegression": {
+    "uncached / cached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "move / move-uncached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "actor / actor-uncached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "eight / cached-eight": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "overflow / overflow-reference": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "baked / map-shadows": {
+      "changedPixels": 11447,
+      "meanAbsoluteDifference": 0.21230555555555555
+    },
+    "map-shadows / spot-realtime": {
+      "changedPixels": 433180,
+      "meanAbsoluteDifference": 27.830055555555557
+    },
+    "spot-realtime / spot-soft": {
+      "changedPixels": 80806,
+      "meanAbsoluteDifference": 1.9366305555555556
+    },
+    "spot-soft / ambient": {
+      "changedPixels": 433161,
+      "meanAbsoluteDifference": 8.471872222222222
+    },
+    "ambient / map-radius": {
+      "changedPixels": 261175,
+      "meanAbsoluteDifference": 12.092004166666667
+    },
+    "quality512 / quality128": {
+      "changedPixels": 220835,
+      "meanAbsoluteDifference": 3.960545138888889
+    }
+  }
+}

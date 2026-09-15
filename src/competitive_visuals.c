@@ -6,6 +6,10 @@
 extern void M_Print_GetPoint(int cx, int cy, int *rx, int *ry, const char *str, qbool red);
 #include "rulesets.h"
 #include "competitive_visuals.h"
+#ifdef RENDERER_OPTION_VULKAN
+#include <vulkan/vulkan.h>
+#include "vk_shadows.h"
+#endif
 #ifndef CLIENTONLY
 #include "server.h"
 #endif
@@ -43,10 +47,12 @@ static const cv_existing_t existing[] = {
 #define CV_RESTART_ROW CV_TOTAL
 static qbool videoApplied;
 static int appliedMSAA, actualMSAA;
+static int appliedHDR, actualHDR;
+void CV_HDRVideoApplied(int requested, int actual) { appliedHDR=requested; actualHDR=actual; }
 void CV_VideoApplied(int requested, int actual) { videoApplied=true; appliedMSAA=requested; actualMSAA=actual; }
 static qbool RestartPending(void) {
  cvar_t *v=Cvar_Find("vid_framebuffer_multisample");
- return R_UseVulkan() && videoApplied && v && v->integer!=appliedMSAA;
+ return R_UseVulkan() && videoApplied && ((v && v->integer!=appliedMSAA) || (int)CV_Value(CV_hdr)!=appliedHDR);
 }
 static const char *pages[] = {"Profiles", "World", "Lighting", "Silhouettes", "Effects", "Image"};
 static char notice[160], profile[32] = "competitive", saved[CV_TOTAL][64];
@@ -62,7 +68,7 @@ static int dragging = -1;
 #define EXT(n) (CV_COUNT+(n))
 static const char *groups[]={"World readability","Surface colours","Light response","Cel shading",
  "Player rim","Outline mode","World edges","Model edges","Edge colours",
- "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering"};
+ "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering","Light and shadow maps"};
 typedef struct { int index, page, group, depth; } cv_row_t;
 static const cv_row_t layout[]={
  {CV_enable,1,0,0},{CV_detail,1,0,1},{CV_contrast,1,0,1},{CV_pattern,1,0,1},{CV_distance,1,0,1},{CV_saturation,1,0,1},
@@ -75,10 +81,12 @@ static const cv_row_t layout[]={
  {CV_edgestrength,3,6,1},{CV_edgewidth,3,6,1},{EXT(2),3,6,1},
  {EXT(1),3,7,1},{CV_modelopacity,3,7,1},{EXT(3),3,7,1},
  {CV_edgepalette,3,8,0},{CV_worldedge,3,8,1},{CV_teamedge,3,8,1},{CV_enemyedge,3,8,1},
- {CV_bloom,4,9,0},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
- {CV_ao,4,10,0},{CV_aoradius,4,10,1},{EXT(4),4,10,0},
+ {CV_bloom,4,9,0},{CV_bloomsource,4,9,1},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
+ {CV_ao,4,10,0},{CV_aoradius,4,10,1},{CV_aomode,4,10,1},{CV_aoquality,4,10,1},{CV_aobias,4,10,1},{EXT(4),4,10,0},
+ {CV_shadows,4,14,0},{CV_shadowquality,4,14,1},{CV_shadowsoft,4,14,1},{CV_shadowdistance,4,14,1},
+ {CV_shadowlights,4,14,1},{CV_shadowbias,4,14,1},{CV_shadowstrength,4,14,1},{CV_shadowcache,4,14,1},{CV_shadowupdates,4,14,1},{CV_shadowcasters,4,14,1},{CV_maplights,4,14,1},{CV_maplightscale,4,14,2},{CV_mapambient,4,14,2},
  {EXT(5),4,11,0},{EXT(6),4,11,0},
- {CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
+ {CV_hdr,5,12,0},{CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
  {EXT(7),5,13,0},{EXT(8),5,13,0},{EXT(14),5,13,0},{CV_RESTART_ROW,5,13,0}
 };
 static cvar_t *Var(int index);
@@ -103,8 +111,17 @@ static const char *Unavailable(int index) {
   if((index==CV_bands||index==CV_softness) && CV_Value(CV_light)<1.5) return "Select Soft Cel to use cel bands.";
  }
  if(index>=CV_rimwidth && index<=CV_rimteam && CV_Value(CV_rim)<=0) return "Increase Player rim first.";
- if(index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
- if(index==CV_aoradius && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
+ if(index>=CV_shadows && index<=CV_mapambient) {
+  if(ExistingValue("r_fullbright")) return "Disable fullbright lighting first.";
+  if(!ExistingValue("r_dynamic")||ExistingValue("gl_flashblend")) return "Enable dynamic lights and disable flashblend.";
+  if(index!=CV_shadows && !CV_Value(CV_shadows)) return "Enable Dynamic shadows first.";
+ }
+ if(index==CV_maplightscale && !CV_Value(CV_maplights))return "Enable Map lighting mode first.";
+ if(index==CV_mapambient && CV_Value(CV_maplights)<2)return "Select realtime Map lighting mode (2) first.";
+ if(index==CV_bloomsource && !actualHDR) return "Enable Linear HDR and Restart video first. SDR uses bright pixels.";
+ if(index==CV_bloomsource||index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
+ if((index==CV_aoradius || index==CV_aomode || index==CV_aoquality || index==CV_aobias) && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
+ if((index==CV_aoquality || index==CV_aobias) && !CV_Value(CV_aomode)) return "Enable the SSAO method first.";
  if(index==CV_edgewidth||index==CV_edgestrength||index==CV_worldedge||index==EXT(2)) {
   if(!world) return "Enable World or Both outlines.";
   if(!RuleSets_AllowEdgeOutline()) return "World edges blocked by ruleset.";
@@ -130,12 +147,13 @@ static void Bounds(int index, float *lo, float *hi, float *step) {
  else { const cv_existing_t *e=&existing[index-CV_COUNT]; *lo=e->lo; *hi=e->hi; *step=e->step; }
 }
 static qbool Toggle(int index) {
+ if(index==CV_aomode || index==CV_bloomsource) return false;
  float lo,hi,step; Bounds(index,&lo,&hi,&step); return lo==0 && hi==1 && step==1;
 }
 static qbool Slider(int index) {
  if(index==CV_RESTART_ROW) return false;
  if(Toggle(index)) return false;
- if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap;
+ if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap && index!=CV_aomode && index!=CV_bloomsource;
  return existing[index-CV_COUNT].step>0 && existing[index-CV_COUNT].step<1;
 }
 static qbool SwitchedOn(cvar_t *v) {
@@ -170,6 +188,8 @@ static void DrawControl(int index, int depth, int y) {
  } else {
   const char *choice=NULL;
   if(Toggle(index)) choice=SwitchedOn(v)?"On":"Off";
+  else if(index==CV_aomode) choice=CV_Value(CV_aomode)?"SSAO":"Contact";
+  else if(index==CV_bloomsource) choice=CV_Value(CV_bloomsource)?"Emissive":"Bright pixels";
   else if(index==CV_light) { const char *names[]={"Original","Gradient","Soft Cel"}; choice=names[(int)CV_Value(CV_light)]; }
   else if(index==CV_tonemap) { const char *names[]={"Original","Soft shoulder","Filmic"}; choice=names[(int)CV_Value(CV_tonemap)]; }
   else if(!strcmp(v->name,"gl_outline")) { const char *names[]={"Off","Models","World","Both"}; choice=names[(int)bound(0,v->value,3)]; }
@@ -392,6 +412,9 @@ void CV_Draw(void) {
   else if(indices[cursor]==EXT(7) && R_UseVulkan()) {
    snprintf(line,sizeof(line),"Active MSAA: %dx%s",actualMSAA,RestartPending()?"; change pending":""); M_PrintWhite(16,180,line);
   }
+  else if(indices[cursor]==CV_hdr && R_UseVulkan()) {
+   snprintf(line,sizeof(line),"Active HDR: %s%s",actualHDR?"RGBA16F":"Off",RestartPending()?"; restart pending":""); M_PrintWhite(16,180,line);
+  }
  }
  M_PrintWhite(16,190,general?"PgUp/Dn: page  F7: reset page":"PgUp/Dn: page  F6: compare  F7: reset");
 }
@@ -497,11 +520,13 @@ static void Command(void) {
 // Opt-in local screenshot fixture. No effect without both -dev and -visual-tests.
 static qbool photoActive;
 static double photoTime;
+static int photoActorStart,photoBrush=-1;
+static dlight_t photoLights[8];
 static vec3_t photoOrigin, photoAngles;
 static qbool PhotoAllowed(void) {
 #ifndef CLIENTONLY
  const netadr_t *address=&cls.netchan.remote_address;
- return IsDeveloperMode() && COM_FindParm("-visual-tests") && sv.state==ss_active &&
+ return (IsDeveloperMode() || COM_FindParm("-shadow-benchmark")) && COM_FindParm("-visual-tests") && sv.state==ss_active &&
   cls.state==ca_active && r_refdef2.allow_cheats &&
   (address->type==NA_LOOPBACK || (address->type==NA_IP && address->ip[0]==127));
 #else
@@ -511,7 +536,22 @@ static qbool PhotoAllowed(void) {
 void CV_TestView(void) {
  if(!photoActive || !PhotoAllowed()) return;
  cl.time=photoTime; r_refdef2.time=photoTime;
+ // View setup computed these before the fixture restored its frozen clock.
+ r_refdef2.powerup_scroll_params[0]=(float)cos(photoTime*1.5);
+ r_refdef2.powerup_scroll_params[1]=(float)sin(photoTime*1.1);
+ r_refdef2.powerup_scroll_params[2]=(float)cos(photoTime*-0.5);
+ r_refdef2.powerup_scroll_params[3]=(float)sin(photoTime*-0.5);
  VectorCopy(photoOrigin,r_refdef.vieworg); VectorCopy(photoAngles,r_refdef.viewangles);
+}
+void CV_TestLights(void) {
+ int i;
+ if(!photoActive||!PhotoAllowed()) return;
+ CV_TestView();
+ memset(cl_dlight_active,0,sizeof(cl_dlight_active));
+ for(i=0;i<8;++i) if(photoLights[i].radius>0) {
+  cl_dlights[i]=photoLights[i];cl_dlights[i].die=cl.time+600;
+  cl_dlight_active[0]|=1u<<i;
+ }
 }
 static void PhotoCommand(void) {
 #ifndef CLIENTONLY
@@ -519,15 +559,52 @@ static void PhotoCommand(void) {
  if(!PhotoAllowed()) { Con_Printf("CV_PHOTO rejected: requires opt-in local cheat-enabled test server.\n"); return; }
  if(!strcmp(action,"freeze")) {
   VectorCopy(r_refdef.vieworg,photoOrigin); VectorCopy(r_refdef.viewangles,photoAngles);
+  memset(photoLights,0,sizeof(photoLights));photoBrush=-1;
   photoTime=cl.time; if(!sv.paused) SV_TogglePause(NULL,1); cl.paused|=PAUSED_SERVER; photoActive=true;
  } else if(!strcmp(action,"camera") && Cmd_Argc()==9) {
   for(i=0;i<3;++i) { photoOrigin[i]=(float)atof(Cmd_Argv(3+i)); photoAngles[i]=(float)atof(Cmd_Argv(6+i)); }
+ } else if(!strcmp(action,"light") && photoActive && Cmd_Argc()==8) {
+  dlight_t *light=&photoLights[bound(0,atoi(Cmd_Argv(3)),7)];
+  for(i=0;i<3;++i) light->origin[i]=(float)atof(Cmd_Argv(4+i));
+  light->radius=bound(0,(float)atof(Cmd_Argv(7)),1024);light->die=cl.time+600;light->type=lt_white;light->decay=0;
+ } else if(!strcmp(action,"actor") && photoActive && Cmd_Argc()==7) {
+  int slot=atoi(Cmd_Argv(3))==3?photoBrush:photoActorStart+bound(0,atoi(Cmd_Argv(3)),2);
+  if(slot>=0 && slot<cl.num_statics) {
+   entity_t *ent=&cl_static_entities[slot];efrag_t *ef=ent->efrag;
+   /* Fixture-only unlink: efrags use map-lifetime hunk allocation. */
+   while(ef && ef->entity==ent) {efrag_t **link=&ef->leaf->efrags;
+    while(*link&&*link!=ef) link=&(*link)->leafnext;
+    if(*link) *link=ef->leafnext;
+    ef=ef->entnext;
+   }
+   ent->efrag=NULL;
+   for(i=0;i<3;++i) ent->origin[i]+=(float)atof(Cmd_Argv(4+i));
+   R_AddEfrags(ent);
+  }
+ } else if(!strcmp(action,"brush") && photoActive) {
+  model_t *model=NULL;vec3_t forward;float best=1e30f;
+  if(photoBrush>=0||cl.num_statics>=MAX_STATIC_ENTITIES) return;
+  for(i=1;i<MAX_MODELS;++i) {model_t *m=cl.model_precache[i];
+   if(m&&m->type==mod_brush&&m->name[0]=='*') {
+    float size=(m->maxs[0]-m->mins[0])*(m->maxs[1]-m->mins[1])*(m->maxs[2]-m->mins[2]);
+    if(size>4096&&size<best){model=m;best=size;}
+   }
+  }
+  if(model) {
+   entity_t *ent=&cl_static_entities[cl.num_statics++];memset(ent,0,sizeof(*ent));
+   photoBrush=cl.num_statics-1;ent->entity_id=cl.num_statics;ent->model=model;ent->colormap=vid.colormap;
+   AngleVectors(photoAngles,forward,NULL,NULL);
+   for(i=0;i<3;++i) ent->origin[i]=photoOrigin[i]+forward[i]*150-(model->mins[i]+model->maxs[i])*.5f;
+   R_AddEfrags(ent);
+   Con_Printf("CV_PHOTO brush=%s slot=%d\n",model->name,photoBrush);
+  }
  } else if(!strcmp(action,"actors") && photoActive) {
   vec3_t forward,right;
   model_t *player=cl.model_precache[cl_modelindices[mi_player]], *ordinary=NULL;
   if(!player || cl.num_statics+3>=MAX_STATIC_ENTITIES) return;
   for(i=1;i<MAX_MODELS;++i) if(cl.model_precache[i] && strstr(cl.model_precache[i]->name,"backpack")) { ordinary=cl.model_precache[i]; break; }
   AngleVectors(photoAngles,forward,right,NULL);
+  photoActorStart=cl.num_statics;
   for(i=0;i<3;++i) {
    entity_t *ent;
    if(i==2 && !ordinary) continue;
@@ -540,6 +617,9 @@ static void PhotoCommand(void) {
     cl.players[slot]=cl.players[cl.playernum]; cl.players[slot].teammate=i==0;
     cl.players[slot].topcolor=i?13:4; cl.players[slot].bottomcolor=3;
     ent->scoreboard=&cl.players[slot]; ent->renderfx=RF_PLAYERMODEL;
+    // HDR fixture: optional frozen powerup actor exercises real emissive
+    // shell draws. Existing photo actors and ordinary gameplay are unchanged.
+    if(i==0 && !strcmp(Cmd_Argv(3),"powerup")) ent->effects|=EF_BLUE;
    }
    R_AddEfrags(ent);
   }
@@ -548,8 +628,14 @@ static void PhotoCommand(void) {
   photoOrigin[0],photoOrigin[1],photoOrigin[2],photoAngles[0],photoAngles[1],photoAngles[2],cl.num_statics,cl.time);
 #endif
 }
+static double shadowBenchStart;
 static void Developer(void) {
  if(!developer.value) return;
+ if(!strcmp(Cmd_Argv(1),"benchstart")){shadowBenchStart=Sys_DoubleTime();return;}
+ if(!strcmp(Cmd_Argv(1),"benchend")){Con_Printf("SHADOW_BENCH elapsed=%.6f frames=%s\n",Sys_DoubleTime()-shadowBenchStart,Cmd_Argv(2));return;}
+#ifdef RENDERER_OPTION_VULKAN
+ if(!strcmp(Cmd_Argv(1),"shadows") && R_UseVulkan()) VK_ShadowStatus();
+#endif
  if(!strcmp(Cmd_Argv(1),"runtime")) {
   int i,players=0;
   for(i=0;i<MAX_CLIENTS;++i) if(cl.players[i].name[0] && !cl.players[i].spectator) ++players;
@@ -587,10 +673,20 @@ static void Developer(void) {
   Con_Printf("CV_PARAMS style=%d post=%d bloom=%g exposure=%g light=%g ao=%g\n",CV_Active(),CV_PostActive(),params.post[2],params.post[0],params.light[0],params.post2[1]);
  }
  Con_Printf("CV_VIDEO pending=%d requested=%g applied=%d actual=%d\n",RestartPending(),ExistingValue("vid_framebuffer_multisample"),appliedMSAA,actualMSAA);
+ Con_Printf("CV_HDR requested=%g applied=%d active=%d\n",CV_Value(CV_hdr),appliedHDR,actualHDR);
+}
+void CV_InitSettings(void) {
+ static qbool initialized;
+ int i;
+ if(initialized) return;
+ for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
+ initialized=true;
 }
 void CV_Init(void) {
- int i; for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
+ CV_InitSettings();
  Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
  Cmd_AddCommand("menu_visual_effects",CV_OpenEffects);
- if(IsDeveloperMode()) Cmd_AddCommand("dev_competitive",Developer);
+ if(IsDeveloperMode() || COM_FindParm("-shadow-benchmark")) Cmd_AddCommand("dev_competitive",Developer);
 }
+
+

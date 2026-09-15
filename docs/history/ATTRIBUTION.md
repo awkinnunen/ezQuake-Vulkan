@@ -1,5 +1,47 @@
 # Attribution and change provenance
 
+## SHADOW-003 authorship (2026-09-15)
+
+The user reported the DM6 Baked with shadows / Map light radius regression.
+OpenAI Codex diagnosed and implemented the correction in src/vk_shadows.c and
+created the baked-reference regression fixture, evidence and documentation.
+Patch 22 and Source-Changes.json identify this edit separately from prior work.
+Existing engine, renderer and game-resource authorship remains unchanged.
+
+## SHADOW-002 authorship (2026-09-15)
+
+OpenAI Codex completed the requested shadow follow-up: up to eight point/spot
+lights, BSP/optional authored lights, baked-shadow/realtime lighting modes, cached
+world bounds and per-frame/view atlases, face/cone culling, bounded round-robin updates,
+shader specialization and thirteen live menu controls. Project defaults use four lights
+and four updates, preserving unrelated config values. See DYNAMIC-SHADOWS.md and
+provenance/shadow2-validation.json for exact scope and evidence.
+
+MULTIVIEW-001 is resolved: sky descriptor updates happen once per fenced frame;
+view-specific buffers/uniforms/atlases are immutable for earlier recorded views.
+The previously ignored 3D viewports and single-camera screenshot path were also fixed.
+Screenshots now rebuild entity lists so static models do not accumulate between captures.
+Source patch 21 and Source-Changes.json attribute these changes to Codex; upstream
+contributors and game asset authors retain their original attribution.
+
+## RASTER-001 and RASTER-DEFAULT-001 (2026-09-14)
+
+OpenAI Codex implemented optional linear RGBA16F rendering and emission MRT,
+world SSAO reconstruction/brush transforms, terminal MSAA/depth store changes,
+new menu controls and test fixtures at the user's request. Patch 19 and the
+RASTER-001 entry in scripts/Source-Changes.json distinguish these changes from
+tibazera/upstream rendering and earlier local patches. No vkQuake-RT code or
+replacement game assets were imported for this work.
+
+OpenAI Codex also authored the raster build/export/test helpers and
+RASTER-FEATURES.md, and updated the TODO, validation, feature and development
+documentation. The user then requested all new settings enabled. Codex added
+five explicit settings to active/named/distributable profiles while retaining
+existing strengths and all unrelated config lines. The private activation
+manifest and backups retain before/after hashes; the original gameplay bindings
+and visual selections keep their prior user authorship. No GitHub upload is
+part of this change.
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
@@ -361,3 +403,63 @@ OpenAI Codex, 2026-09-13. The SDK header identity is computed from canonical
 UTF-8/LF content so Git CRLF conversion cannot break package compatibility.
 Runtime binary/shader hashes remain byte-exact. Patch 17 records this correction.
 The ordered host series now contains 17 patches covering the same 78 paths.
+
+## PERF-COMPARE-001: renderer performance comparison
+
+OpenAI Codex authored scripts/Benchmark-Renderers.ps1,
+scripts/Export-RendererPerformance.py and RENDERER-PERFORMANCE.md, and ran the
+measurements on 2026-09-14. The high-eyecandy preset is derived from the existing
+packaged ezQuake preset; its original content and authorship are not claimed by
+Codex. Engine implementations and binary releases retain upstream authorship.
+Raw demo/capture material remains in local test fixtures, outside public exports.
+
+## PERF-COMPARE-002: AA diagnostics and isolated profiler
+
+OpenAI Codex authored probes/vk_frame_profile.h, scripts/Build-VulkanProfiler.py,
+scripts/Export-AADiagnostics.py, the executable/profiling/validation extensions
+to Benchmark-Renderers.ps1 and AA-DIAGNOSTICS.md on 2026-09-14, and performed
+the measurements. The profiler header is GPL-2.0-or-later. The generated source
+copies and instrumentation.patch retain the upstream engine's existing notices;
+only the diagnostic timing hooks are attributed to Codex. No donor renderer,
+original ezQuake implementation, packaged preset or game asset is reattributed.
+The normal engine source and executable were not changed by this diagnostic work.
+
+## PERF-OPT-001: deferred scene-pass startup
+
+OpenAI Codex, 2026-09-14, authored the scene-pass lifecycle changes in
+src/vk_main.c and src/vk_world.c and their declarations in src/vk_local.h.
+Existing rendering, shaders, assets and upstream copyright notices retain their
+original authorship. The change is exported separately as
+patches/ezquake-18-deferred-scene-pass.patch and identified by PERF-OPT-001 in
+scripts/Source-Changes.json, including its actual implementation date.
+
+Codex also authored Build-ScenePass.py, Test-ScenePass.ps1, Export-ScenePass.py,
+SCENE-PASS-OPTIMIZATION.md and the accompanying benchmark/profiler/provenance
+script maintenance. KTX's position command and existing photo-test hooks are
+used without claiming authorship of KTX. Screenshots and installed game data
+remain local test artifacts.
+
+## PERF-COMPARE-003: optimized renderer comparison
+
+OpenAI Codex, 2026-09-14, authored the optional optimized comparison mode and
+additional integrity checks in scripts/Export-RendererPerformance.py, ran the
+ten-case comparison, and wrote RENDERER-PERFORMANCE-OPTIMIZED.md and accompanying
+development, validation and TODO updates. Engine code, binaries, packaged presets
+and game assets retain their existing authorship; none were modified for this
+comparison. Private demos and captures remain local.
+
+## BUG-TRIAGE-001: issue registry and focused reproduction
+
+OpenAI Codex, 2026-09-14, authored BUGS.md, the reorganized TIBAZERA-TODO.md,
+scripts/Test-MultiviewTriage.ps1 and related documentation/status updates at the
+user's request, and executed the focused current multiview fixture. The prior
+task assessment is preserved in TIBAZERA-TODO-HISTORY.md with its attribution.
+The test uses existing developer checkpoints without claiming authorship of
+upstream rendering, demo data or assets. No engine implementation or binary was
+modified by this audit. Historical hypotheses are attributed as observations,
+not as confirmed new code defects.
+
+
+## SHADOW-001 attribution
+
+OpenAI Codex authored the new raster-shadow implementation, integration edits, tests, documentation and config activation on 2026-09-14 at the user's request. Patch ezquake-20-dynamic-shadows.patch and Source-Changes.json identify exact source changes after patch 19. Existing tibazera/ezQuake/id Software code retains its authorship and licensing; this feature imports no vkQuake-RT code or game assets.

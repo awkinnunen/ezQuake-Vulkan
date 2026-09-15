@@ -1,0 +1,396 @@
+{
+  "author": "OpenAI Codex",
+  "date": "2026-09-15",
+  "hardware": "AMD Radeon(TM) Graphics (integrated), Vulkan 1.2.188",
+  "method": "1280x720, HDR, MSAA 4x, AO/bloom off, fixed camera and local active light fixture. No Vulkan validation. GPU timestamps bracket scene and shadow work; discard 32 boundary samples at each end of each labeled case. Whole-frame GPU time is not game FPS.",
+  "runs": {
+    "shadow2-before-final": {
+      "cases": {
+        "two256": {
+          "samples": 1771,
+          "gpu_ms": {
+            "median": 3.91132,
+            "mean": 3.9983911236589496,
+            "p95": 4.70516
+          },
+          "shadow_ms": {
+            "median": 0.2788,
+            "mean": 0.2886636984754376,
+            "p95": 0.35808
+          },
+          "record_cpu_ms": {
+            "median": 1.8068,
+            "mean": 2.20065358554489,
+            "p95": 4.244
+          },
+          "scene_ms": {
+            "median": 1.5898,
+            "mean": 1.6347056578204404,
+            "p95": 1.94432
+          }
+        },
+        "off-return": {
+          "samples": 2057,
+          "gpu_ms": {
+            "median": 3.40752,
+            "mean": 3.4768115313563444,
+            "p95": 3.98824
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00011951385512882839,
+            "p95": 0.00012
+          },
+          "record_cpu_ms": {
+            "median": 0.5311,
+            "mean": 0.5525196402527953,
+            "p95": 0.7884
+          },
+          "scene_ms": {
+            "median": 1.41072,
+            "mean": 1.4581872630043753,
+            "p95": 1.77716
+          }
+        },
+        "off": {
+          "samples": 2050,
+          "gpu_ms": {
+            "median": 3.45134,
+            "mean": 3.5009885463414636,
+            "p95": 4.02104
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00011949268292682928,
+            "p95": 0.00012
+          },
+          "record_cpu_ms": {
+            "median": 0.49424999999999997,
+            "mean": 0.5210847804878049,
+            "p95": 0.796
+          },
+          "scene_ms": {
+            "median": 1.4369399999999999,
+            "mean": 1.4681125268292683,
+            "p95": 1.74496
+          }
+        },
+        "one256": {
+          "samples": 1837,
+          "gpu_ms": {
+            "median": 3.74532,
+            "mean": 3.857269689711486,
+            "p95": 4.71736
+          },
+          "shadow_ms": {
+            "median": 0.16468,
+            "mean": 0.17099375068045727,
+            "p95": 0.21748
+          },
+          "record_cpu_ms": {
+            "median": 1.5843,
+            "mean": 1.7779730538922156,
+            "p95": 3.2145
+          },
+          "scene_ms": {
+            "median": 1.53216,
+            "mean": 1.5900629286880783,
+            "p95": 2.0076
+          }
+        },
+        "one128": {
+          "samples": 1931,
+          "gpu_ms": {
+            "median": 3.58992,
+            "mean": 3.665011745209736,
+            "p95": 4.35856
+          },
+          "shadow_ms": {
+            "median": 0.1032,
+            "mean": 0.10631061108234076,
+            "p95": 0.12724
+          },
+          "record_cpu_ms": {
+            "median": 1.2313,
+            "mean": 1.5236016053858106,
+            "p95": 2.9951
+          },
+          "scene_ms": {
+            "median": 1.48484,
+            "mean": 1.5232122630761264,
+            "p95": 1.8486
+          }
+        },
+        "one512": {
+          "samples": 1700,
+          "gpu_ms": {
+            "median": 4.11242,
+            "mean": 4.179231205882353,
+            "p95": 4.86428
+          },
+          "shadow_ms": {
+            "median": 0.461,
+            "mean": 0.4729775352941176,
+            "p95": 0.5782
+          },
+          "record_cpu_ms": {
+            "median": 1.8361,
+            "mean": 1.9069783529411766,
+            "p95": 3.193
+          },
+          "scene_ms": {
+            "median": 1.5839599999999998,
+            "mean": 1.6213058588235294,
+            "p95": 1.96272
+          }
+        }
+      },
+      "states": [
+        "SHADOW_STATE enabled=0 lights=0 ids=-1,-1 faces=0 draws=0 overflow=0 size=256 alias=0",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=6 draws=1410 overflow=0 size=128 alias=5",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=6 draws=1410 overflow=0 size=256 alias=5",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=6 draws=1410 overflow=0 size=512 alias=5",
+        "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=2544 overflow=0 size=256 alias=5",
+        "SHADOW_STATE enabled=0 lights=0 ids=-1,-1 faces=0 draws=0 overflow=0 size=256 alias=0"
+      ],
+      "csvSHA256": "bd45779832f7408e9a4973b67cc07444ece148ac189b61f6109bce05f473476a",
+      "logSHA256": "3672990f7048132003c1e98c31651b713f0d2eff9e8b8861ebf940fb0b0c96c7",
+      "executableSHA256": "17b5ba7356b967b8ef457b8165c235cbded20b2bbba71a855bba09f948138279",
+      "commandsSHA256": "24410fd546456d3bd63c4ec1341060e0ab822b8deecd5bafe1102b2860a6f954"
+    },
+    "shadow2-after-filter": {
+      "cases": {
+        "two256": {
+          "samples": 1772,
+          "gpu_ms": {
+            "median": 3.90416,
+            "mean": 3.9677866422121895,
+            "p95": 4.73376
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00013945823927765237,
+            "p95": 0.00016
+          },
+          "record_cpu_ms": {
+            "median": 0.7864,
+            "mean": 0.9150588600451467,
+            "p95": 1.742
+          },
+          "scene_ms": {
+            "median": 1.7530999999999999,
+            "mean": 1.782885840857788,
+            "p95": 2.18184
+          }
+        },
+        "two256-redraw": {
+          "samples": 1612,
+          "gpu_ms": {
+            "median": 4.247,
+            "mean": 4.318001532258065,
+            "p95": 5.09528
+          },
+          "shadow_ms": {
+            "median": 0.30042,
+            "mean": 0.30627661910669973,
+            "p95": 0.36668
+          },
+          "record_cpu_ms": {
+            "median": 1.138,
+            "mean": 1.315264640198511,
+            "p95": 2.3018
+          },
+          "scene_ms": {
+            "median": 1.77032,
+            "mean": 1.8051667245657568,
+            "p95": 2.16068
+          }
+        },
+        "one512": {
+          "samples": 2018,
+          "gpu_ms": {
+            "median": 3.49946,
+            "mean": 3.553175946481665,
+            "p95": 4.02052
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.0001358771060455897,
+            "p95": 0.00016
+          },
+          "record_cpu_ms": {
+            "median": 0.45725,
+            "mean": 0.5027321110009911,
+            "p95": 0.8184
+          },
+          "scene_ms": {
+            "median": 1.51056,
+            "mean": 1.548260436075322,
+            "p95": 1.81304
+          }
+        },
+        "one256": {
+          "samples": 1950,
+          "gpu_ms": {
+            "median": 3.6050199999999997,
+            "mean": 3.6668184205128207,
+            "p95": 4.31204
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00013731282051282053,
+            "p95": 0.00016
+          },
+          "record_cpu_ms": {
+            "median": 0.5088,
+            "mean": 0.5835918974358975,
+            "p95": 1.0415
+          },
+          "scene_ms": {
+            "median": 1.5473,
+            "mean": 1.5872603282051283,
+            "p95": 1.92716
+          }
+        },
+        "off-return": {
+          "samples": 1656,
+          "gpu_ms": {
+            "median": 4.0639400000000006,
+            "mean": 4.221116099033816,
+            "p95": 5.36304
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00013473429951690822,
+            "p95": 0.0002
+          },
+          "record_cpu_ms": {
+            "median": 0.8115,
+            "mean": 1.1041588768115942,
+            "p95": 2.7457
+          },
+          "scene_ms": {
+            "median": 1.74942,
+            "mean": 1.8124261352657005,
+            "p95": 2.3386
+          }
+        },
+        "eight256-cached": {
+          "samples": 1411,
+          "gpu_ms": {
+            "median": 4.92824,
+            "mean": 4.979281112686039,
+            "p95": 5.4162
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.0001365272856130404,
+            "p95": 0.00016
+          },
+          "record_cpu_ms": {
+            "median": 1.2858,
+            "mean": 1.3305870304748406,
+            "p95": 1.9879
+          },
+          "scene_ms": {
+            "median": 2.92992,
+            "mean": 2.9581529695251594,
+            "p95": 3.14976
+          }
+        },
+        "eight256-redraw": {
+          "samples": 1097,
+          "gpu_ms": {
+            "median": 6.1576,
+            "mean": 6.283080154968095,
+            "p95": 7.14984
+          },
+          "shadow_ms": {
+            "median": 1.06548,
+            "mean": 1.0915203737465815,
+            "p95": 1.29776
+          },
+          "record_cpu_ms": {
+            "median": 2.7743,
+            "mean": 2.9144228805834094,
+            "p95": 4.3479
+          },
+          "scene_ms": {
+            "median": 2.9948,
+            "mean": 3.0661876390154967,
+            "p95": 3.42844
+          }
+        },
+        "off": {
+          "samples": 2047,
+          "gpu_ms": {
+            "median": 3.45744,
+            "mean": 3.50852700048852,
+            "p95": 4.01844
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.00011955056179775281,
+            "p95": 0.00012
+          },
+          "record_cpu_ms": {
+            "median": 0.4969,
+            "mean": 0.5311334147532976,
+            "p95": 0.8085
+          },
+          "scene_ms": {
+            "median": 1.44324,
+            "mean": 1.4789189057156815,
+            "p95": 1.76568
+          }
+        },
+        "one128": {
+          "samples": 2032,
+          "gpu_ms": {
+            "median": 3.47224,
+            "mean": 3.52004094488189,
+            "p95": 3.99812
+          },
+          "shadow_ms": {
+            "median": 0.00012,
+            "mean": 0.0001353937007874016,
+            "p95": 0.00016
+          },
+          "record_cpu_ms": {
+            "median": 0.4594,
+            "mean": 0.5023596948818898,
+            "p95": 0.8406
+          },
+          "scene_ms": {
+            "median": 1.47324,
+            "mean": 1.5078684842519685,
+            "p95": 1.76108
+          }
+        }
+      },
+      "states": [
+        "SHADOW_STATE enabled=0 lights=0 ids=-1,-1 faces=0 draws=0 overflow=0 size=256 alias=0 cached=0 culled=0 deferred=0 view=0 maplights=198 views=0,0,0,0",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=0 draws=0 overflow=0 size=128 alias=5 cached=1 culled=0 deferred=0 view=0 maplights=198 views=1,0,0,0",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=0 draws=0 overflow=0 size=256 alias=5 cached=1 culled=0 deferred=0 view=0 maplights=198 views=1,0,0,0",
+        "SHADOW_STATE enabled=1 lights=1 ids=0,-1 faces=0 draws=0 overflow=0 size=512 alias=5 cached=1 culled=0 deferred=0 view=0 maplights=198 views=1,0,0,0",
+        "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=0 draws=0 overflow=0 size=256 alias=5 cached=2 culled=0 deferred=0 view=0 maplights=198 views=2,0,0,0",
+        "SHADOW_STATE enabled=0 lights=0 ids=-1,-1 faces=0 draws=0 overflow=0 size=256 alias=0 cached=0 culled=0 deferred=0 view=0 maplights=198 views=0,0,0,0",
+        "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=774 overflow=0 size=256 alias=5 cached=0 culled=1980 deferred=0 view=0 maplights=198 views=2,0,0,0",
+        "SHADOW_STATE enabled=1 lights=8 ids=0,5 faces=48 draws=3046 overflow=0 size=256 alias=5 cached=0 culled=7868 deferred=0 view=0 maplights=198 views=8,0,0,0",
+        "SHADOW_STATE enabled=1 lights=8 ids=0,5 faces=0 draws=0 overflow=0 size=256 alias=5 cached=8 culled=0 deferred=0 view=0 maplights=198 views=8,0,0,0"
+      ],
+      "csvSHA256": "95b5e1feb2f13af44cb3a9385338603dedb1432770603fc2b6e58a68f4030051",
+      "logSHA256": "29cc358c6acbfbe8291cb13e1e8caacae6f7ba4671d71ef2d806f829a82deb71",
+      "executableSHA256": "71a3ba0ce3a10f2efafe31a2f292cd64671d1731e6edc302743d095ca3ae2c7c",
+      "commandsSHA256": "d085093fb59778b949dd4705122fe1daffee1745ba2a6fb90f76663d1a384bd1"
+    }
+  },
+  "interpretation": [
+    "The initial disabled case is approximately 3.45 ms in both versions. The late disabled samples vary; no universal frame-rate improvement or cross-GPU claim follows from this fixture.",
+    "Cached one/two/eight-light cases record no shadow draw work. The near-zero timestamp interval is marker overhead, not a physical zero-cost claim; CPU selection/fingerprinting and receiver shading still run.",
+    "Eight-light cached versus forced redraw uses identical lighting/geometry and measures the benefit of reusing depth. Moving in-range casters invalidate their maps.",
+    "An intermediate diagnostic found out-of-range animated alias batches unnecessarily dirtied every light; range filtering fixes that without changing physical occlusion.",
+    "The earlier short-MVD throughput observation remains historical and is not substituted for active-light pass timing."
+  ],
+  "eightLightGpuReductionPercent": 19.964921397947265
+}

@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 
 #include "vk_local.h"
+#include "vk_shadows.h"
 #include "r_local.h"
 #include "r_buffers.h"
 
@@ -52,14 +53,15 @@ typedef struct vk_buffer_s {
 // geometry, worse at higher framerates since frames overlap more). The fix is
 // to duplicate the dynamic buffer storage per frame-in-flight and select the
 // live copy with the same index used for that frame's fence.
-static vk_buffer_t bufferData[r_buffer_count][VK_MAX_FRAMES_IN_FLIGHT];
+static vk_buffer_t bufferData[r_buffer_count][VK_MAX_FRAMES_IN_FLIGHT*4];
 
 static void VK_BufferResize(r_buffer_id id, int size, void* data);
 static void VK_BufferUpdateSection(r_buffer_id id, ptrdiff_t offset, int size, const void* data);
 
 static vk_buffer_t* VK_BufferCurrentSlot(r_buffer_id id)
 {
-	return &bufferData[id][vk_options.frame.currentFrame];
+	int view=(bufferData[id][0].usage==bufferusage_once_per_frame || bufferData[id][0].usage==bufferusage_reuse_per_frame)?VK_ShadowViewIndex():0;
+	return &bufferData[id][vk_options.frame.currentFrame+view*VK_MAX_FRAMES_IN_FLIGHT];
 }
 
 static void VK_BufferDestroyCopies(r_buffer_id id)
@@ -71,7 +73,7 @@ static void VK_BufferDestroyCopies(r_buffer_id id)
 		return;
 	}
 
-	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; ++i) {
+	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT*4; ++i) {
 		vk_buffer_t* slot = &bufferData[id][i];
 
 		if (slot->handle != VK_NULL_HANDLE) {
@@ -219,8 +221,9 @@ static qbool VK_BufferCreate(r_buffer_id id, buffertype_t type, const char* name
 	// Recreate every frame's copy with the same size/initial contents so the
 	// buffer reads correctly regardless of which frame-in-flight slot is
 	// currently live.
-	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; ++i) {
+	for (i = 0; i < VK_MAX_FRAMES_IN_FLIGHT*4; ++i) {
 		vk_buffer_t* slot = &bufferData[id][i];
+		if(i>=VK_MAX_FRAMES_IN_FLIGHT && VK_BufferMemoryIsDeviceLocal(usage)) break;
 		qbool created = (usage == bufferusage_once_per_frame || usage == bufferusage_reuse_per_frame) ?
 			VK_CreateBufferResourceWithSelector(size, bufferUsage, memoryStyle, VK_BufferPreferredMemoryType, &slot->handle, &slot->memory) :
 			VK_CreateBufferResource(size, bufferUsage, memoryStyle, &slot->handle, &slot->memory);

@@ -4,7 +4,7 @@ param([string]$Label='smoke', [ValidateSet('Debug','Release')][string]$Configura
     [ValidateSet('Vulkan','OpenGL')][string]$Renderer='Vulkan', [switch]$TestSky, [string[]]$Commands=@(),
     [string]$GameLibrary, [string[]]$BeforeMap=@(), [scriptblock]$PrepareProfile,
     [string[]]$ExtraArguments=@(), [ValidateRange(5,180)][int]$TimeoutSeconds=45,
-    [switch]$NoValidation, [int]$Width=800, [int]$Height=600)
+    [switch]$NoValidation, [int]$Width=800, [int]$Height=600, [string]$Executable)
 $ErrorActionPreference = 'Stop'
 if ($Label -notmatch '^[a-zA-Z0-9_-]+$') { throw 'Invalid test label.' }
 $taskRoot = Split-Path $PSScriptRoot -Parent
@@ -35,6 +35,7 @@ if ($TestSky) {
     Set-Content -Encoding ascii "$taskProfile/qw/finish.cfg"
 $taskRenderer = if ($Renderer -eq 'Vulkan') { '2' } else { '1' }
 $taskExe = Join-Path $taskRoot "build-msvc-x64/$Configuration/ezquake.exe"
+if ($Executable) { $taskExe = (Resolve-Path -LiteralPath $Executable).Path }
 $taskArgs = @('-condebug','-nohome','-basedir','.','-window','-width',"$Width",'-height',"$Height",
     '+set','vid_renderer',$taskRenderer,'+exec','run.cfg') + $ExtraArguments
 if(!$NoValidation) { $taskArgs=@('-dev')+$taskArgs }

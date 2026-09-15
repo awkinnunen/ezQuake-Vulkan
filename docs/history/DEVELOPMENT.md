@@ -1,5 +1,64 @@
 # Development log
 
+## PUBLIC-002: saved defaults and raster publication (2026-09-15)
+
+At the user's request, OpenAI Codex packaged the latest saved config as 71
+portable graphics values and 55 conditional effects. Settings are user-authored;
+HDR is off, shadows use eight lights/updates, radius 0.5 and caster budget 8192.
+The real Debug WASD-overlay save/load test passed with all values intact.
+Publication includes raster updates through patch 22, regression tools, evidence
+and attribution; commercial assets and full personal configs remain local.
+
+## SHADOW-003: preserve baked lighting during camera movement (2026-09-15)
+
+The user reported DM6 lighting switching off in Baked with shadows when Map light
+radius exceeded 0.25. OpenAI Codex traced mode 1 to reapplying static world shadows
+over an already baked lightmap using a camera-selected subset of source lights.
+Mode 1 now gathers only entity occluders; dynamic lights and Realtime mode retain
+the world. The old E1M1 fixture darkened most pixels at larger radii. Added a
+three-position, three-radius baked-reference comparison, including DM6, alongside
+the existing moving-caster/cache/spotlight regression. Configs are preserved.
+Patch 22 and Source-Changes.json attribute the correction to Codex.
+
+## SHADOW-002: complete raster-shadow follow-up (2026-09-15)
+
+OpenAI Codex completed the requested shadow follow-up: up to eight point/spot
+lights, BSP/optional authored lights, baked-shadow/realtime lighting modes, cached
+world bounds and per-frame/view atlases, face/cone culling, bounded round-robin updates,
+shader specialization and thirteen live menu controls. Project defaults use four lights
+and four updates, preserving unrelated config values. See DYNAMIC-SHADOWS.md and
+provenance/shadow2-validation.json for exact scope and evidence.
+
+MULTIVIEW-001 is resolved: sky descriptor updates happen once per fenced frame;
+view-specific buffers/uniforms/atlases are immutable for earlier recorded views.
+The previously ignored 3D viewports and single-camera screenshot path were also fixed.
+Screenshots now rebuild entity lists so static models do not accumulate between captures.
+Source patch 21 and Source-Changes.json attribute these changes to Codex; upstream
+contributors and game asset authors retain their original attribution.
+
+## RASTER-001: HDR, SSAO and MSAA attachment stores (2026-09-14)
+
+Implemented by OpenAI Codex at the user's request. Added optional linear RGBA16F
+scene colour and emission MRT, SDR tone mapping and emissive bloom selection;
+extended world AO with reconstructed-position SSAO, bounded samples/bias and
+moving BSP transforms; discarded terminal MSAA colour and unused main depth
+stores while retaining colour required by LOAD/resumed paths. Normal Debug and
+Release executables were rebuilt. Full scope, tests, performance and limits are
+in [RASTER-FEATURES.md](RASTER-FEATURES.md).
+
+Five new controls use Visual Effects, with contextual help, dependency lockouts
+and active/pending HDR feedback through F5. At the user's subsequent request,
+HDR/SSAO/emissive bloom are enabled in the active config, ESDF/WASD/user-tuned
+profiles and distributable defaults. Existing effect strengths, controls and
+assets are preserved; eight originals are backed up. Factory defaults remain
+compatible for installations without these profiles.
+
+The implemented SSAO is full-resolution/world-only; half-resolution filtering,
+model participation and CACAO remain separate follow-ups. Bloom retains the
+small existing kernel, and monitor HDR output is not implemented. TODO records
+these boundaries instead of marking the entire older VIS-02/VIS-03 roadmap
+complete. Known multiview and RT issues remain open.
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
@@ -525,7 +584,7 @@ all upstream, earlier Codex and concurrently completed Arena contributions.
 
 OpenAI Codex performed the import, inspections, test fixture and documentation
 under explicit user direction in the separate asset-import task. The user
-provided a private legacy Quake installation, flagged possible modifications and asked to preserve nQuake
+provided E:\eQuake, flagged possible modifications and asked to preserve nQuake
 improvements. Imported id1/pak1.pak and the maps-only pak2.pak; imported the
 12-entry pak3 pak.bak as destination pak3.pak after verifying every entry against
 the installed shareware PAK. The active old replacement-model/sound PAKs and
@@ -762,3 +821,185 @@ OpenAI Codex, 2026-09-13. The SDK header identity is computed from canonical
 UTF-8/LF content so Git CRLF conversion cannot break package compatibility.
 Runtime binary/shader hashes remain byte-exact. Patch 17 records this correction.
 The ordered host series now contains 17 patches covering the same 78 paths.
+
+## PERF-COMPARE-001: original ezQuake versus Vulkan
+
+OpenAI Codex, 2026-09-14. Added Benchmark-Renderers.ps1 and
+Export-RendererPerformance.py. The benchmark uses isolated profiles, shared
+installed assets, one private DM6 MVD, a common high-eyecandy preset, 4x MSAA
+and FXAA 5. All shared saved cvar values match except vid_renderer. Seven final
+cases each passed one warm-up and five measurements with 1,290 timedemo frames.
+Captures verify actual 1280x720 and 1920x1080 render sizes.
+
+The initial local upstream Release build did not progress in the restricted
+execution environment; its own CMake/Ninja processes were stopped. The comparison
+therefore uses the already-installed nQuake ezQuake 3.6.6 distribution binary.
+A same-project-binary OpenGL control separates backend cost from part of the
+version/build difference. No engine source was changed for the measurement.
+
+Calibration found an OpenGL-only preset command and differing cl_fakeshaft
+defaults; the final script removes the unsupported shared command and explicitly
+sets the same shaft interpolation. It also tests world outlines separately.
+Earlier probe/main runs are excluded. Median high-effects throughput was 378.9
+versus 335.8 FPS at 720p and 199.2 versus 165.4 FPS at 1080p (original OpenGL
+versus Vulkan). Same-project OpenGL reached 368.1 FPS at 720p. These are single-
+scene measurements on the local Ryzen 5 5600U integrated Radeon, not an RTX estimate.
+Full methodology, samples, limits and hashes are in RENDERER-PERFORMANCE.md and
+cache/renderer-comparison-results.json. Graphics defaults and user cfg files were untouched.
+
+## PERF-COMPARE-002: AA isolation and GPU/CPU profiling
+
+OpenAI Codex, 2026-09-14. Extended the isolated benchmark with an executable
+override, opt-in GPU capture commands and a separate validation-layer switch.
+Added probes/vk_frame_profile.h, scripts/Build-VulkanProfiler.py and
+scripts/Export-AADiagnostics.py. The profiler compiles copies of vk_main.c and
+vk_world.c using the existing MSVC Release flags, then links a separate diagnostic
+executable against the other existing objects. Production sources, objects,
+executable, user configurations and graphics defaults are unchanged.
+
+Ten uninstrumented 1080p cases separate 4x MSAA and FXAA 5 for original OpenGL
+and Vulkan, including closing full-AA controls. Each case completes one warm-up
+and five measured 1,290-frame runs. Full AA gives 5.074 ms on original OpenGL
+versus 6.146 ms on Vulkan; disabling MSAA gives 4.125 versus 3.071 ms. Disabling
+both gives 3.668 versus 2.584 ms. Closing controls are within 0.1% of opening
+medians. Effect costs interact; these are not independent additive costs.
+
+The diagnostic overlay records six GPU timestamps and existing CPU fence,
+acquire, recording, submit and present timings. It collects query results after
+the existing frame fence, adding no per-frame GPU waits. A separate 720p
+validation-layer smoke test passed with zero query errors. A profiler-off
+control and four AA captures distinguish instrumentation overhead from normal
+throughput; an additional world-outline-off pair investigates the initial-pass
+MSAA cost. Methodology, evidence and interpretation: AA-DIAGNOSTICS.md.
+
+The old built-in Vulkan timerefresh brackets only part of the frame, excluding
+the final scene resolve and postprocess/HUD. Its CPU loop also presents images,
+unlike the OpenGL loop. It was therefore not used as a full-frame GPU or matched
+backend measurement. RT work remains paused pending suitable development hardware.
+
+## PERF-OPT-001: defer the initial scene pass
+
+OpenAI Codex, 2026-09-14. Implemented the optimization identified by the AA/GPU
+measurements. VK_BeginFrame now latches clear/load and actual clear values, and
+defers single-view scene-pass startup when world normals/AO are needed.
+VK_RenderView records that prepass first and then starts the scene, avoiding
+the initial empty MSAA resolve and clear/store/reload cycle. The same scene-pass
+helper initializes menu-only and early-exit frames before the HUD transition.
+Abandon/restart closes a pass only when one is actually active.
+
+Multiview retains its previous eager scene-pass ordering. Shaders, scene draw
+order, attachment store/load definitions and approved graphics defaults are
+unchanged. Source changes are limited to vk_main.c, vk_world.c and two declarations
+in vk_local.h; no shared structures or binary layouts changed. The retained old
+Release/Debug executables are in cache/perf-opt-baseline for local comparisons.
+
+The environment's CMake/Ninja invocation again did not launch compiler processes.
+Build-ScenePass.py directly recompiles the two affected units using the existing
+CMake-generated MSVC options and relinks the normal Release and Debug executables.
+It does not substitute different optimization flags or dependencies. Build logs
+and source/binary identities are retained in cache/scene-pass-build.
+
+Added Test-ScenePass.ps1 and Export-ScenePass.py for paired image, AA throughput,
+GPU and lifecycle evidence. The image fixture fixes the actual KTX player position
+and camera, disables animated lighting/particles, and settles camera resources
+before the comparison. Early random-spawn/cold-camera captures are calibration,
+not evidence of image equivalence. Motion benchmarks retain the shared effects.
+The profiler accepts a separate output directory to preserve historical captures.
+The historical AA exporter now verifies its retained baseline instead of assuming
+the normal executable can never be rebuilt.
+
+An extended baseline multiview test exposed an existing descriptor-lifetime
+failure. It is recorded as MULTIVIEW-001, separately from the single-view change.
+Final measurements and limits are recorded in SCENE-PASS-OPTIMIZATION.md and
+cache/scene-pass-results.json. Export: patch 18, with explicit Codex attribution.
+
+## PERF-COMPARE-003 — Original ezQuake comparison after optimization (2026-09-14)
+
+Measurements, exporter changes and documentation by OpenAI Codex, requested by
+the user. Reran ten sequential cases with the current normal Release executable
+and the retained nQuake ezQuake 3.6.6 binary. Each case uses one warm-up plus five
+measured 1,290-frame DM6 timedemos. Full shared high effects, MSAA 4x, FXAA 5,
+720p/1080p, same-project OpenGL controls, an outline-off pair and a closing 1080p
+pair are covered. Project-only visuals are disabled in isolated profiles.
+
+The opening full-effects comparisons are 383.7/387.4 FPS (original/Vulkan, 720p)
+and 189.8/192.7 FPS (1080p). Closing 1080p: 190.9/195.8 FPS. The previous substantial
+full-effects deficit is absent in this scene; small current differences overlap
+run variability. The outline-off comparison remains slower on Vulkan:
+583.4/485.2 FPS. This separate path needs further profiling, recorded in TODO.
+
+Export-RendererPerformance.py now accepts --optimized while retaining historical
+report reproduction. It checks effective cvars, actual capture dimensions,
+demo/preset hashes, current binary hashes, complete rounds and normal exits.
+All ten cases and comparison checks pass. Evidence is retained under
+cache/renderer-optimized-* and RENDERER-PERFORMANCE-OPTIMIZED.md. No engine code,
+binary, user configuration or GitHub publication was changed by this comparison.
+
+## BUG-TRIAGE-001 — Current TODO and evidence-based bug registry (2026-09-14)
+
+Authored and executed by OpenAI Codex at the user's request. Archived the prior
+chronological TIBAZERA-TODO.md as TIBAZERA-TODO-HISTORY.md, preserving completed
+work and historical observations. Replaced the active list with current tasks,
+test gaps and explicitly paused RT milestones. OpenGL/Vulkan appearance matching
+is deferred as requested; old design observations are not reintroduced as bugs.
+BUGS.md indexes confirmed validation defects, user-reported RT failure, two
+unexplained startup observations, historical capture diagnostics, cold-camera
+lightmap calibration, data mismatches and unconfirmed upstream reports.
+
+Test-MultiviewTriage.ps1 exercised the current normal Release at 800x600 with a
+six-player DM6 MVD, MSAA 4x, FXAA 5, outlines 3 and CV/AO/bloom off, under Vulkan
+validation. No photo freeze or synthetic actors were used. The 0/2/4/0 sequence
+produced 0/132/8/0 VUID messages, with descriptor invalidation in the two multi-view
+stages. The executable exited normally and screenshots show continuing scenes
+and view dividers. No crash or independently established visual corruption is
+claimed. The exact resource update and full trigger matrix are still unknown.
+
+The first attempt hit the inherited automation-buffer runaway guard in stage 0;
+adding the existing test-only checkpoints allowed the complete sequence. Its
+timeout remains incomplete fixture evidence, not a renderer hang. The successful
+collection in runtime-multiview-triage-release2 is a reproduced renderer failure,
+not a clean validation pass. Current single-view controls have no VUIDs.
+
+README links the new registry and current TODO; RT status now includes the user's
+failed first test and pause. Engine source, binaries, user configs and upstream
+notices are unchanged. No GitHub publication was performed by this task.
+
+## MENU-UNIFY-001 / CFG-PRESETS-001 — Requested UI and preset roadmap (2026-09-14)
+
+Task breakdown and documentation by OpenAI Codex, following the user's request
+to add menu consistency/usability and configuration management to the TODO.
+MENU-UNIFY-001 covers shared native menu presentation/navigation for original and
+new graphics controls, plus integration of relevant KTX menus with Local Arena
+and game menus while respecting actual server state/capabilities.
+
+CFG-PRESETS-001 proposes menu-aligned category presets stored as CFG files, live
+browsing with apply/cancel, category-only load/save/save-as, modification indicators
+and composed complete profiles. It explicitly includes ownership/isolation, a
+defined baseline for switching presets, restart handling, legacy alias/include
+compatibility and migration/save-on-exit behavior. Browsing a legacy script must
+not inadvertently execute match/connection actions. Group names are provisional
+until the menu structure is designed. The present binding-preview browser remains
+documented as implemented; the proposed live preset workflow is not yet available.
+
+This update adds planning tasks only. No engine, menus, executable, config files
+or installed directory structure were modified; no runtime tests were needed.
+
+MENU-UNIFY-001 clarification, 2026-09-14: the user identified the in-game Escape
+menu during a bot match as a concrete navigation problem. Adding a bot currently
+requires going through the main menu to Local Arena. OpenAI Codex added a direct
+in-game bot-management route and a no-match-restart acceptance scenario to TODO.
+The user explicitly allows separate startup and in-game menus; consistency does
+not require identical contents. This records requested work, not an implemented
+menu change or a newly reproduced engine defect.
+
+Further user clarification, 2026-09-14: Local Arena is specifically for preparing
+and starting a game; actions on an existing match belong in the in-game menu.
+OpenAI Codex updated MENU-UNIFY-001 accordingly, replacing the earlier possible
+in-game shortcut to Local Arena with actual in-game bot/match administration.
+Shared widgets/actions can be reused while the two menu responsibilities remain
+distinct. Planning documentation only; no menu implementation changed.
+
+
+## SHADOW-001 — dynamic raster point-light shadows
+
+Implemented by OpenAI Codex at the user's request, 2026-09-14. Added world, moving BSP and interpolated alias occluders, selected-light shader illumination, a fence-owned depth atlas, bounded selection/caster budgets and seven live Effects controls. Project profiles enable one 256-pixel light. See DYNAMIC-SHADOWS.md for scope and provenance; RT work remains paused.

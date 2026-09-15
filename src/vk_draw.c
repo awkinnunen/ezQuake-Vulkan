@@ -26,6 +26,7 @@ of the License, or (at your option) any later version.
 #include "tr_types.h"
 #include "glsl/constants.glsl"
 #include "vk_local.h"
+#include "vk_shadows.h"
 #include "competitive_visuals.h"
 
 void Atlas_SolidTextureCoordinates(texture_ref* ref, float* s, float* t);
@@ -69,6 +70,7 @@ typedef struct vk_post_process_push_s {
 	float invHeight;
 	int fxaaEnabled;
 	float fxaaQuality;
+	int bloomSource;
 } vk_post_process_push_t;
 
 typedef struct vk_world_outline_push_s {
@@ -80,7 +82,10 @@ typedef struct vk_world_outline_push_s {
 	float invHeight;
 	float zFar;
 	float aoStrength, aoRadius, edges, edgeOpacity;
+	float padding[3];
+	float rayRight[4], rayUp[4], rayForward[4];
 } vk_world_outline_push_t;
+typedef char vk_ao_push_size_check[(sizeof(vk_world_outline_push_t)==112)?1:-1];
 
 static VkPipelineLayout hudImagePipelineLayout;
 static VkPipelineLayout hudColorPipelineLayout;
@@ -333,7 +338,7 @@ static qbool VK_HudCreateImagePipeline(void)
 	pipelineInfo.renderPass = VK_HudRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &hudImagePipeline) != VK_SUCCESS) {
+	if (VK_CreateScenePipeline(&pipelineInfo, &hudImagePipeline) != VK_SUCCESS) {
 		hudImagePipeline = VK_NULL_HANDLE;
 	}
 
@@ -469,7 +474,7 @@ static qbool VK_HudCreateColorPipeline(VkPrimitiveTopology topology, r_blendfunc
 	pipelineInfo.renderPass = VK_HudRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
+	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
 		*pipeline = VK_NULL_HANDLE;
 	}
 
@@ -497,7 +502,7 @@ static qbool VK_PostProcessCreatePipeline(void)
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
 	VkSamplerCreateInfo samplerInfo;
-	VkDescriptorSetLayoutBinding binding;
+	VkDescriptorSetLayoutBinding binding, bindings[2];
 	VkDescriptorSetLayoutCreateInfo layoutInfo;
 	VkDescriptorSetLayout cvLayouts[2];
 
@@ -530,8 +535,9 @@ static qbool VK_PostProcessCreatePipeline(void)
 
 		VK_InitialiseStructure(layoutInfo);
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 1;
-		layoutInfo.pBindings = &binding;
+		bindings[0]=bindings[1]=binding; bindings[1].binding=1;
+		layoutInfo.bindingCount = 2;
+		layoutInfo.pBindings = bindings;
 		if (vkCreateDescriptorSetLayout(vk_options.logicalDevice, &layoutInfo, NULL, &postProcessDescriptorSetLayout) != VK_SUCCESS) {
 			return false;
 		}
@@ -626,7 +632,7 @@ static qbool VK_PostProcessCreatePipeline(void)
 	pipelineInfo.renderPass = VK_PostProcessRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &postProcessPipeline) != VK_SUCCESS) {
+	if (VK_CreateScenePipeline(&pipelineInfo, &postProcessPipeline) != VK_SUCCESS) {
 		postProcessPipeline = VK_NULL_HANDLE;
 	}
 
@@ -679,6 +685,9 @@ static VkDescriptorSet VK_PostProcessDescriptorSet(uint32_t imageIndex)
 	write.descriptorCount = 1;
 	write.pImageInfo = &imageInfo;
 	vkUpdateDescriptorSets(vk_options.logicalDevice, 1, &write, 0, NULL);
+    write.dstBinding=1;
+    if (VK_HDRActive()) imageInfo.imageView=VK_EmissionImageView(imageIndex);
+    vkUpdateDescriptorSets(vk_options.logicalDevice, 1, &write, 0, NULL);
 
 	vk_options.swapChain.postProcessDescriptorSets[imageIndex] = set;
 	return set;
@@ -707,7 +716,7 @@ void VK_PostProcessTransitionForSampling(VkCommandBuffer commandBuffer, uint32_t
 
 	VK_InitialiseStructure(barrier);
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	barrier.oldLayout = (VK_HDRActive() ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -720,6 +729,10 @@ void VK_PostProcessTransitionForSampling(VkCommandBuffer commandBuffer, uint32_t
 	barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+    if (VK_HDRActive()) {
+        barrier.image=VK_EmissionImage(imageIndex);
+        vkCmdPipelineBarrier(commandBuffer,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
+    }
 }
 
 void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -750,6 +763,7 @@ void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 	push.contrast = paletteActive ? bound(1.0f, v_contrast.value, 3.0f) : 1.0f;
 	push.invWidth = 1.0f / (float)max(1, vk_options.swapChain.imageSize.width);
 	push.invHeight = 1.0f / (float)max(1, vk_options.swapChain.imageSize.height);
+	push.bloomSource = (int)CV_Value(CV_bloomsource);
 	push.fxaaEnabled = vid_framebuffer_fxaa.integer != 0 ? 1 : 0;
 	// GLC/GLM select one of 17 distinct FXAA_QUALITY__PRESET shader variants
 	// (GL_FramebufferFxaaPreset); this single-pass approximation has no
@@ -931,7 +945,7 @@ static qbool VK_WorldOutlineCreatePipeline(void)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldOutlinePipeline) != VK_SUCCESS) {
+	if (VK_CreateScenePipeline(&pipelineInfo, &worldOutlinePipeline) != VK_SUCCESS) {
 		worldOutlinePipeline = VK_NULL_HANDLE;
 	}
 
@@ -1010,6 +1024,22 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
 	VkDescriptorSet descriptorSet;
 	vk_world_outline_push_t push;
 	float fbScaleX, fbScaleY;
+	float view[16], projection[16];
+	int axis;
+	memset(&push, 0, sizeof(push));
+	R_GetModelviewMatrix(view);
+	R_GetProjectionMatrix(projection);
+	// Vulkan world viewport fills the target. Reconstruct camera-relative world
+	// rays from the actual projection scales and inverse view rotation. Radial
+	// depth is independent of normal/reversed hardware depth conventions.
+	for (axis=0; axis<3; ++axis) {
+		push.rayRight[axis] = view[axis*4] / projection[0];
+		push.rayUp[axis] = view[axis*4+1] / projection[5];
+		push.rayForward[axis] = -view[axis*4+2] +
+			push.rayRight[axis]*projection[8] + push.rayUp[axis]*projection[9];
+	}
+	push.rayRight[3] = CV_Value(CV_aomode) ? CV_Value(CV_aoquality) : 0;
+	push.rayForward[3] = CV_Value(CV_aobias);
 
 	if (!VK_WorldOutlineCreatePipeline()) {
 		return;
@@ -1046,6 +1076,7 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
  }
 
 	VK_HudSetViewportScissor(commandBuffer);
+ {VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);vkCmdSetScissor(commandBuffer,0,1,&scissor);}
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOutlinePipelineLayout, 0, 1, &descriptorSet, 0, NULL);
 	vkCmdPushConstants(commandBuffer, worldOutlinePipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);

@@ -1,5 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#include "vk_hdr.glsl"
+#extension GL_GOOGLE_include_directive : require
 
 layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
 layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
@@ -13,6 +15,7 @@ layout(location = 2) flat in uint inFlags;
 #define CV_SET 4
 #define CV_WORLD_FRAGMENT
 #include "vk_competitive.glsl"
+#include "vk_shadows.glsl"
 
 layout(location = 0) out vec4 fragColour;
 
@@ -20,12 +23,12 @@ layout(location = 0) out vec4 fragColour;
 // since Vulkan shaders are compiled standalone (no #include).
 #define EZQ_SURFACE_UNDERWATER 16u
 
-void main()
+void shadeScene()
 {
 	vec2 texCoord = inTexCoord;
 	if (pushConstants.surfaceType > 0.5 && pushConstants.surfaceType < 5.5) {
 		if (pushConstants.fastTurb > 0.5) {
-			fragColour = vec4(pushConstants.color.rgb, 1.0);
+			fragColour = vec4(hdrMaterial(pushConstants.color.rgb), 1.0);
 			return;
 		}
 
@@ -40,7 +43,7 @@ void main()
 		discard;
 	}
 
-	fragColour = vec4(texColour.rgb, texColour.a);
+	fragColour = vec4(hdrMaterial(texColour.rgb), texColour.a);
 	if (worldFlag(VK_WORLD_DETAIL)) {
 		vec4 detail = texture(detailTexture[0], inDetailCoord);
 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
@@ -55,4 +58,12 @@ void main()
 		vec3 caustic = texture(causticsTexture[0], causticCoord).rgb;
 		fragColour = vec4(caustic * fragColour.rgb * 2.0, fragColour.a);
 	}
+}
+
+// HDR-001: emission follows the same coverage as color, independently of albedo.
+layout(location=1) out vec4 fragEmission;
+void main() {
+ shadeScene();
+ if(pushConstants.surfaceType<.5) fragColour.rgb += fragColour.rgb*shadowIrradiance();
+ fragEmission=vec4(vec3(0), fragColour.a);
 }

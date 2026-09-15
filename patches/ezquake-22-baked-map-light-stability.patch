@@ -1,0 +1,25 @@
+diff --git a/src/vk_shadows.c b/src/vk_shadows.c
+index 608e5f3..4e939d4 100644
+--- a/src/vk_shadows.c
++++ b/src/vk_shadows.c
+@@ -308,6 +308,11 @@ static qbool AddModel(model_t *model,const float *world,const vec3_t light,float
+ }
+ static qbool GatherCasters(int lightIndex) {
+  float identity[16];int i;dlight_t *light=&lightData[lightIndex].light;
++ /* SHADOW-003: static world occlusion is already baked into mode 1 lightmaps.
++  * Reapplying it from a camera-selected subset of lights darkens whole rooms
++  * as that subset changes. Only additional entity occluders belong in this
++  * mode. Dynamic lights and realtime replacement still need the full world. */
++ qbool bakedMapLight=lightIndex>=MAX_DLIGHTS && (int)CV_Value(CV_maplights)==1;
+  casterCount=0;if(aliasOverflow) return false;
+  R_SetIdentityMatrix(identity);
+  if(casterWorld!=cl.worldmodel) {
+@@ -331,7 +336,7 @@ static qbool GatherCasters(int lightIndex) {
+    }
+   }}
+  }
+- for(i=0;i<worldCasterCount;++i) {
++ for(i=0;!bakedMapLight && i<worldCasterCount;++i) {
+   vec3_t d;shadow_caster_t *c=&worldCasters[i];VectorSubtract(c->center,light->origin,d);
+   if(DotProduct(d,d)>(light->radius+c->radius)*(light->radius+c->radius))continue;
+   if(casterCount>=bound(64,(int)CV_Value(CV_shadowcasters),SHADOW_CASTERS))return false;

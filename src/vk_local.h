@@ -96,6 +96,13 @@ void VK_DestroySwapChainFramebuffers(void);
 
 // vk_renderpass.c
 qbool VK_RenderPassCreate(void);
+// HDR-001, OpenAI Codex: scene format is latched at video initialization.
+void VK_ConfigureSceneFormat(void);
+VkFormat VK_SceneFormat(void);
+qbool VK_HDRActive(void);
+VkImage VK_EmissionImage(uint32_t imageIndex);
+VkImageView VK_EmissionImageView(uint32_t imageIndex);
+VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline);
 void VK_RenderPassDelete(void);
 VkRenderPass VK_MainRenderPass(void);
 VkRenderPass VK_FrameRenderPass(qbool clear_color);
@@ -200,6 +207,9 @@ void VK_Draw3DSprites(void);
 
 // vk_main.c
 VkCommandBuffer VK_CurrentCommandBuffer(void);
+// PERF-OPT-001: scene pass may be deferred while its command buffer is active.
+void VK_BeginScenePass(void);
+void VK_EndScenePass(void);
 
 // (common)
 typedef struct vk_options_s {

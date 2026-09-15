@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // Most code taken from gl_rmain.c
 
 #include "quakedef.h"
+#include "vk_shadows.h"
 #include "gl_model.h"
 #include "vx_stuff.h"
 #include "vx_vertexlights.h"
@@ -323,7 +324,11 @@ void R_DrawAliasModel(entity_t *ent, qbool outline)
 		r_framelerp = min(ent->framelerp, 1);
 	}
 
-	if (R_CullAliasModel(ent, oldframe, frame)) {
+	if (R_CullAliasModel(ent, oldframe, frame)
+#ifdef RENDERER_OPTION_VULKAN
+		&& !VK_ShadowCasterRelevant(ent)
+#endif
+	) {
 		return;
 	}
 
@@ -472,6 +477,9 @@ static void R_AliasModelColoredLighting(entity_t* ent)
 		for (j = 0; j < 32; j++) {
 			if ((cl_dlight_active[i] & (1 << j)) && i * 32 + j < MAX_DLIGHTS) {
 				lnum = i * 32 + j;
+#ifdef RENDERER_OPTION_VULKAN
+				if(!(ent->renderfx&RF_WEAPONMODEL) && VK_ShadowManagedLight(lnum)) continue;
+#endif
 
 				VectorSubtract(ent->origin, cl_dlights[lnum].origin, dist);
 				add = cl_dlights[lnum].radius - VectorLength(dist);
@@ -517,6 +525,9 @@ static void R_AliasModelStandardLighting(entity_t* ent)
 			for (j = 0; j < 32; j++) {
 				if ((cl_dlight_active[i] & (1 << j)) && i * 32 + j < MAX_DLIGHTS) {
 					lnum = i * 32 + j;
+#ifdef RENDERER_OPTION_VULKAN
+				if(!(ent->renderfx&RF_WEAPONMODEL) && VK_ShadowManagedLight(lnum)) continue;
+#endif
 
 					VectorSubtract(ent->origin, cl_dlights[lnum].origin, dist);
 					add = cl_dlights[lnum].radius - VectorLength(dist);

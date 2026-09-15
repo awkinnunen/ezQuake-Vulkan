@@ -1,0 +1,11 @@
+{
+  "author": "OpenAI Codex",
+  "date": "2026-09-15",
+  "buildMethod": "Recompiled vk_shadows.c and linked Debug/Release using generated MSVC flags and direct compiler/linker fallback. Shader source unchanged; no new shader build required.",
+  "sourceSHA256": "bfafe35c2955688e88782302faace2535a61e9670c813442e16765cb511488b5",
+  "patchSHA256": "9dd9f0a096efa61fdce7aa810ffb8f8eeb39212ec3582494b86a5aadfc9e1636",
+  "finalExecutables": {
+    "Debug": "769da102e2ac125fee46a9dfdcceb149c63686f6639c560837e5cf2e5b5b174d",
+    "Release": "3ad9dd5a5af381bd7a785dc7a5d9c074d969a5e5ee96486db7efe8f2ed0c1053"
+  }
+}

@@ -1,5 +1,78 @@
 # Development environment validation — 2026-09-13
 
+## PUBLIC-002: saved defaults and raster publication (2026-09-15)
+
+At the user's request, OpenAI Codex packaged the latest saved config as 71
+portable graphics values and 55 conditional effects. Settings are user-authored;
+HDR is off, shadows use eight lights/updates, radius 0.5 and caster budget 8192.
+The real Debug WASD-overlay save/load test passed with all values intact.
+Publication includes raster updates through patch 22, regression tools, evidence
+and attribution; commercial assets and full personal configs remain local.
+
+## SHADOW-003 baked-light stability (2026-09-15)
+
+Debug and Release rebuilt with the affected C unit. On DM6, the retained old
+executable changes 392,166–479,064 pixels against baked lighting at radii 1/4
+across three camera positions. The corrected build preserves the baked image in
+18 E1M1/DM6 comparisons at radii 0.25/1/4: fifteen exact matches, three with one
+pixel differing by one 8-bit channel level. No Vulkan validation errors occurred.
+The existing Debug extended fixture also passes all five exact cache/fallback
+comparisons; entity shadows still change the image, and realtime point/spot,
+softness, radius, ambient and resolution checks pass. Evidence and binary hashes:
+provenance/shadow3-validation.json and provenance/shadow3-final-build.json.
+These fixtures isolate static-world stability; they are not an all-map or
+long-session guarantee. User config values were preserved.
+
+## SHADOW-002 current validation (2026-09-15)
+
+Debug/Release builds and 24 compiled/validated shader stages passed. Runtime
+evidence includes nineteen stable control pairs, five exact cache/fallback
+comparisons, thirteen live menu widgets, 71 saved graphics values, native rocket
+combat, moving demo/map/restart checks and clean 0/2/4/0 multiview validation.
+Thirteen current disabled-renderer image pairs are stable. A diagnostic restoring
+only the old screenshot entity list matches all 26 pre-shadow captures exactly;
+normal captures keep the duplicate-static-model fix. Shadow off/on/off restores
+the original dynamic-light image exactly. See the shadow2 validation/build JSON
+manifests and SHADOW-PERFORMANCE.md for identities, timings and test limitations.
+
+OpenAI Codex completed the requested shadow follow-up: up to eight point/spot
+lights, BSP/optional authored lights, baked-shadow/realtime lighting modes, cached
+world bounds and per-frame/view atlases, face/cone culling, bounded round-robin updates,
+shader specialization and thirteen live menu controls. Project defaults use four lights
+and four updates, preserving unrelated config values. See DYNAMIC-SHADOWS.md and
+provenance/shadow2-validation.json for exact scope and evidence.
+
+MULTIVIEW-001 is resolved: sky descriptor updates happen once per fenced frame;
+view-specific buffers/uniforms/atlases are immutable for earlier recorded views.
+The previously ignored 3D viewports and single-camera screenshot path were also fixed.
+Screenshots now rebuild entity lists so static models do not accumulate between captures.
+Source patch 21 and Source-Changes.json attribute these changes to Codex; upstream
+contributors and game asset authors retain their original attribution.
+
+## RASTER-001 validation (2026-09-14, OpenAI Codex)
+
+Normal Debug/Release rebuilt with affected C units and all 22 shader modules.
+Both configurations pass 19 paired frozen HDR/SSAO cases, exact zero/restore
+checks and supported-device Vulkan validation. The unchanged-effects path
+matches 26 retained-baseline scene captures exactly. Three-map moving demo,
+seek/pause/skin reload/restart tests pass with HDR and SSAO enabled. F5 feedback
+tests cover HDR pending/revert/enable/disable and MSAA clamping, including
+immediate screenshots around resource recreation.
+
+Production GPU math checks pass HDR round trips, SSAO rejection/bias cases and
+C/SPIR-V ABI verification for new 112/128-byte blocks; all 13 existing scene
+layouts and 22 modules pass. Details, incomplete fixture attempts, exact local
+evidence locations and limitations: [RASTER-FEATURES.md](RASTER-FEATURES.md).
+The patch manifest and normal binary hashes distinguish this work from prior
+historical validation below. No all-device or multiview correctness claim is made.
+
+Final Release startup uses HDR on its first scene creation from saved settings,
+without a restart command. Final Debug tests verify the five new menu widgets,
+dependency lockouts/F5, all 58 profile values and retained WASD/55 particle values.
+All 19 patches replay exactly to the 81 changed/new source paths, with complete
+source attribution and a clean whitespace check. Exported capture and final-build
+hashes distinguish the later menu/help/initial-registration changes.
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
@@ -612,3 +685,183 @@ An isolated LF-only checkout fixture was packaged with the real packaging tool.
 Its runtime passed package/API verification with the CRLF-checkout executable.
 Evidence: `cache/rt-lf-checkout.log`. The final 13 boundary tests and 17-patch
 replay passed again after the identity correction.
+
+## PERF-COMPARE-001: shared-effects benchmark validation
+
+OpenAI Codex, 2026-09-14. All seven final benchmark cases exited normally and
+completed six 1,290-frame timedemos. One warm-up per case is excluded. The report
+generator checks demo and preset hashes, actual capture dimensions, MSAA/FXAA
+and disabled project post effects, expected renderer selection, and all shared
+saved cvars. Their only difference within each renderer comparison is vid_renderer.
+No unknown commands remain in the final runs. Results: RENDERER-PERFORMANCE.md.
+
+Both renderers drew the expected scene. FXAA and world outlines have different
+implementations, so matching controls do not establish identical image quality
+or GPU workloads. Weather, underwater and TF-specific effects are not fully
+covered by this one six-player DM6 fixture. No RT functionality is tested.
+
+## PERF-COMPARE-002: AA isolation and full-frame diagnostic intervals
+
+OpenAI Codex, 2026-09-14. Completed 104 timedemos across 18 isolated processes:
+ten uninstrumented AA/backend cases, one diagnostic-build profiler-off control,
+six diagnostic captures (four AA combinations and a world-outline-off pair),
+and one two-round validation-layer smoke test. All report 1,290 timedemo frames
+per round and exit normally. Each six-round process discards its first round.
+
+Export-AADiagnostics.py checks matching saved cvars (only requested AA/outline
+settings and renderer vary), demo/preset and executable identities, screenshot
+dimensions, present mode, recognized commands and log completion. The separate
+diagnostic executable compiles and links successfully with existing Release flags.
+Its profiler-off full-AA median is 6.155 ms versus 6.146 ms for normal Release;
+the profiled median is 6.280 ms. Profiled throughput is not substituted into the
+authoritative OpenGL/Vulkan comparison.
+
+The validation-layer smoke test has 2,582 complete GPU rows, three skipped
+boundary frames and zero query errors, with no VUID/validation/device-loss report.
+Each of the six performance captures has 7,746 complete rows and seven skipped
+boundary frames, with zero query errors. Analysis drops warm-up label 1 and a
+fixed two frames from each end of each remaining label, retaining 6,435 rows per
+capture. All GPU/CPU values are finite and nonnegative; the timestamp intervals
+sum to the GPU total within CSV rounding precision. No additional per-frame
+GPU wait was introduced by the collector.
+
+GPU time with MSAA/FXAA is 5.883 ms; without MSAA it is 2.831 ms. About 1.19 ms
+of this change occurs at scene end/resolve and 1.27 ms in setup/normals. A separate
+world-outline-off pair reduces the setup MSAA increment from 1.269 to 0.263 ms,
+supporting investigation of the initial main-pass resolve around the normal
+prepass. Exact savings require an implementation A/B test. CPU image-fence wait
+falls with GPU cost; these overlapping intervals must not be added as latency.
+
+Evidence and limitations: AA-DIAGNOSTICS.md, cache/aa-diagnostics-results.json,
+cache/aa2-*, cache/vp-* and cache/vulkan-profiler/build-identity.json. Engine
+sources and production executable remain untouched; normal-executable SHA-256
+is checked against the diagnostic build identity. RT was not exercised.
+
+## PERF-OPT-001: deferred scene-pass validation
+
+OpenAI Codex, 2026-09-14. Release and Debug builds pass. The 18 ordered patches
+replay exactly to all 78 attributed modified/new host files; git diff --check
+passes. Verify-StepPatches.py now creates its replay directory with inherited
+workspace ACLs: Python's owner-only temporary-directory ACL prevented the Git
+child process from entering the initial replay fixture on this Windows host.
+
+Ten final uninstrumented before/after AA cases complete six 1,290-frame timedemos
+each. The first run of each is discarded. Saved cvars, demo/preset hashes and
+1920x1080 capture dimensions match. Full 4x MSAA + FXAA 5 improves from 6.091 to
+5.050 ms (164.2 to 198.0 FPS, +20.6%). MSAA without FXAA improves from 4.982 to
+4.060 ms (+22.7% FPS). Without MSAA the change is small. Closing full-AA controls
+are 6.091 ms before and 4.942 ms after; both are reported rather than selecting
+the faster closing result as the headline.
+
+The separate full-frame GPU capture completes 7,746 rows with zero query errors;
+6,435 interior measured rows remain after the fixed warm-up/boundary trim.
+GPU setup/normals falls from the retained pre-change 1.865 ms to 0.835 ms; final
+scene resolve remains about 1.2 ms. Total measured GPU time is 4.757 ms versus
+5.883 ms previously. The new profiler also passes a separate 720p validation-layer
+smoke test. Diagnostic timings are kept separate from normal Release throughput.
+
+Final image fixtures runtime-opt-images-ready-before and -after complete normally
+under Vulkan validation. All 13 frozen configurations have zero changed pixels
+between builds and zero within-build repeat drift, including MSAA/FXAA/outline
+combinations, AO only, CV/AO/bloom, clear, reduced viewport and resize. The fixture
+pins the actual server player and photo camera, disables animated particles and
+dynamic lighting, and settles camera resources before capture. Earlier fixtures
+with random spawns or cold camera lightmaps are excluded calibration attempts.
+The final run also validates disconnected/menu-only frames. Image settings are
+separate from the shared-effects timedemo settings.
+
+The final Debug motion regression passes three maps, demo playback, forward and
+backward seeking, paused-demo stability, skin reload and video restart with the
+project visual profile. The earlier Debug MSAA restart test also passed pending,
+revert, apply and unsupported-sample clamping checks. No VUID/device-loss/runtime
+error appears in the final passing fixtures.
+
+An opt-in multiview extension failed on the retained original binary with a
+descriptor destroyed or updated while referenced by the command buffer. This is
+not counted as a passing test; it is tracked as MULTIVIEW-001. The optimization
+keeps multiview's existing eager scene-pass order and makes no claim to fix it.
+
+Evidence: SCENE-PASS-OPTIMIZATION.md, cache/scene-pass-results.json, cache/opt-*,
+cache/runtime-opt-images-ready-*, cache/runtime-opt-motion and
+cache/scene-pass-build/{Release,Debug}/identity.json. Graphics defaults, bindings
+and private game data are unchanged; the normal launchers use the updated builds.
+
+## PERF-COMPARE-003 — Optimized versus original renderer (2026-09-14)
+
+Executed by OpenAI Codex. Ten sequential normal Release benchmark processes
+completed with exit 0: original/Vulkan/project-OpenGL at 720p and 1080p, a 720p
+world-outline-off original/Vulkan pair, and a closing 1080p original/Vulkan pair.
+Each produced six complete 1,290-frame timedemos, with the first discarded.
+No GPU profiler or Vulkan validation instrumentation was enabled; these are
+throughput measurements, not an additional validation-layer correctness claim.
+
+Export-RendererPerformance.py --optimized passes comparison checks: shared saved
+cvars differ only by vid_renderer, MSAA 4x and FXAA 5 are saved as requested,
+project-only effects are disabled, hashes match the actual demo/preset/current
+binaries, screenshot dimensions match the requested resolution and Vulkan uses
+IMMEDIATE presentation. All profiles use the same installed assets and private
+DM6 demo. Original and optimized binaries retain different source/build origins;
+same-executable OpenGL controls help separate that from backend performance.
+
+Full effects are now near original throughput; outline-off Vulkan remains 16.8%
+behind. Closing 1080p results support the opening result. Raw fixtures and hashes:
+cache/renderer-optimized-*/{manifest.json,results.json}, saved benchmark.cfg files
+and console logs. Aggregate: cache/renderer-optimized-results.json. Report:
+RENDERER-PERFORMANCE-OPTIMIZED.md. Historical comparison artifacts remain intact.
+
+## BUG-TRIAGE-001 — Focused current multiview reproduction (2026-09-14)
+
+OpenAI Codex ran scripts/Test-MultiviewTriage.ps1 on the current normal Release
+executable with Vulkan validation, installed assets and the same private six-player
+DM6 MVD used for performance work. Binary hash and demo hash are saved in
+cache/runtime-multiview-triage-release2/triage-results.json. At 800x600 with MSAA 4x,
+FXAA 5, outlines 3 and CV/AO/bloom off, stages cl_multiview 0/2/4/0 logged 0/132/8/0
+VUID messages. The two multi-view stages report a descriptor destroyed or updated
+while referenced by the command buffer. All stage markers, screenshots and the
+completion marker are present; the executable exited 0. Test-VulkanRuntime
+correctly rejects the renderer validation errors. The wrapper records this error
+and returns after complete evidence collection; it does not certify a renderer pass.
+
+Screenshots ezquake001.png and ezquake002.png show rendered scenes and view
+dividers without the old main-menu overlay. They establish continuing output,
+not pixel-correctness against a reference renderer. No crash or independently
+demonstrated image corruption occurred. Four views were tested after two views;
+fresh-process four-view behavior, other settings/GPUs and long sessions remain
+untested. MULTIVIEW-001 therefore remains open with a narrow, current reproduction.
+
+The initial runtime-multiview-triage-release attempt lacked test checkpoints,
+triggered the inherited command-buffer runaway guard before stage 2 and timed out.
+It remains incomplete fixture evidence. Existing developer checkpoints reset only
+the automation guard in the corrected sequence; engine rendering code is unchanged.
+
+BUGS.md now distinguishes current defects from historical failures, successful
+retries, fixture calibration and test gaps. No current reproduction is claimed
+for the old pre-frame screenshot or cold-camera lightmap observations in this pass.
+
+
+## SHADOW-001 — dynamic raster shadows (2026-09-14)
+
+Implemented/tested by OpenAI Codex. Release and Debug each produced 19 stable
+screenshot pairs, with nonzero rendered changes for shadow strength, softness,
+resolution, bias, moving lights/models/inline BSP and the two-light budget.
+Occlusion only darkened the unoccluded reference. Distance rejection produced
+zero faces, and HDR/SDR, MSAA off/4x, resize and normal shutdown passed Vulkan
+validation. The 26 retained pre-shadow compatibility captures match exactly
+when shadows are disabled. Seven real menu handlers and prerequisite lockouts
+passed; the WASD overlay saved all 65 graphics values and 55 conditional effects.
+The user's copied startup config can request SDR; the public overlay correctly
+activates HDR afterward, so the profile test now checks the final scene format.
+
+Patch 20 replays over patches 1–19; all 89 modified/new source paths are covered
+by the attribution manifest. New/affected C units were compiled using generated
+CMake flags through the direct MSVC fallback; 24 shader stages were compiled and
+validated for both builds. A full Ninja build is not claimed. See
+DYNAMIC-SHADOWS.md and provenance/shadow-validation.json,
+shadow-performance.json and shadow-final-build.json for evidence and hashes.
+
+
+The additional shadow-toggle test restores the exact legacy dynamic-light image.
+Native KTX rocket firing passed twenty active two-light/twelve-face snapshots
+without overflow or validation errors. Whole-demo timing was recorded, but the
+clip and sample variation do not isolate active shadow-map cost; see the explicit
+limits and disabled-path throughput observation in DYNAMIC-SHADOWS.md.

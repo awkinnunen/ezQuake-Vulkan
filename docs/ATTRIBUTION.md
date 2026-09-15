@@ -1,5 +1,15 @@
 # Attribution and provenance
 
+## Raster follow-up and latest defaults (2026-09-15)
+
+OpenAI Codex implemented the deferred scene, HDR/SSAO/MSAA, raster shadow and
+multiview changes, including the user-reported DM6 baked-light correction.
+Ordered patches 18–22 and provenance/source-changes.json identify these edits;
+upstream notices and history are retained. The user selected the current
+71 graphics and 55 conditional-effect defaults, packaged by Codex and verified
+through the real engine. Earlier default values below are historical.
+
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.

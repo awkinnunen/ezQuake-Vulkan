@@ -1,281 +1,202 @@
-# Tibazera Vulkan branch: task assessment
+# ezQuake Vulkan: current TODO
 
-## MAINT-005 correction: conditional particle settings (2026-09-13)
+Updated and curated by OpenAI Codex, 2026-09-15, at the user's request
+(BUG-TRIAGE-001). This is the active work list. [BUGS.md](BUGS.md) records evidence,
+reproduction conditions and practical impact. The prior chronological task list,
+upstream assessment and completed checkboxes are preserved in
+[TIBAZERA-TODO-HISTORY.md](TIBAZERA-TODO-HISTORY.md).
 
-OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
-All 55 are registered by InitVXStuff when QMB particle assets initialize. The
-earlier isolated fixture lacked the ezQuake particle resource pack; its unknown
-command messages did not establish missing engine support. Removing those
-settings reset enhanced lightning and other effects. The removal has been reversed
-from the per-file backups, and the destructive cleanup script is disabled.
+An unchecked feature or test below is not itself a known bug. Priorities reflect
+the current raster-focused work; RT remains paused at the user's request.
 
-The user's requested bloom restoration is 0.1 strength, 0.7 threshold and 2.75 radius.
-Lightning is restored to 1 with sparks 0.4. Other current graphics and bindings
-are preserved. The public defaults include a separate 55-setting particle module;
-the visual-only profile still contains 53 values. Runtime fixtures now include
-the installed ezquake.pk3 before initialization. Earlier claims that these 55
-settings were unsupported or safe to remove are superseded by this correction.
+## Next raster work
 
-Debug weapon/shaft fire and release tests pass with the restored settings.
-The combined public profile test verifies all 53 visual values and all 55 conditional
-values after saving through the real engine. Engine source/binaries are unchanged.
-Earlier performance measurements used the former bloom/particle state and are
-historical evidence, not measurements of the restored defaults.
+- [x] SHADOW-003: fix DM6 Baked with shadows darkening as the player moves
+  with larger Map light radius. Preserve baked world occlusion; add only entity
+  occlusion in mode 1. Dynamic lights and Realtime mode retain world casters.
+  See DYNAMIC-SHADOWS.md and provenance/shadow3-validation.json.
+- [ ] PERF-INVESTIGATE-003: profile the remaining outline-off Vulkan deficit.
+  At 720p, shared high effects/MSAA 4x/FXAA 5 give 485.2 FPS versus original
+  ezQuake's 583.4 FPS (-16.8%). Establish the responsible stages before changing
+  code. This is measured throughput, not a rendering-correctness failure.
+- [x] PERF-OPT-002: discard terminal single-view offscreen MSAA color stores and
+  unused main depth stores. Preserve MSAA color for resumed/multiview and direct
+  cross-frame LOAD paths. Evidence and measured benefit: [RASTER-FEATURES.md](RASTER-FEATURES.md).
+- [x] MULTIVIEW-001: fix descriptor lifetime, per-view buffers/atlases and
+  camera viewports; capture every camera. The 0/2/4/0 MVD sequence passes with
+  HDR, MSAA, SSAO, bloom and shadows enabled. See DYNAMIC-SHADOWS.md and
+  provenance/shadow2-validation.json; BUGS.md retains the original failure.
 
-Menu paths: Options > Graphics > Visual Effects > Effects for Bloom strength,
-threshold and radius; Options > Graphics > Advanced Options > Lighting > Particle
-Shaft for the enhanced lightning switch. Lightning color, size and sparks do not
-yet have dedicated menu rows.
+## Reproduction and issue triage
 
+These are investigations, not a claim that ordinary gameplay is broken.
 
-English assessment and translation of selected upstream notes: OpenAI Codex,
-2026-09-13. Source revision: `91859a996daede0df166e2a55a5f08d56b052b21` from
-`tibazera/ezquake-source`, branch `feature/sdl3-vulkan-pr`.
+- [ ] STARTUP-001: retain two independent unexplained pre-log startup failures
+  (KTX installation and CV fixture); collect exit/crash details if either recurs.
+  Both had successful retries; do not assume a common root cause.
+- [ ] CAPTURE-001: retry the old pre-frame screenshot layout diagnostic on current
+  source before prescribing another screenshot fix. Later screenshot/lifecycle
+  fixes may supersede this historical observation.
+- [ ] LIGHTMAP-001: determine whether cold-camera stale lightmaps with r_dynamic 0
+  are a renderer issue or fixture setup artifact. Stable final fixtures match
+  exactly; do not label this a current normal-play regression.
+- [ ] ASSET-001: identify the incompatible DM4/DM6 .lit sources and map pairing.
+  Preserve installed nQuake/user resources; no replacement is authorized by this
+  diagnostic entry. Visible impact has not been isolated.
+- [ ] HIST-TEXTURE-001: seek a current device/config/map reproduction for upstream
+  black/untextured model reports. No local reproduction is established.
+- HIST-VSYNC-001: local FIFO/timedemo check passed. Monitor only; reopen with a
+  concrete failing device/demo/log rather than repeatedly testing an old rumor.
+- HIST-VISUAL-001: old water/skywind/muzzleflash/luma/outline differences are
+  reference observations. OpenGL/Vulkan appearance matching is deferred by the user.
 
-The source [CONTINUE.md](ezquake-vulkan/CONTINUE.md) is a Portuguese development
-diary last updated on 2026-08-07. This is an edited English assessment, not a
-complete translation. Older entries contain superseded findings and conflicting
-diagnoses. See [ATTRIBUTION.md](ATTRIBUTION.md) for authorship. Upstream test
-reports are not local verification; historical session instructions are not
-project-wide policy.
+## Menu consistency and usability (MENU-UNIFY-001)
 
-## Explicit next task in the latest upstream entry
+Requested by the user, 2026-09-14; task breakdown by OpenAI Codex. Planned work,
+not implemented behavior. Coordinate this with CFG-PRESETS-001 below.
 
-### Local gameplay work (LOCAL-008; separate from the upstream Vulkan TODO)
+- [ ] Inventory original ezQuake, Competitive Visuals, new graphics, Local Arena
+  and KTX menus; propose one navigation structure with clear ownership of each
+  setting/action and remove redundant routes where they add confusion.
+- [ ] Use shared menu widgets, fonts, spacing, selection/focus styling, sliders,
+  toggles and keyboard/mouse navigation. New graphics pages should look and behave
+  like the rest of the game menus; retain the established Quake visual character.
+- [ ] Integrate relevant KTX match/mode/bot controls into native game menus and
+  assign them by lifecycle: Local Arena owns preparing and starting a new game
+  (map, mode, initial rules and starting bot setup); the in-game menu owns actions
+  on the running match (including adding/removing bots and other available match
+  management). Local Arena must not remain the destination for running-match
+  administration. Reflect actual server state and distinguish local
+  setup from actions available on a connected server; preserve underlying KTX
+  behavior and account for server capabilities rather than assuming all servers
+  support the same controls.
+- [ ] In-game Escape menu: place running-match bot management in this menu,
+  without routing through the main menu or Local Arena. User example: adding a
+  bot currently requires that detour. Startup and in-game menus have distinct
+  responsibilities but shared styling/widgets. Reuse the underlying bot actions
+  and preserve the active match. Acceptance: while playing, Escape -> Bots ->
+  Add bot -> return to play, with no Local Arena/main-menu visit or match restart.
+- [ ] Apply consistent contextual help, units/ranges, dependency grouping,
+  disabled-state explanations and restart indicators across all settings pages.
+  Show changed values and consistent back/apply/reset actions where appropriate.
+- [ ] Review common flows with keyboard and mouse: find an effect, change a
+  binding, choose a game mode, add bots and return to play. Check readable layouts
+  at multiple resolutions/UI scales and preserve existing config/console access.
 
-- [x] Update the local KTX game module to latest fetched master 1.48-dev at the
-  user's explicit request; pin revision 631584f7 and retain its contributor history.
-- [x] Adapt independent GPL QuakeC fixes for key-door audio, secret-door lethal
-  activation and killtarget/target dispatch; exclude rerelease engine/assets.
-- [x] Reproduce the three failures in pristine KTX, pass 19 corrected scenarios,
-  build Debug/Release and run Vulkan/OpenGL native-module map tests.
-- [x] Provide direct-link Release installation and rollback to the retained QVM.
-- [ ] Broader gameplay regression coverage for the KTX 1.46-dev to 1.48-dev upgrade
-  (bots, match modes, multiplayer and registered campaign maps).
+## Menu-aligned config presets (CFG-PRESETS-001)
 
-See [QUAKEC-MERGE.md](QUAKEC-MERGE.md) for the exact scope and exclusions.
+Design direction: a managed CFG file represents a named preset for a settings
+category; menu categories and preset categories share the same ownership map.
+Provisional groups are Graphics (including Competitive Visuals), Controls, HUD,
+Audio and Local Game/KTX. Final grouping follows the agreed menu structure;
+not every submenu needs a separate file.
 
-### Renderer work
+- [ ] Define category ownership and a directory/naming convention. Category
+  presets must only change their own settings: selecting graphics must retain
+  bindings, communication aliases, sound and game rules. Allow a complete profile
+  to compose selected category presets with documented load order/precedence.
+- [ ] Add the same preset browser to each relevant menu: browse named CFG presets,
+  show current selection and unsaved modifications, Load, Save, Save As and Reset.
+  Save only the owning category; preserve shipped presets and existing user files
+  when creating variants. Define startup and save-on-exit behavior for mixed presets.
+- [ ] Support live browsing/preview in the game scene or suitable category preview,
+  with Apply/Cancel restoring the exact pre-preview category state. Switching
+  between presets must start from a defined category baseline so omitted settings
+  do not leak from the previous preview. Display effective changes and pending
+  video restarts; do not restart the renderer on every selection movement.
+- [ ] Separate declarative managed presets from legacy CFG scripts. Keep existing
+  explicit full-config loading/import, ESDF/WASD profiles, aliases and includes
+  compatible. Do not execute arbitrary aliases, connection/map commands or KTX
+  match actions merely by highlighting a preset. Preview game-rule values locally;
+  server-changing actions retain an explicit apply/start action.
+- [ ] Verify category isolation, live switching/cancel, load/save round trips,
+  composed profile startup, legacy import, restart-required values and unsaved
+  changes. Add a migration plan with recoverable originals before changing the
+  installed config layout or save-on-exit behavior.
 
-- [ ] **Bindless world texturing.** The August 6–7 entry calls this task #4 and
-  says it has not started. Scope: textured, lightmapped, alpha-textured, flat and
-  overlay paths in `src/vk_world.c`, using the existing alias-model/texture bindless
-  infrastructure. Fewer texture bindings are the intended benefit; performance
-  needs measurement. The entry identifies descriptor-lifetime regressions as a risk.
+The existing CFG browser previews literal key bindings and loads full configs;
+it does not yet implement live preset application or category-only saving.
+See [CONFIG-BROWSER.md](CONFIG-BROWSER.md) for current behavior.
 
-## Source findings and current resolution
+## Renderer and other UI features
 
-- [ ] **Bounded alias compatibility fallback:** the shader still requires bindless
-  indexing. LOCAL-007 now rejects missing features/insufficient limits explicitly;
-  a bounded-descriptor shader variant remains future work.
-- [x] **Shader layout and device limits:** inherited world/sprite blocks of 176/160
-  bytes are now 128/68 bytes. The actual local GPU limit is 128. Shared C/GLSL
-  flags and layout checks fix caustics offsets; both 8192-entry sampler arrays
-  are checked against the appropriate device limits before use.
-- [ ] **Post-processing parity:** approximate FXAA, HDR/linear-light handling and
-  3D/HUD framebuffer differences require a separate audit.
-- [x] **Directional alias-model lighting:** normal-pass shader calculation matches
-  the existing GLM formula in 511 GPU cases, preserving alpha and special passes.
-- [x] **Skybox resolution assumptions:** bounds derive from actual face dimensions;
-  42 GPU cases and mixed-size face loading passed.
-- [ ] **Extended skybox seam inspection:** visually inspect all face edges/corners
-  with real texture packs and moving views.
-- [x] **NPOT capability reporting:** Vulkan initialization now calls the setter
-  before shared texture/HUD initialization. 1,094 guarded mipmap cases passed.
+- [ ] WORLD-BINDLESS: extend alias/texture bindless infrastructure to textured,
+  lightmapped, alpha, flat and overlay world paths. Check descriptor lifetime
+  and benchmark benefit; this is not a demonstrated current bug.
+- [ ] ALIAS-FALLBACK: bounded-descriptor model shader for devices missing required
+  indexing features/limits. Current behavior is an explicit initialization error.
+- [x] HDR-001: optional RGBA16F linear scene and separate emission target, manual
+  exposure/tone mapping to SDR, bright/emissive bloom selection, capability fallback
+  and visible restart state. Project profiles enabled at the user's request;
+  existing strengths and bindings retained. See RASTER-FEATURES.md.
+- [x] SSAO-001: world-position reconstruction, 8–32 hemisphere samples, radius/bias/
+  strength controls and moving BSP transforms; retain legacy Contact mode.
+- [ ] BLOOM-PYRAMID: replace the current small 25-tap bloom kernel with a
+  downsample/upsample chain if a wider glow is wanted; benchmark first.
+- [ ] AO-EXTEND: consider half-resolution AO with depth-aware filtering and model
+  normals. Current SSAO covers world/BSP surfaces at full resolution; models,
+  weapons, sky and transparent surfaces are excluded. CACAO remains optional.
+- [ ] HDR-OUTPUT: HDR10/scRGB monitor output and automatic exposure are separate
+  future features; the implemented HDR internal buffer outputs ordinary SDR.
+- [x] SHADOW-001: dynamic point-light raster shadow maps, world/brush/alias
+  casters, live controls and bounded per-frame light/caster budget. See
+  [DYNAMIC-SHADOWS.md](DYNAMIC-SHADOWS.md).
+- [x] SHADOW-OPT / SHADOW-002: active-light GPU profiling, shadow-off shader
+  specialization, cached world bounds/depth maps, face/cone culling and bounded
+  round-robin updates; maximum eight lights / 8192 casters.
+- [x] SHADOW-EXTEND / SHADOW-002: BSP and additive authored lights, target-based
+  spotlights, baked-shadow and realtime replacement modes, thirteen live controls.
+  Transparent transmission and reconstruction of baked indirect light remain
+  outside the raster-shadow approximation; see DYNAMIC-SHADOWS.md.
+- [ ] TEMPORAL: establish history/reset handling before temporal visual effects.
+- [ ] SHAFT-UI: dedicated lightning color, size and sparks menu controls.
+- [ ] CFG-PREVIEW: optional Finnish physical-key layout and include-script handling.
+  The current browser intentionally previews literal bindings without execution.
+- [ ] ARENA-UI: team rosters, per-bot controls and navigation-aware map filtering.
 
-## Historical reports: reproduce before treating as current bugs
+Detailed design: [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md). Old observations
+about oversized shader blocks, missing NPOT reporting or screenshot fixes in that
+plan are superseded by completed work; use this list and BUGS.md for current status.
 
-- [x] **Local reproduction check: timedemo + vid_vsync 1.** MAINT-004 completes
-  three 1,290-frame timedemos with FIFO on the development AMD GPU. Historical
-  hang not reproduced; this does not establish a fix for every device/driver.
-- [ ] **Black/untextured models or items on some machines.** Several explanations
-  were attempted or rejected. Mipmap corruption is a hypothesis, not a locally
-  established root cause. Current reproducibility is unknown.
-- [ ] **Other visual differences:** lit water, skywind, muzzleflash interpolation,
-  luma/lightmap combination and player outline colours. These are older audit
-  candidates, not all confirmed defects in the current revision.
+## Validation coverage still missing
 
-## Reported upstream as implemented or fixed
+- [ ] Full manual Episode 1 playthrough: exits, difficulty, secrets, death/restart,
+  boss and episode transition. Existing spawn/save tests do not cover all of this.
+- [ ] Broader KTX 1.48-dev modes, bots, registered maps and remote/LAN regression tests.
+- [ ] Moving-view skybox edge/corner inspection with real mixed-resolution packs.
+- [ ] Player recognizability/gameplay assessment across maps and GPUs.
+- [ ] Supported-device fault testing of RT component constructors and host fallback
+  when RT work resumes. Central cleanup alone does not establish complete safety.
 
-Newer entries report underwater caustics, world outlines, drawflat colours and
-modes, Vulkan screenshot synchronization, an eyecandy-preset vid_restart hang,
-GPU timestamps for timerefresh and dynamic-buffer memory selection. Treat these
-as regression-test targets, not automatically missing features.
-The later LOCAL-007 pass ran E1M1 and inspected rendered screenshots. This does
-not validate every effect claimed in the upstream diary.
+## RT: paused until a suitable development GPU is available
 
-## Local progress and proposed order
+- [ ] RT-STARTUP-001 / RT-01: diagnose the user-reported stop after GPU detection
+  and obtain the first actual triangle/light image, resize and clean shutdown.
+- [ ] RT-00: complete semantic feature mapping. Requirements, package/API checks,
+  device diagnostics and a standalone harness already exist.
+- [ ] RT-02: host backend lifecycle, 2D/HUD callbacks and renderer-switch fallback.
+- [ ] RT-03: static BSP, materials, sky and map lights.
+- [ ] RT-04: moving models, skins, viewmodel, transient lights and entity lifetimes.
+- [ ] RT-05: connect all inventoried effects, particles, water and powerup behavior.
+- [ ] RT-06: RTGL1 shader/API extensions, Competitive Visuals and RT profiles/menus.
+- [ ] RT-07: temporal resets, QuakeWorld/demo/capture and multiview validation.
+- [ ] RT-08: RTX 3060 performance/memory measurements and optional runtime packaging.
 
-- [x] Fetch the branch and configure the development worktree.
-- [x] Build Windows x64 Debug with Vulkan enabled without source changes.
-- [x] E1M1 with data and validation, screenshot, clean shutdown; Vulkan vid_restart.
-- [x] Extend Vulkan runtime coverage to demo playback, seeking, three maps and video restart.
-- [x] Reproduce and fix confirmed push-limit, screenshot usage and QTV shutdown issues.
-- [ ] Reproduce the remaining historical timedemo and texture-lifetime reports.
-- OpenGL/Vulkan visual parity deferred at the user's explicit request.
-- [ ] Measure bindless changes and plan RTGL1 integration separately.
+CPU geometry helpers pass but are not connected to the host scene callbacks.
+There is no playable RT renderer yet. See
+[RT-IMPLEMENTATION-STATUS.md](RT-IMPLEMENTATION-STATUS.md) and
+[RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md).
 
-This ordering is Codex's proposal, not a commitment by tibazera.
-The more detailed and dependency-ordered sequence is now in
-[IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md), PLAN-001. It prioritizes a
-working compatibility path and safe resource ownership before world bindless
-expansion. Additional roadmap findings still require reproduction; the LOCAL-007 results
-above identify the subset verified and fixed on the local GPU.
+## Recently completed
 
-Sources: [PR #1145](https://github.com/QW-Group/ezquake-source/pull/1145) and
-[pinned upstream diary](https://github.com/tibazera/ezquake-source/blob/91859a996daede0df166e2a55a5f08d56b052b21/CONTINUE.md).
+- [x] PERF-OPT-001: deferred single-view scene pass; normal Debug/Release rebuilt,
+  13 exact-image comparisons and motion/restart/GPU checks completed.
+- [x] PERF-COMPARE-003: fresh original/OpenGL/Vulkan comparison. Full shared effects
+  are now near original throughput; outline-off deficit is tracked above.
+- [x] BUG-TRIAGE-001: consolidate current tasks and issue evidence; rerun a focused
+  0 -> 2 -> 4 -> 0 multiview sequence on current Release. Capturing the defect is
+  historical failing evidence; SHADOW-002 adds the passing multiview regression.
 
-## Local implementation pass — 2026-09-13 (supersedes corresponding source observations above)
-
-- [x] Step 1: checked pipeline/device limits; world push block 128 bytes, sprite
-  block 68 bytes; common world GLSL ABI fixes caustics flag disagreement.
-- [x] Runtime prerequisites: valid screenshot image usage; QTV worker joined
-  before freeing its data/mutex and shutting down the console.
-- [x] Step 2: Vulkan NPOT reporting enabled; 1,094 guarded mipmap cases and map runtime passed.
-- [x] Step 3: actual sky face dimensions; 42 GPU boundary cases and mixed-size sky runtime passed.
-- [x] Step 4: normal-dependent alias lighting; 511 GPU comparisons against existing GLM and map runtime passed.
-
-Step 1 gate passed: Debug build, limit boundary tests, 13 actual C/SPIR-V block
-comparisons, 22 SPIR-V validations, E1M1 + screenshot + clean exit with validation.
-Bindless alias fallback remains unimplemented; incompatible devices now fail
-initialization explicitly. See DEVELOPMENT.md LOCAL-007 for evidence and scope.
-
-## Local UI addition: CFG-001
-
-- [x] List CFG files in the designated config directory and refresh with F5.
-- [x] Preview keyboard/mouse bindings without executing the config.
-- [x] Explicit load of the selected path, including same-name file handling.
-- [x] Parser regressions, Vulkan Debug/Release, OpenGL and empty-directory tests.
-- [x] English user documentation, launcher, attribution and ordered source patch.
-
-See CONFIG-BROWSER.md. The diagram currently uses US engine-key positions;
-physical Finnish-layout diagrams and evaluating included scripts are future
-extensions, not part of the current preview contract.
-
-## Local campaign repair: SP-001
-
-- [x] Verify installed shareware progs.dat and all Episode 1 maps.
-- [x] Preserve explicit single-player startup against nQuake KTX server settings.
-- [x] Honor original QuakeC selection and avoid multiplayer .dat fallback.
-- [x] Enable the load menu with original NetQuake data and fix -nohome save paths.
-- [x] Provide a direct fullscreen campaign launcher and English documentation.
-- [ ] Manual campaign playthrough: real exit triggers, difficulty selection,
-  secrets, death/restart, boss and final episode transition.
-
-Automated map/spawn/save tests are documented in VALIDATION.md; they do not
-constitute a completed playthrough of the episode.
-
-## Local Arena: ARENA-001
-
-- [x] Main-menu Local Arena entry with the same Quake big font.
-- [x] Installed-map picker, refresh, sorting, filtering and paging.
-- [x] Start/restart/stop the embedded KTX listen server.
-- [x] FFA, duel, 2on2 and Clan Arena mode actions.
-- [x] Add/remove bots, new-bot skill, live count and Ready.
-- [x] Exclude external connections and original single-player from bot actions.
-- [ ] Future: team roster UI, per-bot controls and navigation-aware map filtering.
-- [x] MAINT-002: replace separate screenshot acquisition with pre-present capture
-      of the rendered image; immediate-restart Debug/Release tests pass.
-
-Documentation and attribution: LOCAL-ARENA.md / ARENA-001.
-- [x] Final Vulkan Debug/Release and Modern OpenGL integration evidence;
-      seven-patch replay, English documentation and author/hash exports.
-
-## ARENA-002 — Deathmatch and startup
-
-- [x] Change the installed startup preference to the main menu; preserve other config bytes.
-- [x] Add deathmatch 1–5 selection and live value display.
-- [x] Start with selected rules automatically; FFA defaults to deathmatch 3.
-- [x] Match the mode presets (FFA/Duel 3, 2on2 1, Clan Arena 5).
-- [x] Debug/Release builds, real KTX rule-change regressions and layout review.
-
-## Competitive Visuals: CV-001
-
-- [x] Six-page Competitive Visuals menu, 53 controls, visual-only profiles, reset/compare.
-- [x] World microcontrast reduction with broad texture patterns preserved.
-- [x] Soft cel/gradient shading, silhouette controls and powerup-exclusive rim with ruleset gates.
-- [x] Conservative bright-pixel bloom, world contact AO and existing projected-shadow controls.
-- [x] Scene exposure/tone/sharpening before HUD, MSAA/FXAA/filtering controls.
-- [x] Debug/Release, real menu/profile/restart tests and production C/GLSL GPU checks.
-- [ ] Floating-point HDR and emissive bloom mask, full SSAO, dynamic shadow maps/budget, temporal facilities.
-- [x] Recorded-motion, seek/restart and selected effect frame-time checks (MAINT-003/004).
-- [ ] Broader player recognizability and gameplay assessment across maps and GPUs.
-
-See COMPETITIVE-VISUALS.md for the user-requested scope and VALORANT references.
-
-## Competitive Visuals widgets: CV-002
-
-- [x] Give all strength/dimension settings visible sliders and binary settings On/Off switches.
-- [x] Preserve discrete mode selectors with readable names where applicable.
-- [x] Support scaled mouse dragging, clamping, keyboard stepping and page navigation.
-- [x] Increase user crosshair size from 2 to 2.5 in active and reloadable configs.
-- [x] Build Debug/Release and verify all 53 controls in an isolated Vulkan client.
-
-## Graphics menu clarity and effect audit: CV-003
-
-- [x] Separate general effects from competitive readability controls.
-- [x] Remove duplicate menu rows while retaining old profile compatibility.
-- [x] Add contextual help, dependency grouping and grey disabled controls.
-- [x] Preserve the user's saved defaults and create recoverable snapshots.
-- [x] CV-DEFAULT-001: adopt the later user-approved visual configuration as the project-default profile, including edge depth threshold 16.
-- [x] INPUT-002: add a WASD alternative with shifted communication keys and Caps Lock jump-alias rebinding, retaining the ESDF profile.
-- [x] Separate general rendering gates from the competitive master switch.
-- [x] Explain pending video restarts and expose a Restart video action.
-- [x] Add controlled rendered-image comparisons alongside control-value tests.
-- [x] Verify all 48 menu settings with stable A/A/B/A rendered images (Debug validation and Release evidence).
-- [x] MAINT-002: immediate swapchain-recreation captures pass without settling waits.
-
-## Pre-publication pass: MAINT-001..004 / PUBLIC-001
-
-- [x] MAINT-005: restore the 55 supported conditional settings and correct the missing-asset test fixture.
-- [x] Fix the acquired-image screenshot lifecycle and compile Debug/Release.
-- [x] Verify immediate/F5 restart captures, MSAA transitions and hardware clamping.
-- [x] Exercise three maps, demo seek/pause, skin reload, video restart and KTX entity join/leave.
-- [x] Measure selected effect costs with fixed Release timedemos and a closing baseline.
-- [x] Retain the approved 53 graphics values and export the portable WASD module.
-- [x] Verify the actual combined profile load, saved values and movement-dependent jump binding.
-- [x] Verify the 13 source patches at the pre-publication pass; the later FX-001 patch brings the verified sequence to 14.
-- [x] Complete the first public GitHub upload with portable cfg files; published main verified at bcace078b8cdbd8212bb9b16eb141f2ea9537d07 (PUBLIC-002).
-
-## FX-001 - Explosion style (2026-09-13)
-
-- [x] Add Explosion without the ring while keeping Big explosion unchanged.
-- [x] Preserve existing config values and support the new value in visual profiles.
-- [x] Rebuild Debug and Release. Runtime validation is recorded in VALIDATION.md.
-
-## RT-AUDIT-001 / RT-PLAN-002 - Direct RTGL1 integration
-
-- [x] Recheck integration feasibility and local device support; see RTX-FEASIBILITY.md.
-- [x] Write the user-requested detailed plan for broad effects migration, allowing a distinct RT appearance.
-- [ ] RT-00: inventory host/donor features, pin runtime/ABI and implement device diagnostics.
-- [ ] RT-01: validate the SDL3 triangle/light harness on the RTX 3060.
-- [ ] RT-02: integrate backend lifecycle, 2D rendering and raster recovery.
-- [ ] RT-03: submit static BSP, materials, sky and map lights.
-- [ ] RT-04: add moving models, skins, viewmodel and transient lights.
-- [ ] RT-05: adapt all host/donor effects, particles, water, powerups and HUD details.
-- [ ] RT-06: extend RTGL1 for Competitive Visuals and shared controls; add RT profiles/menus.
-- [ ] RT-07: validate temporal resets, QW/demos, capture and multiview handling.
-- [ ] RT-08: measure RTX 3060 performance/memory and package the optional runtime.
-
-Implementation update: RT-00 requirements/package/API checks and the RT-01
-standalone test harness are implemented. Central RTGL1 initialization cleanup
-from RT-02 is also implemented. The RTX 3060 is unavailable; the user will perform
-the first GPU test. Semantic inventory mapping and host integration remain open.
-See [RT-IMPLEMENTATION-STATUS.md](RT-IMPLEMENTATION-STATUS.md) for exact status.
-
-Architecture, scope and acceptance gates: [RT-IMPLEMENTATION-PLAN.md](RT-IMPLEMENTATION-PLAN.md).
-All implementation stages remain open. Earlier RT numbering is superseded.
-All requested effects remain inventoried; missing features must stay visible as
-open work. No raster appearance-matching pass is planned.
-
-### RT CPU preparation follow-up
-
-- [x] RT-GEOMETRY-001: checked fan/strip triangles, affine matrices, pose interpolation,
-  bounded ID packing and scene/overlay submission, tested in Debug and Release.
-- [ ] Connect the tested helpers to actual BSP/model/texture/particle/HUD callbacks.
-- [ ] Add host entity lifetime tracking and renderer lifecycle/switch fallback.
-- [ ] Complete RT feature mapping, donor frame effects, shader extensions and profiles.
-- [ ] User-run RTX 3060 triangle/resize/shutdown test; hardware is not currently available.
-
-This completes no additional GPU milestone. See RT-IMPLEMENTATION-STATUS.md for
-all seven requested steps and their remaining work.
+Earlier completed engine, menu, gameplay, config and public-source work is in
+the history archive and [DEVELOPMENT.md](DEVELOPMENT.md). Current performance:
+[RENDERER-PERFORMANCE-OPTIMIZED.md](RENDERER-PERFORMANCE-OPTIMIZED.md).

@@ -126,7 +126,7 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
 			vk_options.swapChain.imageSize.height,
 			1,
 			vk_options.msaaSamples,
-			vk_options.physicalDeviceSurfaceFormat.format,
+			VK_SceneFormat(),
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -140,7 +140,7 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
 	createImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	createImageViewInfo.image = vk_options.swapChain.msaaColorImage;
 	createImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	createImageViewInfo.format = vk_options.physicalDeviceSurfaceFormat.format;
+	createImageViewInfo.format = VK_SceneFormat();
 	createImageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	createImageViewInfo.subresourceRange.baseMipLevel = 0;
 	createImageViewInfo.subresourceRange.levelCount = 1;
@@ -154,6 +154,34 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
 	}
 
 	return true;
+}
+
+// HDR-001, OpenAI Codex: per-image emission resolves and shared MSAA target.
+typedef struct { VkImage image; VkImageView view; VkDeviceMemory memory; } vk_emission_target_t;
+static vk_emission_target_t *emissionTargets;
+static vk_emission_target_t emissionMSAA;
+static uint32_t emissionCount;
+VkImage VK_EmissionImage(uint32_t i) { return i<emissionCount ? emissionTargets[i].image : VK_NULL_HANDLE; }
+VkImageView VK_EmissionImageView(uint32_t i) { return i<emissionCount ? emissionTargets[i].view : VK_NULL_HANDLE; }
+static void VK_DestroyEmissionTarget(vk_emission_target_t *target)
+{
+	if (target->view) vkDestroyImageView(vk_options.logicalDevice, target->view, NULL);
+	if (target->image) vkDestroyImage(vk_options.logicalDevice, target->image, NULL);
+	if (target->memory) vkFreeMemory(vk_options.logicalDevice, target->memory, NULL);
+	memset(target,0,sizeof(*target));
+}
+static qbool VK_CreateEmissionTarget(vk_emission_target_t *target, VkSampleCountFlagBits samples)
+{
+	VkImageViewCreateInfo view = {0};
+	if (!VK_CreateImageResource(vk_options.swapChain.imageSize.width, vk_options.swapChain.imageSize.height,
+		1, samples, VK_SceneFormat(), VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &target->image, &target->memory)) return false;
+	view.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	view.image=target->image; view.viewType=VK_IMAGE_VIEW_TYPE_2D; view.format=VK_SceneFormat();
+	view.subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+	view.subresourceRange.levelCount=view.subresourceRange.layerCount=1;
+	return vkCreateImageView(vk_options.logicalDevice,&view,NULL,&target->view)==VK_SUCCESS;
 }
 
 static void VK_DestroyPostProcessDescriptors(void)
@@ -223,6 +251,10 @@ void VK_DestroyPostProcessResources(void)
 	}
 
 	vk_options.swapChain.postProcessActive = false;
+	for (i=0; i<emissionCount; ++i) VK_DestroyEmissionTarget(&emissionTargets[i]);
+	Q_free(emissionTargets); emissionTargets=NULL; emissionCount=0;
+	VK_DestroyEmissionTarget(&emissionMSAA);
+
 }
 
 // Real gamma/contrast curve and/or FXAA only differ from the GLM/GLC shader
@@ -236,7 +268,7 @@ void VK_DestroyPostProcessResources(void)
 // a restart.
 qbool VK_PostProcessActive(void)
 {
-	if (CV_Active() || CV_PostActive()) return true;
+	if (VK_HDRActive() || CV_Active() || CV_PostActive()) return true;
 	extern cvar_t v_gamma, v_contrast;
 	extern cvar_t vid_framebuffer_fxaa;
 	extern cvar_t vid_software_palette;
@@ -281,17 +313,22 @@ qbool VK_CreatePostProcessResources(void)
 	vk_options.swapChain.postProcessFramebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.postProcessFramebuffers[0]));
 	vk_options.swapChain.postProcessCompositeFramebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.postProcessCompositeFramebuffers[0]));
 
-	for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
+	if (VK_HDRActive()) {
+        emissionCount=vk_options.swapChain.imageCount;
+        emissionTargets=Q_calloc(emissionCount,sizeof(*emissionTargets));
+        if (msaa && !VK_CreateEmissionTarget(&emissionMSAA,vk_options.msaaSamples)) { VK_DestroyPostProcessResources(); return false; }
+    }
+    for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
 		VkImageViewCreateInfo viewInfo;
 		VkFramebufferCreateInfo framebufferInfo;
-		VkImageView mainAttachments[3];
+		VkImageView mainAttachments[5];
 
 		if (!VK_CreateImageResource(
 				vk_options.swapChain.imageSize.width,
 				vk_options.swapChain.imageSize.height,
 				1,
 				VK_SAMPLE_COUNT_1_BIT,
-				vk_options.physicalDeviceSurfaceFormat.format,
+				VK_SceneFormat(),
 				VK_IMAGE_TILING_OPTIMAL,
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -305,7 +342,7 @@ qbool VK_CreatePostProcessResources(void)
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = vk_options.swapChain.postProcessColorImages[i];
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = vk_options.physicalDeviceSurfaceFormat.format;
+		viewInfo.format = VK_SceneFormat();
 		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.levelCount = 1;
@@ -327,10 +364,16 @@ qbool VK_CreatePostProcessResources(void)
 			mainAttachments[1] = vk_options.swapChain.depthImageView;
 		}
 
+        if (VK_HDRActive()) {
+            if (!VK_CreateEmissionTarget(&emissionTargets[i],VK_SAMPLE_COUNT_1_BIT)) { VK_DestroyPostProcessResources(); return false; }
+            mainAttachments[msaa ? 3 : 2]=msaa ? emissionMSAA.view : emissionTargets[i].view;
+            if (msaa) mainAttachments[4]=emissionTargets[i].view;
+        }
+
 		VK_InitialiseStructure(framebufferInfo);
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = mainRenderPass;
-		framebufferInfo.attachmentCount = msaa ? 3 : 2;
+		framebufferInfo.attachmentCount = VK_HDRActive() ? (msaa ? 5 : 3) : (msaa ? 3 : 2);
 		framebufferInfo.pAttachments = mainAttachments;
 		framebufferInfo.width = vk_options.swapChain.imageSize.width;
 		framebufferInfo.height = vk_options.swapChain.imageSize.height;
@@ -358,7 +401,7 @@ qbool VK_CreatePostProcessResources(void)
 
 	VK_InitialiseStructure(poolSize);
 	poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSize.descriptorCount = vk_options.swapChain.imageCount;
+	poolSize.descriptorCount = vk_options.swapChain.imageCount * 2;
 
 	VK_InitialiseStructure(poolInfo);
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -766,7 +809,7 @@ qbool VK_CreateSwapChainFramebuffers(void)
 	}
 
 	vk_options.swapChain.framebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.framebuffers[0]));
-	for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
+	for (i = 0; i < vk_options.swapChain.imageCount && !VK_HDRActive(); ++i) {
 		// With MSAA, the render pass's color attachment 0 is the shared
 		// multisampled image (one resource for every swapchain image, like
 		// depth above) and the per-image swapchain view only appears as the

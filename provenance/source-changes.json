@@ -294,5 +294,109 @@
       "src/rt/rt_build_identity.h"
     ],
     "origin": "OpenAI Codex: canonical LF SDK identity shared by the generator and runtime packager, independent of Git checkout newline settings."
+  },
+  {
+    "id": "PERF-OPT-001",
+    "date": "2026-09-14",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/vk_main.c",
+      "src/vk_world.c",
+      "src/vk_local.h"
+    ],
+    "origin": "OpenAI Codex: defer the single-view scene pass until after world normals/AO, latch clear values, and handle menu/abandoned-frame lifecycle. Existing shaders and upstream rendering retain their authorship."
+  },
+  {
+    "id": "RASTER-001",
+    "date": "2026-09-14",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/competitive_visuals.c",
+      "src/competitive_visuals.h",
+      "src/vk_aliasmodel.c",
+      "src/vk_draw.c",
+      "src/vk_local.h",
+      "src/vk_main.c",
+      "src/vk_renderpass.c",
+      "src/vk_sprite3d.c",
+      "src/vk_swapchain.c",
+      "src/vk_world.c",
+      "src/vulkan_shaders/vk_alias_model.frag",
+      "src/vulkan_shaders/vk_hdr.glsl",
+      "src/vulkan_shaders/vk_post_process.frag",
+      "src/vulkan_shaders/vk_sprite3d.frag",
+      "src/vulkan_shaders/vk_world_alpha_textured.frag",
+      "src/vulkan_shaders/vk_world_flat.frag",
+      "src/vulkan_shaders/vk_world_lightmapped.frag",
+      "src/vulkan_shaders/vk_world_normals.frag",
+      "src/vulkan_shaders/vk_world_normals.vert",
+      "src/vulkan_shaders/vk_world_outline.frag",
+      "src/vulkan_shaders/vk_world_overlay.frag",
+      "src/vulkan_shaders/vk_world_textured.frag"
+    ],
+    "origin": "OpenAI Codex: optional linear RGBA16F and emission MRT, output conversion/bloom selection, reconstructed world SSAO and brush transforms, terminal MSAA/depth store optimization, controls and test-only powerup actor. Upstream rendering and prior local work retain their attribution."
+  },
+  {
+    "id": "SHADOW-001",
+    "date": "2026-09-14",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "CMakeLists.txt",
+      "src/competitive_visuals.c",
+      "src/competitive_visuals.h",
+      "src/r_aliasmodel.c",
+      "src/r_lightmaps.c",
+      "src/vk_aliasmodel.c",
+      "src/vk_competitive.c",
+      "src/vk_main.c",
+      "src/vk_shadows.c",
+      "src/vk_shadows.h",
+      "src/vk_world.c",
+      "src/vulkan_shaders/vk_alias_model.frag",
+      "src/vulkan_shaders/vk_shadow.frag",
+      "src/vulkan_shaders/vk_shadow.vert",
+      "src/vulkan_shaders/vk_shadow_face.glsl",
+      "src/vulkan_shaders/vk_shadows.glsl",
+      "src/vulkan_shaders/vk_world_alpha_textured.frag",
+      "src/vulkan_shaders/vk_world_flat.frag",
+      "src/vulkan_shaders/vk_world_lightmapped.frag",
+      "src/vulkan_shaders/vk_world_textured.frag"
+    ],
+    "origin": "OpenAI Codex: bounded point-light raster shadow atlas, world/brush/alias casters, selected-light shader illumination, live menu controls, deferred pass integration and opt-in moving light/actor fixtures. Upstream rendering and prior local work retain their attribution."
+  },
+  {
+    "id": "SHADOW-002",
+    "date": "2026-09-14",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/competitive_visuals.c",
+      "src/competitive_visuals.h",
+      "src/vk_aliasmodel.c",
+      "src/vk_buffers.c",
+      "src/vk_competitive.c",
+      "src/vk_draw.c",
+      "src/vk_main.c",
+      "src/vk_renderpass.c",
+      "src/vk_shadows.c",
+      "src/vk_shadows.h",
+      "src/vk_sprite3d.c",
+      "src/vk_world.c",
+      "src/vulkan_shaders/vk_alias_model.frag",
+      "src/vulkan_shaders/vk_shadow.vert",
+      "src/vulkan_shaders/vk_shadow_face.glsl",
+      "src/vulkan_shaders/vk_shadows.glsl",
+      "src/vulkan_shaders/vk_world_lightmapped.frag"
+    ],
+    "origin": "OpenAI Codex: cached and culled point/spot shadow maps, eight-light and update budgets, map lighting modes/sidecars, shader specialization, per-view GPU buffers/uniforms/atlases, multiview viewport and screenshot fixes, thirteen controls and expanded fixtures. Upstream rendering and prior local work retain their attribution."
+  },
+  {
+    "id": "SHADOW-003",
+    "date": "2026-09-15",
+    "repository": "ezquake-vulkan",
+    "paths": [
+      "src/vk_shadows.c"
+    ],
+    "origin": "OpenAI Codex: preserve baked world lighting by excluding already baked static world occluders from map-light mode 1; retain entity shadows and full world occlusion for dynamic/realtime lights. User-reported DM6 movement/radius regression. Upstream authorship retained."
   }
 ]

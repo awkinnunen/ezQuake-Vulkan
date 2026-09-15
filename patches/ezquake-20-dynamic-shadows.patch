@@ -1,0 +1,939 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c7d664e..3688d42 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -481,7 +481,7 @@ if(RENDERER_VULKAN)
+         add_custom_command(
+                 OUTPUT ${output_file}
+                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
+-                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl ${VULKAN_SHADER_DIR}/vk_hdr.glsl
++                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl ${VULKAN_SHADER_DIR}/vk_hdr.glsl ${VULKAN_SHADER_DIR}/vk_shadows.glsl ${VULKAN_SHADER_DIR}/vk_shadow_face.glsl
+                 COMMENT "Compiling Vulkan shader ${source_file}"
+                 VERBATIM
+         )
+@@ -511,6 +511,8 @@ if(RENDERER_VULKAN)
+     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_normals.vert vk_world_normals_vert.spv)
+     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_normals.frag vk_world_normals_frag.spv)
+     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_outline.frag vk_world_outline_frag.spv)
++    add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_shadow.vert vk_shadow_vert.spv)
++    add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_shadow.frag vk_shadow_frag.spv)
+     add_resources(shaders_vulkan ${vulkan_spirv_shaders})
+ 
+     set(vulkan_renderer_headers
+@@ -541,6 +543,7 @@ if(RENDERER_VULKAN)
+             ${SOURCE_DIR}/vk_window_surface.c
+             ${SOURCE_DIR}/vk_competitive.c
+             ${SOURCE_DIR}/vk_world.c
++            ${SOURCE_DIR}/vk_shadows.c
+             ${vulkan_renderer_headers}
+     )
+     source_group(TREE ${SOURCE_DIR} PREFIX "Source Files/vulkan" FILES ${vulkan_renderer})
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+index 9661039..fc313b5 100644
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -6,6 +6,10 @@
+ extern void M_Print_GetPoint(int cx, int cy, int *rx, int *ry, const char *str, qbool red);
+ #include "rulesets.h"
+ #include "competitive_visuals.h"
++#ifdef RENDERER_OPTION_VULKAN
++#include <vulkan/vulkan.h>
++#include "vk_shadows.h"
++#endif
+ #ifndef CLIENTONLY
+ #include "server.h"
+ #endif
+@@ -64,7 +68,7 @@ static int dragging = -1;
+ #define EXT(n) (CV_COUNT+(n))
+ static const char *groups[]={"World readability","Surface colours","Light response","Cel shading",
+  "Player rim","Outline mode","World edges","Model edges","Edge colours",
+- "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering"};
++ "Bloom","Ambient shading","Surface decoration","Scene image","Antialiasing / filtering","Dynamic light shadows"};
+ typedef struct { int index, page, group, depth; } cv_row_t;
+ static const cv_row_t layout[]={
+  {CV_enable,1,0,0},{CV_detail,1,0,1},{CV_contrast,1,0,1},{CV_pattern,1,0,1},{CV_distance,1,0,1},{CV_saturation,1,0,1},
+@@ -79,6 +83,8 @@ static const cv_row_t layout[]={
+  {CV_edgepalette,3,8,0},{CV_worldedge,3,8,1},{CV_teamedge,3,8,1},{CV_enemyedge,3,8,1},
+  {CV_bloom,4,9,0},{CV_bloomsource,4,9,1},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
+  {CV_ao,4,10,0},{CV_aoradius,4,10,1},{CV_aomode,4,10,1},{CV_aoquality,4,10,1},{CV_aobias,4,10,1},{EXT(4),4,10,0},
++ {CV_shadows,4,14,0},{CV_shadowquality,4,14,1},{CV_shadowsoft,4,14,1},{CV_shadowdistance,4,14,1},
++ {CV_shadowlights,4,14,1},{CV_shadowbias,4,14,1},{CV_shadowstrength,4,14,1},
+  {EXT(5),4,11,0},{EXT(6),4,11,0},
+  {CV_hdr,5,12,0},{CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
+  {EXT(7),5,13,0},{EXT(8),5,13,0},{EXT(14),5,13,0},{CV_RESTART_ROW,5,13,0}
+@@ -105,6 +111,12 @@ static const char *Unavailable(int index) {
+   if((index==CV_bands||index==CV_softness) && CV_Value(CV_light)<1.5) return "Select Soft Cel to use cel bands.";
+  }
+  if(index>=CV_rimwidth && index<=CV_rimteam && CV_Value(CV_rim)<=0) return "Increase Player rim first.";
++ if(index>=CV_shadows && index<=CV_shadowstrength) {
++  if(ExistingValue("r_fullbright")) return "Disable fullbright lighting first.";
++  if(ExistingValue("cl_multiview")) return "Dynamic shadows require a single view.";
++  if(!ExistingValue("r_dynamic")||ExistingValue("gl_flashblend")) return "Enable dynamic lights and disable flashblend.";
++  if(index!=CV_shadows && !CV_Value(CV_shadows)) return "Enable Dynamic shadows first.";
++ }
+  if(index==CV_bloomsource && !actualHDR) return "Enable Linear HDR and Restart video first. SDR uses bright pixels.";
+  if(index==CV_bloomsource||index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
+  if((index==CV_aoradius || index==CV_aomode || index==CV_aoquality || index==CV_aobias) && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
+@@ -507,6 +519,8 @@ static void Command(void) {
+ // Opt-in local screenshot fixture. No effect without both -dev and -visual-tests.
+ static qbool photoActive;
+ static double photoTime;
++static int photoActorStart,photoBrush=-1;
++static dlight_t photoLights[2];
+ static vec3_t photoOrigin, photoAngles;
+ static qbool PhotoAllowed(void) {
+ #ifndef CLIENTONLY
+@@ -528,21 +542,68 @@ void CV_TestView(void) {
+  r_refdef2.powerup_scroll_params[3]=(float)sin(photoTime*-0.5);
+  VectorCopy(photoOrigin,r_refdef.vieworg); VectorCopy(photoAngles,r_refdef.viewangles);
+ }
++void CV_TestLights(void) {
++ int i;
++ if(!photoActive||!PhotoAllowed()||(!photoLights[0].radius&&!photoLights[1].radius)) return;
++ CV_TestView();
++ memset(cl_dlight_active,0,sizeof(cl_dlight_active));
++ for(i=0;i<2;++i) if(photoLights[i].radius>0) {
++  cl_dlights[i]=photoLights[i];cl_dlights[i].die=cl.time+600;
++  cl_dlight_active[0]|=1u<<i;
++ }
++}
+ static void PhotoCommand(void) {
+ #ifndef CLIENTONLY
+  const char *action=Cmd_Argv(2); int i;
+  if(!PhotoAllowed()) { Con_Printf("CV_PHOTO rejected: requires opt-in local cheat-enabled test server.\n"); return; }
+  if(!strcmp(action,"freeze")) {
+   VectorCopy(r_refdef.vieworg,photoOrigin); VectorCopy(r_refdef.viewangles,photoAngles);
++  memset(photoLights,0,sizeof(photoLights));photoBrush=-1;
+   photoTime=cl.time; if(!sv.paused) SV_TogglePause(NULL,1); cl.paused|=PAUSED_SERVER; photoActive=true;
+  } else if(!strcmp(action,"camera") && Cmd_Argc()==9) {
+   for(i=0;i<3;++i) { photoOrigin[i]=(float)atof(Cmd_Argv(3+i)); photoAngles[i]=(float)atof(Cmd_Argv(6+i)); }
++ } else if(!strcmp(action,"light") && photoActive && Cmd_Argc()==8) {
++  dlight_t *light=&photoLights[bound(0,atoi(Cmd_Argv(3)),1)];
++  for(i=0;i<3;++i) light->origin[i]=(float)atof(Cmd_Argv(4+i));
++  light->radius=bound(0,(float)atof(Cmd_Argv(7)),1024);light->die=cl.time+600;light->type=lt_white;light->decay=0;
++ } else if(!strcmp(action,"actor") && photoActive && Cmd_Argc()==7) {
++  int slot=atoi(Cmd_Argv(3))==3?photoBrush:photoActorStart+bound(0,atoi(Cmd_Argv(3)),2);
++  if(slot>=0 && slot<cl.num_statics) {
++   entity_t *ent=&cl_static_entities[slot];efrag_t *ef=ent->efrag;
++   /* Fixture-only unlink: efrags use map-lifetime hunk allocation. */
++   while(ef && ef->entity==ent) {efrag_t **link=&ef->leaf->efrags;
++    while(*link&&*link!=ef) link=&(*link)->leafnext;
++    if(*link) *link=ef->leafnext;
++    ef=ef->entnext;
++   }
++   ent->efrag=NULL;
++   for(i=0;i<3;++i) ent->origin[i]+=(float)atof(Cmd_Argv(4+i));
++   R_AddEfrags(ent);
++  }
++ } else if(!strcmp(action,"brush") && photoActive) {
++  model_t *model=NULL;vec3_t forward;float best=1e30f;
++  if(photoBrush>=0||cl.num_statics>=MAX_STATIC_ENTITIES) return;
++  for(i=1;i<MAX_MODELS;++i) {model_t *m=cl.model_precache[i];
++   if(m&&m->type==mod_brush&&m->name[0]=='*') {
++    float size=(m->maxs[0]-m->mins[0])*(m->maxs[1]-m->mins[1])*(m->maxs[2]-m->mins[2]);
++    if(size>4096&&size<best){model=m;best=size;}
++   }
++  }
++  if(model) {
++   entity_t *ent=&cl_static_entities[cl.num_statics++];memset(ent,0,sizeof(*ent));
++   photoBrush=cl.num_statics-1;ent->entity_id=cl.num_statics;ent->model=model;ent->colormap=vid.colormap;
++   AngleVectors(photoAngles,forward,NULL,NULL);
++   for(i=0;i<3;++i) ent->origin[i]=photoOrigin[i]+forward[i]*150-(model->mins[i]+model->maxs[i])*.5f;
++   R_AddEfrags(ent);
++   Con_Printf("CV_PHOTO brush=%s slot=%d\n",model->name,photoBrush);
++  }
+  } else if(!strcmp(action,"actors") && photoActive) {
+   vec3_t forward,right;
+   model_t *player=cl.model_precache[cl_modelindices[mi_player]], *ordinary=NULL;
+   if(!player || cl.num_statics+3>=MAX_STATIC_ENTITIES) return;
+   for(i=1;i<MAX_MODELS;++i) if(cl.model_precache[i] && strstr(cl.model_precache[i]->name,"backpack")) { ordinary=cl.model_precache[i]; break; }
+   AngleVectors(photoAngles,forward,right,NULL);
++  photoActorStart=cl.num_statics;
+   for(i=0;i<3;++i) {
+    entity_t *ent;
+    if(i==2 && !ordinary) continue;
+@@ -568,6 +629,9 @@ static void PhotoCommand(void) {
+ }
+ static void Developer(void) {
+  if(!developer.value) return;
++#ifdef RENDERER_OPTION_VULKAN
++ if(!strcmp(Cmd_Argv(1),"shadows") && R_UseVulkan()) VK_ShadowStatus();
++#endif
+  if(!strcmp(Cmd_Argv(1),"runtime")) {
+   int i,players=0;
+   for(i=0;i<MAX_CLIENTS;++i) if(cl.players[i].name[0] && !cl.players[i].spectator) ++players;
+diff --git a/src/competitive_visuals.h b/src/competitive_visuals.h
+index 88885cd..2f4f8da 100644
+--- a/src/competitive_visuals.h
++++ b/src/competitive_visuals.h
+@@ -46,7 +46,14 @@
+  X(aomode,"AO method","0",0,1,1,4,"Contact or world SSAO. Models, sky and transparent surfaces are excluded.") \
+  X(aoquality,"SSAO samples","16",8,32,8,4,"Hemisphere sampling quality: 8 to 32 taps. Higher quality costs more GPU time.") \
+  X(aobias,"SSAO bias","0.5",.1,2,.1,4,"World-unit offset to suppress self-shadowing on flat surfaces. Requires SSAO.") \
+- X(bloomsource,"Bloom source","1",0,1,1,4,"Bright pixels or emissive surfaces only. Requires bloom and active HDR for Emissive.")
++ X(bloomsource,"Bloom source","1",0,1,1,4,"Bright pixels or emissive surfaces only. Requires bloom and active HDR for Emissive.") \
++ X(shadows,"Dynamic shadows","0",0,1,1,4,"Point-light shadows from world, doors and models. Requires dynamic lights; single view only.") \
++ X(shadowquality,"Shadow resolution","256",128,512,128,4,"Pixels per cube face: 128 to 512. Higher values sharpen shadows and cost more GPU time.") \
++ X(shadowsoft,"Shadow softness","1",0,2,.25,4,"Shadow filter radius in pixels. Zero gives hard edges; larger values soften edges.") \
++ X(shadowdistance,"Shadow distance","768",128,2048,64,4,"Maximum distance to a light's influence sphere. Farther lights keep ordinary lighting.") \
++ X(shadowlights,"Shadow lights","1",1,2,1,4,"Maximum shadowed point lights: one or two. Each requires six face renders per frame.") \
++ X(shadowbias,"Shadow bias","0.5",.05,4,.05,4,"World-unit offset against self-shadow artifacts. Too much separates shadows from surfaces.") \
++ X(shadowstrength,"Shadow strength","1",0,1,.05,4,"How strongly occluders block the selected dynamic lights. Baked lighting stays unchanged.")
+ #define CV_ENUM(id,label,def,lo,hi,step,page,help) CV_##id,
+ typedef enum { CV_OPTIONS(CV_ENUM) CV_COUNT } cv_id;
+ #undef CV_ENUM
+@@ -59,6 +66,7 @@ qbool CV_PostActive(void);
+ void CV_VideoApplied(int requested, int actual);
+ void CV_HDRVideoApplied(int requested, int actual);
+ void CV_TestView(void);
++void CV_TestLights(void);
+ qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked);
+ void CV_Params(cv_params_t *out);
+ void CV_EdgeColor(float *out, int kind);
+diff --git a/src/r_aliasmodel.c b/src/r_aliasmodel.c
+index 10594d4..b40e6cd 100644
+--- a/src/r_aliasmodel.c
++++ b/src/r_aliasmodel.c
+@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ // Most code taken from gl_rmain.c
+ 
+ #include "quakedef.h"
++#include "vk_shadows.h"
+ #include "gl_model.h"
+ #include "vx_stuff.h"
+ #include "vx_vertexlights.h"
+@@ -323,7 +324,11 @@ void R_DrawAliasModel(entity_t *ent, qbool outline)
+ 		r_framelerp = min(ent->framelerp, 1);
+ 	}
+ 
+-	if (R_CullAliasModel(ent, oldframe, frame)) {
++	if (R_CullAliasModel(ent, oldframe, frame)
++#ifdef RENDERER_OPTION_VULKAN
++		&& !VK_ShadowCasterRelevant(ent)
++#endif
++	) {
+ 		return;
+ 	}
+ 
+@@ -472,6 +477,9 @@ static void R_AliasModelColoredLighting(entity_t* ent)
+ 		for (j = 0; j < 32; j++) {
+ 			if ((cl_dlight_active[i] & (1 << j)) && i * 32 + j < MAX_DLIGHTS) {
+ 				lnum = i * 32 + j;
++#ifdef RENDERER_OPTION_VULKAN
++				if(!(ent->renderfx&RF_WEAPONMODEL) && VK_ShadowManagedLight(lnum)) continue;
++#endif
+ 
+ 				VectorSubtract(ent->origin, cl_dlights[lnum].origin, dist);
+ 				add = cl_dlights[lnum].radius - VectorLength(dist);
+@@ -517,6 +525,9 @@ static void R_AliasModelStandardLighting(entity_t* ent)
+ 			for (j = 0; j < 32; j++) {
+ 				if ((cl_dlight_active[i] & (1 << j)) && i * 32 + j < MAX_DLIGHTS) {
+ 					lnum = i * 32 + j;
++#ifdef RENDERER_OPTION_VULKAN
++				if(!(ent->renderfx&RF_WEAPONMODEL) && VK_ShadowManagedLight(lnum)) continue;
++#endif
+ 
+ 					VectorSubtract(ent->origin, cl_dlights[lnum].origin, dist);
+ 					add = cl_dlights[lnum].radius - VectorLength(dist);
+diff --git a/src/r_lightmaps.c b/src/r_lightmaps.c
+index 38c8b42..2b8ebe9 100644
+--- a/src/r_lightmaps.c
++++ b/src/r_lightmaps.c
+@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ // gl_lightmaps.c: lightmap-related code
+ 
+ #include "quakedef.h"
++#include "vk_shadows.h"
+ #include "gl_model.h"
+ #include "rulesets.h"
+ #include "utils.h"
+@@ -89,6 +90,9 @@ static void R_BuildDlightList (msurface_t *surf)
+ 		}
+ 
+ 		dlightbits &= ~(1<<lnum);
++#ifdef RENDERER_OPTION_VULKAN
++		if(VK_ShadowManagedLight(lnum)) continue;
++#endif
+ 
+ 		dist = PlaneDiff(cl_dlights[lnum].origin, surf->plane);
+ 		irad = (cl_dlights[lnum].radius - fabs(dist)) * 256;
+diff --git a/src/vk_aliasmodel.c b/src/vk_aliasmodel.c
+index 6769661..966c0c7 100644
+--- a/src/vk_aliasmodel.c
++++ b/src/vk_aliasmodel.c
+@@ -25,6 +25,7 @@ of the License, or (at your option) any later version.
+ #include "tr_types.h"
+ #include "vk_local.h"
+ #include "competitive_visuals.h"
++#include "vk_shadows.h"
+ 
+ extern const unsigned char vk_alias_model_vert_spv[];
+ extern const unsigned int vk_alias_model_vert_spv_len;
+@@ -579,6 +580,8 @@ static void VK_AliasQueuePreparedDraw(
+ 
+ 	draw = &aliasDraws[aliasDrawCount++];
+ 	CV_PlayerParams(&draw->cv, ent, ent->effects, render_effects, modelView);
++	if(mode==VK_ALIAS_MODE_NORMAL && !(render_effects&(RF_WEAPONMODEL|RF_ADDITIVEBLEND|RF_ALPHABLEND)) && color[3]>=1)
++		VK_ShadowAddAlias(firstVertex,vertexCount,modelView,lerpfrac,textureReady?texture:solidwhite_texture);
+ 	draw->firstVertex = (uint32_t)firstVertex;
+ 	draw->vertexCount = (uint32_t)vertexCount;
+ 	memcpy(draw->mvp, mvp, sizeof(draw->mvp));
+diff --git a/src/vk_competitive.c b/src/vk_competitive.c
+index e432a2f..f3a2bcf 100644
+--- a/src/vk_competitive.c
++++ b/src/vk_competitive.c
+@@ -4,6 +4,7 @@
+ #include "quakedef.h"
+ #include "vk_local.h"
+ #include "competitive_visuals.h"
++#include "vk_shadows.h"
+ 
+ #define CV_DRAWS 8192
+ static VkDescriptorSetLayout cvLayout;
+@@ -18,19 +19,24 @@ VkDescriptorSetLayout VK_CVLayout(void) {
+  binding.binding=0; binding.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+  binding.descriptorCount=1; binding.stageFlags=VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
+  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO; info.bindingCount=1;info.pBindings=&binding;
++ VkDescriptorSetLayoutBinding bindings[3]={binding,{0},{0}};
++ bindings[1].binding=1;bindings[1].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[1].descriptorCount=1;bindings[1].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;
++ bindings[2].binding=2;bindings[2].descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;bindings[2].descriptorCount=1;bindings[2].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;
++ info.bindingCount=3;info.pBindings=bindings;
+  if(vkCreateDescriptorSetLayout(vk_options.logicalDevice,&info,NULL,&cvLayout)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals layout failed");
+  return cvLayout;
+ }
+ void VK_CVBeginFrame(void) {
+  uint32_t i=vk_options.frame.currentFrame;
+  cv_params_t params;
++ VK_ShadowFrameResources();
+  if(!cvPool) {
+-  VkDescriptorPoolSize size={VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_MAX_FRAMES_IN_FLIGHT};
++  VkDescriptorPoolSize sizes[3]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_MAX_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_MAX_FRAMES_IN_FLIGHT},{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_MAX_FRAMES_IN_FLIGHT}};
+   VkDescriptorPoolCreateInfo info={0}; VkPhysicalDeviceProperties props;
+   vkGetPhysicalDeviceProperties(vk_options.physicalDevice,&props);
+   if(props.limits.maxBoundDescriptorSets<5) Sys_Error("Vulkan: Competitive Visuals pipelines require 5 descriptor sets");
+   cvStride=(sizeof(cv_params_t)+props.limits.minUniformBufferOffsetAlignment-1)&~(props.limits.minUniformBufferOffsetAlignment-1);
+-  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;info.maxSets=VK_MAX_FRAMES_IN_FLIGHT;info.poolSizeCount=1;info.pPoolSizes=&size;
++  info.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;info.maxSets=VK_MAX_FRAMES_IN_FLIGHT;info.poolSizeCount=3;info.pPoolSizes=sizes;
+   if(vkCreateDescriptorPool(vk_options.logicalDevice,&info,NULL,&cvPool)!=VK_SUCCESS) Sys_Error("Vulkan: Competitive Visuals pool failed");
+  }
+  if(!frames[i].buffer) {
+@@ -44,6 +50,13 @@ void VK_CVBeginFrame(void) {
+   write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=frames[i].set;write.dstBinding=0;
+   write.descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;write.descriptorCount=1;write.pBufferInfo=&buf;
+   vkUpdateDescriptorSets(vk_options.logicalDevice,1,&write,0,NULL);
++  VkDescriptorImageInfo shadowImage={0};VkDescriptorBufferInfo shadowBuffer={0};VkWriteDescriptorSet shadowWrites[2]={{0}};
++  VK_ShadowDescriptors(&shadowImage,&shadowBuffer);
++  shadowWrites[0].sType=shadowWrites[1].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
++  shadowWrites[0].dstSet=shadowWrites[1].dstSet=frames[i].set;
++  shadowWrites[0].dstBinding=1;shadowWrites[0].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;shadowWrites[0].descriptorCount=1;shadowWrites[0].pImageInfo=&shadowImage;
++  shadowWrites[1].dstBinding=2;shadowWrites[1].descriptorType=VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;shadowWrites[1].descriptorCount=1;shadowWrites[1].pBufferInfo=&shadowBuffer;
++  vkUpdateDescriptorSets(vk_options.logicalDevice,2,shadowWrites,0,NULL);
+  }
+  /* Called only after this frame slot's fence has completed. Draw slices are
+     immutable until that fence completes again, including unsubmitted records. */
+@@ -59,6 +72,7 @@ void VK_CVBind(VkCommandBuffer command, VkPipelineLayout layout, uint32_t set, c
+  vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,set,1,&frames[i].set,1,&offset);
+ }
+ void VK_CVShutdown(void) {
++ VK_ShadowShutdown();
+  int i;
+  for(i=0;i<VK_MAX_FRAMES_IN_FLIGHT;++i) {
+   if(frames[i].mapped) vkUnmapMemory(vk_options.logicalDevice,frames[i].memory);
+diff --git a/src/vk_main.c b/src/vk_main.c
+index 34580fe..15c94d1 100644
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ #include "tr_types.h"
+ #include "glsl/constants.glsl"
+ #include "vk_local.h"
++#include "vk_shadows.h"
+ 
+ vk_options_t vk_options;
+ static qbool vk_recreate_swapchain_requested;
+@@ -688,7 +689,8 @@ void VK_BeginFrame(void)
+ 	// The single-view normals/AO prepass runs before any scene draws. Starting
+ 	// the main pass now would clear, store and resolve MSAA color only to end
+ 	// it immediately for that prepass. Retain the existing multiview ordering.
+-	if (!VK_WorldOutlineActive() || cl_multiview.integer) {
++	VK_ShadowBeginCommands();
++	if ((!VK_WorldOutlineActive() && !VK_ShadowEnabled()) || cl_multiview.integer) {
+ 		VK_BeginScenePass();
+ 	}
+ }
+diff --git a/src/vk_shadows.c b/src/vk_shadows.c
+new file mode 100644
+index 0000000..d1edda9
+--- /dev/null
++++ b/src/vk_shadows.c
+@@ -0,0 +1,315 @@
++/* SHADOW-001, OpenAI Codex, 2026-09-14. GPL-2.0-or-later.
++ * Bounded point-light shadow atlas; per-frame resources are fence-owned.
++ */
++#ifdef RENDERER_OPTION_VULKAN
++#include <vulkan/vulkan.h>
++#include "quakedef.h"
++#include "gl_model.h"
++#include "r_buffers.h"
++#include "r_matrix.h"
++#include "r_local.h"
++#include "r_texture.h"
++#include "vk_local.h"
++#include "competitive_visuals.h"
++#include "vk_shadows.h"
++#include <stddef.h>
++#include <math.h>
++
++#define SHADOW_LIGHTS 2
++#define SHADOW_CASTERS 1024
++#define SHADOW_ALIAS 256
++#define SHADOW_WIDTH 1536
++#define SHADOW_HEIGHT 2048
++typedef struct {float inverse[16],viewport[4],settings[4],positions[2][4],colors[2][4],camera[4];} shadow_uniform_t;
++typedef struct {float world[16],light[4],params[4];} shadow_push_t;
++typedef char shadow_uniform_size[(sizeof(shadow_uniform_t)==176)?1:-1];
++typedef char shadow_push_size[(sizeof(shadow_push_t)==96)?1:-1];
++typedef struct {unsigned first,count;float modelview[16],lerp;texture_ref texture;} shadow_alias_t;
++typedef struct {unsigned first,count;float world[16];texture_ref texture; qbool alias;float lerp;} shadow_caster_t;
++static struct {VkImage image;VkDeviceMemory memory;VkImageView view;VkFramebuffer framebuffer;
++ VkBuffer buffer;VkDeviceMemory bufferMemory;shadow_uniform_t *mapped;qbool initialized;} frames[VK_MAX_FRAMES_IN_FLIGHT];
++static VkRenderPass pass;
++static VkSampler sampler;
++static VkPipelineLayout pipelineLayout;
++static VkPipeline pipelines[2];
++static VkFormat format;
++static int selected[2]={-1,-1},selectedCount;
++static shadow_alias_t aliases[SHADOW_ALIAS];
++static int aliasCount;
++static qbool aliasOverflow;
++static shadow_caster_t casters[SHADOW_CASTERS];
++static int casterCount;
++static unsigned lastDraws,lastFaces,lastOverflow;
++static model_t *previousWorld;
++static double previousTime;
++extern int dlightcolor[NUM_DLIGHTTYPES][3];
++extern cvar_t r_dynamic,gl_flashblend,cl_multiview,r_fullbright;
++extern const unsigned char vk_shadow_vert_spv[],vk_shadow_frag_spv[];
++extern const unsigned int vk_shadow_vert_spv_len,vk_shadow_frag_spv_len;
++
++static void Check(VkResult result,const char *where){if(result!=VK_SUCCESS) Sys_Error("Vulkan shadow %s failed: %d",where,result);}
++static VkShaderModule Module(const unsigned char *data,unsigned size) {
++ VkShaderModule module;VkShaderModuleCreateInfo info={0};void *aligned=Q_malloc(size);
++ memcpy(aligned,data,size);info.sType=VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;info.codeSize=size;info.pCode=aligned;
++ Check(vkCreateShaderModule(vk_options.logicalDevice,&info,NULL,&module),"shader");Q_free(aligned);return module;
++}
++static void CreatePass(void) {
++ VkAttachmentDescription a={0};VkAttachmentReference ref={0,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
++ VkSubpassDescription sub={0};VkSubpassDependency deps[2]={{0}};VkRenderPassCreateInfo info={0};VkSamplerCreateInfo samp={0};
++ VkFormatProperties props;
++ if(pass) return;
++ format=VK_FORMAT_D32_SFLOAT;vkGetPhysicalDeviceFormatProperties(vk_options.physicalDevice,format,&props);
++ if((props.optimalTilingFeatures&(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))!=(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) format=VK_FORMAT_D16_UNORM;
++ a.format=format;a.samples=VK_SAMPLE_COUNT_1_BIT;a.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;a.storeOp=VK_ATTACHMENT_STORE_OP_STORE;
++ a.stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;a.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
++ a.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;a.finalLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++ sub.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sub.pDepthStencilAttachment=&ref;
++ deps[0].srcSubpass=VK_SUBPASS_EXTERNAL;deps[0].dstSubpass=0;
++ deps[0].srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;
++ deps[0].dstStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
++ deps[1].srcSubpass=0;deps[1].dstSubpass=VK_SUBPASS_EXTERNAL;
++ deps[1].srcStageMask=deps[0].dstStageMask;deps[1].srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
++ deps[1].dstStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
++ info.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;info.attachmentCount=1;info.pAttachments=&a;
++ info.subpassCount=1;info.pSubpasses=&sub;info.dependencyCount=2;info.pDependencies=deps;
++ Check(vkCreateRenderPass(vk_options.logicalDevice,&info,NULL,&pass),"render pass");
++ samp.sType=VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;samp.magFilter=samp.minFilter=VK_FILTER_NEAREST;
++ samp.addressModeU=samp.addressModeV=samp.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
++ Check(vkCreateSampler(vk_options.logicalDevice,&samp,NULL,&sampler),"sampler");
++}
++void VK_ShadowFrameResources(void) {
++ int i=vk_options.frame.currentFrame;VkImageViewCreateInfo view={0};VkFramebufferCreateInfo fb={0};
++ CreatePass();
++ if(!frames[i].image) {
++  if(!VK_CreateImageResource(SHADOW_WIDTH,SHADOW_HEIGHT,1,VK_SAMPLE_COUNT_1_BIT,format,VK_IMAGE_TILING_OPTIMAL,
++   VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,&frames[i].image,&frames[i].memory)) Sys_Error("Vulkan: shadow atlas allocation failed");
++  view.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;view.image=frames[i].image;view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.format=format;
++  view.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;view.subresourceRange.levelCount=view.subresourceRange.layerCount=1;
++  Check(vkCreateImageView(vk_options.logicalDevice,&view,NULL,&frames[i].view),"image view");
++  fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;fb.renderPass=pass;fb.attachmentCount=1;fb.pAttachments=&frames[i].view;
++  fb.width=SHADOW_WIDTH;fb.height=SHADOW_HEIGHT;fb.layers=1;
++  Check(vkCreateFramebuffer(vk_options.logicalDevice,&fb,NULL,&frames[i].framebuffer),"framebuffer");
++  if(!VK_CreateBufferResource(sizeof(shadow_uniform_t),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,&frames[i].buffer,&frames[i].bufferMemory)) Sys_Error("Vulkan: shadow uniform allocation failed");
++  Check(vkMapMemory(vk_options.logicalDevice,frames[i].bufferMemory,0,VK_WHOLE_SIZE,0,(void**)&frames[i].mapped),"uniform map");
++ }
++ memset(frames[i].mapped,0,sizeof(shadow_uniform_t));
++ selectedCount=0;
++}
++void VK_ShadowDescriptors(VkDescriptorImageInfo *image,VkDescriptorBufferInfo *buffer) {
++ int i=vk_options.frame.currentFrame;
++ image->sampler=sampler;image->imageView=frames[i].view;image->imageLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++ buffer->buffer=frames[i].buffer;buffer->offset=0;buffer->range=sizeof(shadow_uniform_t);
++}
++qbool VK_ShadowEnabled(void){return R_UseVulkan()&&CV_Value(CV_shadows)>0&&r_dynamic.value>0&&!gl_flashblend.integer&&!cl_multiview.integer&&!r_fullbright.value;}
++void VK_ShadowSelect(void) {
++ int old[2]={selected[0],selected[1]},i,k;float scores[MAX_DLIGHTS]={0};
++ CV_TestLights();
++ selectedCount=aliasCount=0;aliasOverflow=false;selected[0]=selected[1]=-1;
++ if(previousWorld!=cl.worldmodel || cl.time<previousTime || cl.time-previousTime>1) old[0]=old[1]=-1;
++ previousWorld=cl.worldmodel;previousTime=cl.time;
++ if(!VK_ShadowEnabled()||!frames[vk_options.frame.currentFrame].mapped) return;
++ for(i=0;i<MAX_DLIGHTS;++i) {
++  vec3_t d;float distance;
++  if(!(cl_dlight_active[i/32]&(1u<<(i%32))) || cl_dlights[i].radius<16) continue;
++  VectorSubtract(cl_dlights[i].origin,r_refdef.vieworg,d);distance=VectorLength(d);
++  if(distance>CV_Value(CV_shadowdistance)+cl_dlights[i].radius) continue;
++  scores[i]=cl_dlights[i].radius/(distance+64);
++  if(i==old[0]||i==old[1]) scores[i]*=1.15f;
++ }
++ for(k=0;k<(int)CV_Value(CV_shadowlights);++k) {
++  int best=-1;float score=0;
++  for(i=0;i<MAX_DLIGHTS;++i) if(scores[i]>score){best=i;score=scores[i];}
++  if(best<0) break;
++  selected[selectedCount++]=best;scores[best]=0;
++ }
++}
++qbool VK_ShadowManagedLight(int index) {int i;if(!R_UseVulkan()) return false;for(i=0;i<selectedCount;++i) if(index==selected[i]) return true;return false;}
++qbool VK_ShadowCasterRelevant(entity_t *ent) {
++ int i;if(!R_UseVulkan()||!ent||ent->renderfx&RF_WEAPONMODEL) return false;
++ for(i=0;i<selectedCount;++i){vec3_t d;VectorSubtract(ent->origin,cl_dlights[selected[i]].origin,d);if(VectorLength(d)<cl_dlights[selected[i]].radius+(ent->model?ent->model->radius:128)) return true;}
++ return false;
++}
++void VK_ShadowAddAlias(unsigned first,unsigned count,const float *mv,float lerp,texture_ref texture) {
++ shadow_alias_t *a;if(!selectedCount) return;if(aliasCount==SHADOW_ALIAS){aliasOverflow=true;return;}
++ a=&aliases[aliasCount++];a->first=first;a->count=count;a->lerp=lerp;a->texture=texture;memcpy(a->modelview,mv,64);
++}
++static void WorldMatrix(const float *mv,float *world) {
++ float view[16];int axis,col,k;R_GetModelviewMatrix(view);R_SetIdentityMatrix(world);
++ for(axis=0;axis<3;++axis) for(col=0;col<4;++col) {
++  float value=col==3?r_refdef.vieworg[axis]:0;
++  for(k=0;k<3;++k) value+=view[axis*4+k]*mv[col*4+k];
++  world[col*4+axis]=value;
++ }
++}
++static qbool Inverse(const float *m,float *result) {
++ double a[4][8];int r,c,k;
++ for(r=0;r<4;++r) for(c=0;c<8;++c) a[r][c]=c<4?m[c*4+r]:(c-4==r);
++ for(c=0;c<4;++c) {
++  int pivot=c;double value;
++  for(r=c+1;r<4;++r) if(fabs(a[r][c])>fabs(a[pivot][c])) pivot=r;
++  if(fabs(a[pivot][c])<1e-12) return false;
++  for(k=0;k<8;++k){double t=a[c][k];a[c][k]=a[pivot][k];a[pivot][k]=t;}
++  value=a[c][c];for(k=0;k<8;++k) a[c][k]/=value;
++  for(r=0;r<4;++r) if(r!=c){value=a[r][c];for(k=0;k<8;++k) a[r][k]-=value*a[c][k];}
++ }
++ for(r=0;r<4;++r) for(c=0;c<4;++c) result[c*4+r]=(float)a[r][c+4];return true;
++}
++static VkPipeline Pipeline(qbool alias) {
++ VkGraphicsPipelineCreateInfo info={0};VkPipelineShaderStageCreateInfo stages[2]={{0}};
++ VkVertexInputBindingDescription binding={0};VkVertexInputAttributeDescription attr[3]={{0}};
++ VkPipelineVertexInputStateCreateInfo vertex={0};VkPipelineInputAssemblyStateCreateInfo assembly={0};
++ VkPipelineViewportStateCreateInfo viewport={0};VkPipelineRasterizationStateCreateInfo raster={0};
++ VkPipelineMultisampleStateCreateInfo ms={0};VkPipelineDepthStencilStateCreateInfo depth={0};
++ VkPipelineColorBlendStateCreateInfo blend={0};VkPipelineDynamicStateCreateInfo dynamic={0};
++ VkDynamicState states[2]={VK_DYNAMIC_STATE_VIEWPORT,VK_DYNAMIC_STATE_SCISSOR};int i;
++ if(pipelines[alias]) return pipelines[alias];
++ if(!pipelineLayout) {
++  VkDescriptorSetLayout texture=VK_TextureDescriptorSetLayout();VkPushConstantRange range={VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(shadow_push_t)};
++  VkPipelineLayoutCreateInfo layout={0};layout.sType=VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;layout.setLayoutCount=1;layout.pSetLayouts=&texture;
++  layout.pushConstantRangeCount=1;layout.pPushConstantRanges=&range;
++  Check(vkCreatePipelineLayout(vk_options.logicalDevice,&layout,NULL,&pipelineLayout),"pipeline layout");
++ }
++ for(i=0;i<2;++i){stages[i].sType=VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;stages[i].stage=i?VK_SHADER_STAGE_FRAGMENT_BIT:VK_SHADER_STAGE_VERTEX_BIT;stages[i].pName="main";}
++ stages[0].module=Module(vk_shadow_vert_spv,vk_shadow_vert_spv_len);stages[1].module=Module(vk_shadow_frag_spv,vk_shadow_frag_spv_len);
++ binding.stride=alias?sizeof(vbo_model_vert_t):sizeof(vbo_world_vert_t);binding.inputRate=VK_VERTEX_INPUT_RATE_VERTEX;
++ for(i=0;i<3;++i){attr[i].location=i;attr[i].format=i==1?VK_FORMAT_R32G32_SFLOAT:VK_FORMAT_R32G32B32_SFLOAT;}
++ attr[1].offset=alias?offsetof(vbo_model_vert_t,texture_coords):offsetof(vbo_world_vert_t,material_coords);
++ attr[2].offset=alias?offsetof(vbo_model_vert_t,direction):offsetof(vbo_world_vert_t,position);
++ vertex.sType=VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;vertex.vertexBindingDescriptionCount=1;vertex.pVertexBindingDescriptions=&binding;vertex.vertexAttributeDescriptionCount=3;vertex.pVertexAttributeDescriptions=attr;
++ assembly.sType=VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;assembly.topology=alias?VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
++ viewport.sType=VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;viewport.viewportCount=viewport.scissorCount=1;
++ raster.sType=VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;raster.polygonMode=VK_POLYGON_MODE_FILL;raster.cullMode=VK_CULL_MODE_NONE;raster.lineWidth=1;
++ ms.sType=VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;ms.rasterizationSamples=VK_SAMPLE_COUNT_1_BIT;
++ depth.sType=VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;depth.depthTestEnable=depth.depthWriteEnable=VK_TRUE;depth.depthCompareOp=VK_COMPARE_OP_LESS_OR_EQUAL;
++ blend.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
++ dynamic.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;dynamic.dynamicStateCount=2;dynamic.pDynamicStates=states;
++ info.sType=VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;info.stageCount=2;info.pStages=stages;info.pVertexInputState=&vertex;info.pInputAssemblyState=&assembly;info.pViewportState=&viewport;
++ info.pRasterizationState=&raster;info.pMultisampleState=&ms;info.pDepthStencilState=&depth;info.pColorBlendState=&blend;info.pDynamicState=&dynamic;info.layout=pipelineLayout;info.renderPass=pass;
++ Check(vkCreateGraphicsPipelines(vk_options.logicalDevice,vk_options.pipelineCache,1,&info,NULL,&pipelines[alias]),"pipeline");
++ for(i=0;i<2;++i) vkDestroyShaderModule(vk_options.logicalDevice,stages[i].module,NULL);
++ return pipelines[alias];
++}
++static qbool AddModel(model_t *model,const float *world,const vec3_t light,float radius) {
++ int s,v,axis;glpoly_t *poly;
++ if(!model||model->type!=mod_brush) return true;
++ for(s=0;s<model->nummodelsurfaces;++s) {
++  msurface_t *surface=&model->surfaces[model->firstmodelsurface+s];texture_t *tex=surface->texinfo->texture;
++  if(surface->flags&(SURF_DRAWSKY|SURF_DRAWTURB)) continue;
++  for(poly=surface->polys;poly;poly=poly->next) {
++   vec3_t mins={1e30f,1e30f,1e30f},maxs={-1e30f,-1e30f,-1e30f};float distance=0;
++   shadow_caster_t *c;
++   if(poly->numverts<3) continue;
++   for(v=0;v<poly->numverts;++v) for(axis=0;axis<3;++axis) {
++    float p=world[12+axis]+world[axis]*poly->verts[v][0]+world[4+axis]*poly->verts[v][1]+world[8+axis]*poly->verts[v][2];
++    mins[axis]=min(mins[axis],p);maxs[axis]=max(maxs[axis],p);
++   }
++   for(axis=0;axis<3;++axis){float d=max(max(mins[axis]-light[axis],light[axis]-maxs[axis]),0);distance+=d*d;}
++   if(distance>radius*radius) continue;
++   if(casterCount==SHADOW_CASTERS) return false;
++   c=&casters[casterCount++];memset(c,0,sizeof(*c));memcpy(c->world,world,64);
++   c->first=poly->vbo_start;c->count=poly->numverts;c->texture=tex->gl_texturenum;
++   if(!VK_TextureReady(c->texture)) c->texture=solidwhite_texture;
++  }
++ }
++ return true;
++}
++static qbool GatherCasters(int lightIndex) {
++ float identity[16];int i;dlight_t *light=&cl_dlights[lightIndex];
++ casterCount=0;if(aliasOverflow) return false;
++ R_SetIdentityMatrix(identity);
++ if(!AddModel(cl.worldmodel,identity,light->origin,light->radius)) return false;
++ for(i=0;i<cl_visents.count;++i) {
++  entity_t *ent=&cl_visents.list[i].ent;float old[16],mv[16],world[16];
++  if(!ent->model||ent->model->type!=mod_brush||(ent->alpha>0&&ent->alpha<1)) continue;
++  R_PushModelviewMatrix(old);R_RotateForEntity(ent);R_GetModelviewMatrix(mv);R_PopModelviewMatrix(old);WorldMatrix(mv,world);
++  if(!AddModel(ent->model,world,light->origin,light->radius)) return false;
++ }
++ for(i=0;i<aliasCount;++i) {
++  shadow_caster_t *c;
++  if(casterCount==SHADOW_CASTERS) return false;
++  c=&casters[casterCount++];c->alias=true;c->first=aliases[i].first;c->count=aliases[i].count;c->texture=aliases[i].texture;c->lerp=aliases[i].lerp;
++  WorldMatrix(aliases[i].modelview,c->world);
++ }
++ return true;
++}
++qbool VK_ShadowWorkPending(void) {return selectedCount>0;}
++void VK_ShadowBeginCommands(void) {
++ int slot=vk_options.frame.currentFrame;
++ VkCommandBuffer command=VK_CurrentCommandBuffer();
++ lastDraws=lastFaces=lastOverflow=0;
++ if(!command||!frames[slot].mapped) return;
++  if(!frames[slot].initialized) {
++   VkImageMemoryBarrier barrier={0};barrier.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
++   barrier.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;barrier.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
++   barrier.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;barrier.srcQueueFamilyIndex=barrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;
++   barrier.image=frames[slot].image;barrier.subresourceRange.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;barrier.subresourceRange.levelCount=barrier.subresourceRange.layerCount=1;
++   vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
++   frames[slot].initialized=true;
++  }
++}
++void VK_ShadowRender(void) {
++ int slot=vk_options.frame.currentFrame,i,face,j;
++ VkCommandBuffer command=VK_CurrentCommandBuffer();shadow_uniform_t uniform={0};float view[16],projection[16],vp[16];
++ VkRenderPassBeginInfo begin={0};VkClearValue clear={0};
++ lastDraws=lastFaces=lastOverflow=0;
++ if(!frames[slot].mapped||!command) return;
++ if(!selectedCount) return;
++ R_GetModelviewMatrix(view);R_GetProjectionMatrix(projection);R_MultiplyMatrix(view,projection,vp);
++ if(!Inverse(vp,uniform.inverse)) Sys_Error("Vulkan: singular shadow receiver view");
++ uniform.viewport[0]=(float)vk_options.swapChain.imageSize.width;uniform.viewport[1]=(float)vk_options.swapChain.imageSize.height;
++ VectorCopy(r_refdef.vieworg,uniform.camera);
++ uniform.viewport[2]=1.0f/SHADOW_WIDTH;uniform.viewport[3]=1.0f/SHADOW_HEIGHT;
++ uniform.settings[0]=(float)selectedCount;uniform.settings[1]=(float)(int)CV_Value(CV_shadowquality);uniform.settings[2]=CV_Value(CV_shadowbias);uniform.settings[3]=CV_Value(CV_shadowsoft);
++ Pipeline(false);Pipeline(true);
++ clear.depthStencil.depth=1;begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;begin.renderPass=pass;begin.framebuffer=frames[slot].framebuffer;
++ begin.renderArea.extent.width=SHADOW_WIDTH;begin.renderArea.extent.height=SHADOW_HEIGHT;begin.clearValueCount=1;begin.pClearValues=&clear;
++ vkCmdBeginRenderPass(command,&begin,VK_SUBPASS_CONTENTS_INLINE);
++ for(i=0;i<selectedCount;++i) {
++  dlight_t *light=&cl_dlights[selected[i]];qbool complete=GatherCasters(selected[i]);
++  VectorCopy(light->origin,uniform.positions[i]);uniform.positions[i][3]=light->radius;
++  for(j=0;j<3;++j) uniform.colors[i][j]=light->type==lt_custom?light->color[j]/255.0f:dlightcolor[bound(0,light->type,NUM_DLIGHTTYPES-1)][j]/128.0f;
++  uniform.colors[i][3]=complete?CV_Value(CV_shadowstrength):0;
++  if(!complete){++lastOverflow;continue;} // Complete unshadowed light, never a partial occluder map.
++  for(face=0;face<6;++face) {
++   int tile=i*6+face;VkViewport viewport={(float)(tile%3*512),(float)(tile/3*512),uniform.settings[1],uniform.settings[1],0,1};
++   VkRect2D scissor={{tile%3*512,tile/3*512},{(uint32_t)uniform.settings[1],(uint32_t)uniform.settings[1]}};
++   vkCmdSetViewport(command,0,1,&viewport);vkCmdSetScissor(command,0,1,&scissor);++lastFaces;
++   for(j=0;j<casterCount;++j) {
++    shadow_caster_t *c=&casters[j];shadow_push_t push={0};VkDeviceSize offset=0;
++    VkBuffer vertex=VK_BufferHandle(c->alias?r_buffer_aliasmodel_vertex_data:r_buffer_brushmodel_vertex_data);
++    VkDescriptorSet material=VK_TextureDescriptorSet(c->texture);
++    if(!vertex||!material) continue;
++    memcpy(push.world,c->world,64);memcpy(push.light,uniform.positions[i],16);push.params[0]=(float)face;push.params[3]=c->lerp;
++    vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelines[c->alias]);
++    vkCmdBindVertexBuffers(command,0,1,&vertex,&offset);
++    vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material,0,NULL);
++    vkCmdPushConstants(command,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(push),&push);
++    vkCmdDraw(command,c->count,1,c->first,0);++lastDraws;
++   }
++  }
++ }
++ vkCmdEndRenderPass(command);frames[slot].initialized=true;
++ memcpy(frames[slot].mapped,&uniform,sizeof(uniform));
++}
++void VK_ShadowStatus(void) {
++ Con_Printf("SHADOW_STATE enabled=%d lights=%d ids=%d,%d faces=%u draws=%u overflow=%u size=%g alias=%d\n",VK_ShadowEnabled(),selectedCount,selected[0],selected[1],lastFaces,lastDraws,lastOverflow,CV_Value(CV_shadowquality),aliasCount);
++}
++void VK_ShadowShutdown(void) {
++ int i;
++ for(i=0;i<VK_MAX_FRAMES_IN_FLIGHT;++i) {
++  if(frames[i].mapped) vkUnmapMemory(vk_options.logicalDevice,frames[i].bufferMemory);
++  if(frames[i].buffer) vkDestroyBuffer(vk_options.logicalDevice,frames[i].buffer,NULL);
++  if(frames[i].bufferMemory) vkFreeMemory(vk_options.logicalDevice,frames[i].bufferMemory,NULL);
++  if(frames[i].framebuffer) vkDestroyFramebuffer(vk_options.logicalDevice,frames[i].framebuffer,NULL);
++  if(frames[i].view) vkDestroyImageView(vk_options.logicalDevice,frames[i].view,NULL);
++  if(frames[i].image) vkDestroyImage(vk_options.logicalDevice,frames[i].image,NULL);
++  if(frames[i].memory) vkFreeMemory(vk_options.logicalDevice,frames[i].memory,NULL);
++ }
++ for(i=0;i<2;++i) if(pipelines[i]) vkDestroyPipeline(vk_options.logicalDevice,pipelines[i],NULL);
++ if(pipelineLayout) vkDestroyPipelineLayout(vk_options.logicalDevice,pipelineLayout,NULL);
++ if(pass) vkDestroyRenderPass(vk_options.logicalDevice,pass,NULL);
++ if(sampler) vkDestroySampler(vk_options.logicalDevice,sampler,NULL);
++ memset(frames,0,sizeof(frames));memset(pipelines,0,sizeof(pipelines));pipelineLayout=VK_NULL_HANDLE;pass=VK_NULL_HANDLE;sampler=VK_NULL_HANDLE;
++ selectedCount=0;selected[0]=selected[1]=-1;previousWorld=NULL;
++}
++#endif
+diff --git a/src/vk_shadows.h b/src/vk_shadows.h
+new file mode 100644
+index 0000000..870edad
+--- /dev/null
++++ b/src/vk_shadows.h
+@@ -0,0 +1,18 @@
++/* SHADOW-001, OpenAI Codex, 2026-09-14. GPL-2.0-or-later. */
++#ifndef EZ_VK_SHADOWS_H
++#define EZ_VK_SHADOWS_H
++qbool VK_ShadowManagedLight(int index);
++qbool VK_ShadowCasterRelevant(entity_t *ent);
++#ifdef VK_VERSION_1_0
++void VK_ShadowFrameResources(void);
++void VK_ShadowSelect(void);
++void VK_ShadowRender(void);
++void VK_ShadowBeginCommands(void);
++qbool VK_ShadowEnabled(void);
++qbool VK_ShadowWorkPending(void);
++void VK_ShadowShutdown(void);
++void VK_ShadowDescriptors(VkDescriptorImageInfo *image, VkDescriptorBufferInfo *buffer);
++void VK_ShadowAddAlias(unsigned first, unsigned count, const float *modelview, float lerp, texture_ref texture);
++void VK_ShadowStatus(void);
++#endif
++#endif
+diff --git a/src/vk_world.c b/src/vk_world.c
+index b542a78..93a8542 100644
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -29,6 +29,7 @@ of the License, or (at your option) any later version.
+ #include "tr_types.h"
+ #include "vk_local.h"
+ #include "competitive_visuals.h"
++#include "vk_shadows.h"
+ 
+ extern const unsigned char vk_world_flat_vert_spv[];
+ extern const unsigned int vk_world_flat_vert_spv_len;
+@@ -1929,6 +1930,7 @@ void VK_PreRenderView(void)
+ 	worldDrawCount = 0;
+ 	worldIndexCount = 0;
+ 	VK_AliasModelFrameReset();
++	VK_ShadowSelect();
+ }
+ 
+ void VK_DrawWorld(void)
+@@ -2383,6 +2385,10 @@ void VK_RenderView(void)
+ 		}
+ 	}
+ 
++	if (VK_ShadowWorkPending()) {
++		VK_EndScenePass();
++		VK_ShadowRender();
++	}
+ 	// A deferred first scene pass has nothing to end; its clear is preserved.
+ 	// Multiview keeps the prior end/prepass/resume sequence and LOAD behavior.
+ 	if (VK_WorldOutlineActive()) {
+diff --git a/src/vulkan_shaders/vk_alias_model.frag b/src/vulkan_shaders/vk_alias_model.frag
+index 92066cd..4fe46dd 100644
+--- a/src/vulkan_shaders/vk_alias_model.frag
++++ b/src/vulkan_shaders/vk_alias_model.frag
+@@ -4,6 +4,7 @@
+ #extension GL_GOOGLE_include_directive : enable
+ #define CV_SET 1
+ #include "vk_competitive.glsl"
++#include "vk_shadows.glsl"
+ #extension GL_EXT_nonuniform_qualifier : require
+ 
+ // Bindless path: binding 0/1 are MAX_GLTEXTURES-sized runtime arrays (the
+@@ -86,6 +87,7 @@ void shadeScene()
+ 	else {
+ 		fragColour = vec4(cvLighting(inColor.rgb, true), inColor.a);
+ 	}
++	if(pushConstants.weapon<.5) fragColour.rgb += texColour.rgb*shadowIrradiance()*max(inMinLumaMix,texColour.a);
+ 	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
+ 	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
+ }
+diff --git a/src/vulkan_shaders/vk_shadow.frag b/src/vulkan_shaders/vk_shadow.frag
+new file mode 100644
+index 0000000..db82874
+--- /dev/null
++++ b/src/vulkan_shaders/vk_shadow.frag
+@@ -0,0 +1,4 @@
++#version 450
++layout(binding=0) uniform sampler2D material[2];
++layout(location=0) in vec2 texCoord;
++void main(){if(texture(material[0],texCoord).a<0.5) discard;}
+diff --git a/src/vulkan_shaders/vk_shadow.vert b/src/vulkan_shaders/vk_shadow.vert
+new file mode 100644
+index 0000000..e523008
+--- /dev/null
++++ b/src/vulkan_shaders/vk_shadow.vert
+@@ -0,0 +1,15 @@
++#version 450
++#extension GL_GOOGLE_include_directive : require
++#include "vk_shadow_face.glsl"
++layout(location=0) in vec3 position;
++layout(location=1) in vec2 uv;
++layout(location=2) in vec3 direction;
++layout(location=0) out vec2 texCoord;
++layout(push_constant) uniform ShadowPush {mat4 world;vec4 light;vec4 params;} pc;
++void main() {
++ vec3 d=(pc.world*vec4(position+direction*pc.params.w,1)).xyz-pc.light.xyz;
++ vec3 q=shadowFace(d,int(pc.params.x));
++ float a=pc.light.w/(pc.light.w-1.0);
++ gl_Position=vec4(q.xy,a*q.z-a,q.z);
++ texCoord=uv;
++}
+diff --git a/src/vulkan_shaders/vk_shadow_face.glsl b/src/vulkan_shaders/vk_shadow_face.glsl
+new file mode 100644
+index 0000000..a95ace6
+--- /dev/null
++++ b/src/vulkan_shaders/vk_shadow_face.glsl
+@@ -0,0 +1,16 @@
++// Same convention for depth rasterization and receiver lookup.
++vec3 shadowFace(vec3 d,int face) {
++ if(face==0) return vec3(-d.z,-d.y,d.x);
++ if(face==1) return vec3(d.z,-d.y,-d.x);
++ if(face==2) return vec3(d.x,d.z,d.y);
++ if(face==3) return vec3(d.x,-d.z,-d.y);
++ if(face==4) return vec3(d.x,-d.y,d.z);
++ return vec3(-d.x,-d.y,-d.z);
++}
++int shadowFaceIndex(vec3 d) {
++ vec3 a=abs(d);
++ if(a.x>=a.y && a.x>=a.z) return d.x>=0?0:1;
++ if(a.y>=a.z) return d.y>=0?2:3;
++ return d.z>=0?4:5;
++}
++float shadowDepth(float z,float farPlane) {return farPlane/(farPlane-1.0)*(1.0-1.0/z);}
+diff --git a/src/vulkan_shaders/vk_shadows.glsl b/src/vulkan_shaders/vk_shadows.glsl
+new file mode 100644
+index 0000000..b892cfe
+--- /dev/null
++++ b/src/vulkan_shaders/vk_shadows.glsl
+@@ -0,0 +1,43 @@
++// SHADOW-001. Only selected lights move out of legacy CPU lighting.
++#include "vk_shadow_face.glsl"
++layout(set=CV_SET,binding=1) uniform sampler2D shadowAtlas;
++layout(set=CV_SET,binding=2,std140) uniform ShadowLights {
++ mat4 inverseViewProjection;
++ vec4 viewport;
++ vec4 settings; // count, face size, world bias, PCF radius
++ vec4 positions[2]; // world xyz, radius
++ vec4 colors[2]; // rgb, shadow strength (zero = unshadowed budget fallback)
++ vec4 camera;
++} sl;
++vec3 shadowIrradiance() {
++ if(sl.settings.x<0.5) return vec3(0);
++ vec4 h=sl.inverseViewProjection*vec4(gl_FragCoord.x/sl.viewport.x*2.0-1.0,
++  1.0-gl_FragCoord.y/sl.viewport.y*2.0,gl_FragCoord.z*2.0-1.0,1.0);
++ vec3 p=h.xyz/h.w;
++ vec3 n=normalize(cross(dFdx(p),dFdy(p)));
++ if(dot(n,p-sl.camera.xyz)>0) n=-n;
++ vec3 light=vec3(0);
++ for(int i=0;i<2;++i) {
++  if(i>=int(sl.settings.x)) break;
++  vec3 d=p-sl.positions[i].xyz;
++  float distanceToLight=length(d),radius=sl.positions[i].w;
++  if(distanceToLight>=radius || distanceToLight<1.0) continue;
++  float diffuse=max(0.0,dot(n,-d/distanceToLight));
++  float visible=1.0;
++  if(sl.colors[i].w>0.0) {
++   int face=shadowFaceIndex(d),tile=i*6+face;
++   vec3 q=shadowFace(d,face);
++   vec2 base=vec2(tile%3,tile/3)*512.0;
++   vec2 pixel=base+(q.xy/q.z*.5+.5)*sl.settings.y;
++   float reference=shadowDepth(max(1.0,q.z-sl.settings.z*(1.0+2.0*(1.0-diffuse))),radius);
++   float sum=0;
++   for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x) {
++    vec2 tap=clamp(pixel+vec2(x,y)*sl.settings.w,base+.5,base+sl.settings.y-.5);
++    sum+=step(reference,texture(shadowAtlas,tap*sl.viewport.zw).r);
++   }
++   visible=mix(1.0,sum/9.0,sl.colors[i].w);
++  }
++  light+=sl.colors[i].rgb*(radius-distanceToLight)/128.0*diffuse*visible;
++ }
++ return light;
++}
+diff --git a/src/vulkan_shaders/vk_world_alpha_textured.frag b/src/vulkan_shaders/vk_world_alpha_textured.frag
+index 56af021..914e7a0 100644
+--- a/src/vulkan_shaders/vk_world_alpha_textured.frag
++++ b/src/vulkan_shaders/vk_world_alpha_textured.frag
+@@ -15,6 +15,7 @@ layout(location = 2) flat in uint inFlags;
+ #define CV_SET 4
+ #define CV_WORLD_FRAGMENT
+ #include "vk_competitive.glsl"
++#include "vk_shadows.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -63,5 +64,6 @@ void shadeScene()
+ layout(location=1) out vec4 fragEmission;
+ void main() {
+  shadeScene();
++ if(pushConstants.surfaceType<.5) fragColour.rgb += fragColour.rgb*shadowIrradiance();
+  fragEmission=vec4(vec3(0), fragColour.a);
+ }
+diff --git a/src/vulkan_shaders/vk_world_flat.frag b/src/vulkan_shaders/vk_world_flat.frag
+index 46688b3..a36049c 100644
+--- a/src/vulkan_shaders/vk_world_flat.frag
++++ b/src/vulkan_shaders/vk_world_flat.frag
+@@ -21,6 +21,7 @@ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
+ #define CV_SET 4
+ #define CV_WORLD_FRAGMENT
+ #include "vk_competitive.glsl"
++#include "vk_shadows.glsl"
+ #include "vk_skybox_uv.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+@@ -152,5 +153,6 @@ void shadeScene()
+ layout(location=1) out vec4 fragEmission;
+ void main() {
+  shadeScene();
++ if(pushConstants.surfaceType<.5) fragColour.rgb += fragColour.rgb*shadowIrradiance();
+  fragEmission=vec4(vec3(0), fragColour.a);
+ }
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.frag b/src/vulkan_shaders/vk_world_lightmapped.frag
+index f67a4d2..ce9ecac 100644
+--- a/src/vulkan_shaders/vk_world_lightmapped.frag
++++ b/src/vulkan_shaders/vk_world_lightmapped.frag
+@@ -17,6 +17,7 @@ layout(location = 3) flat in uint inFlags;
+ #define CV_SET 4
+ #define CV_WORLD_FRAGMENT
+ #include "vk_competitive.glsl"
++#include "vk_shadows.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -78,7 +79,7 @@ void shadeScene()
+ 	vec4 texColour = texture(worldTexture[0], texCoord);
+ 	if (pushConstants.surfaceType < 0.5) texColour.rgb = cvMaterial(worldTexture[0], texCoord, texColour.rgb, (inFlags & 8u) != 0u);
+ 	vec4 lightColour = texture(lightmapTexture[0], inLightmapCoord);
+-	lightColour.rgb = cvLighting(lightColour.rgb, false);
++	lightColour.rgb = cvLighting(lightColour.rgb + shadowIrradiance(), false);
+ 
+ 	if (texColour.a < 0.5) {
+ 		discard;
+diff --git a/src/vulkan_shaders/vk_world_textured.frag b/src/vulkan_shaders/vk_world_textured.frag
+index 47b3baa..94656db 100644
+--- a/src/vulkan_shaders/vk_world_textured.frag
++++ b/src/vulkan_shaders/vk_world_textured.frag
+@@ -15,6 +15,7 @@ layout(location = 2) flat in uint inFlags;
+ #define CV_SET 4
+ #define CV_WORLD_FRAGMENT
+ #include "vk_competitive.glsl"
++#include "vk_shadows.glsl"
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+@@ -97,5 +98,6 @@ void shadeScene()
+ layout(location=1) out vec4 fragEmission;
+ void main() {
+  shadeScene();
++ if(pushConstants.surfaceType<.5) fragColour.rgb += fragColour.rgb*shadowIrradiance();
+  fragEmission=vec4(vec3(0), fragColour.a);
+ }

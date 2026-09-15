@@ -6,8 +6,9 @@ layout(location = 1) flat in float inSurfaceType;
 layout(push_constant) uniform PushConstants {
 	mat4 mvp;
 	vec4 cameraPosition;
-	float surfaceType;
-	float zFar;
+	vec4 worldRow0;
+	vec4 worldRow1;
+	vec4 worldRow2;
 } pushConstants;
 
 layout(location = 0) out vec4 fragColour;
@@ -28,7 +29,7 @@ void main()
 	// depth comparison), everything else uses actual distance from the
 	// camera normalized by zFar.
 	int surface = int(inSurfaceType);
-	float depth = (surface != 0) ? -float(surface) : (distance(inWorldPos, pushConstants.cameraPosition.xyz) / max(pushConstants.zFar, 1.0));
+	float depth = (surface != 0) ? -float(surface) : (distance(inWorldPos, pushConstants.cameraPosition.xyz) / max(pushConstants.cameraPosition.w, 1.0));
 
 	fragColour = vec4(normal, depth);
 }

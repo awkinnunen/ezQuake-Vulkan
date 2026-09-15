@@ -19,7 +19,7 @@ python ./tools/Prepare-MotionDemo.py 'C:\Demos\your-game.mvd' ./cache/motion.mvd
 The screenshot test deliberately captures immediately after video recreation,
 checks requested/applied MSAA and hardware clamping, and rejects Vulkan validation
 errors. The public-profile test needs an existing nQuake config and verifies all
-53 saved visual values, all 55 conditional particle settings, the actual WASD/jump
+71 saved visual values, all 55 conditional particle settings, the actual WASD/jump
 bindings and crosshair/pickup settings. The installed ezquake.pk3 is required for
 QMB initialization; its absence must not be interpreted as missing cvar support.
 
@@ -39,3 +39,5 @@ The detailed historical CPU/GPU shader and 48-control image evidence is describe
 in `docs/history/VALIDATION.md` and `VISUAL-TEST-RESULTS.md`. Historical cache paths
 refer to the original private workspace; the source release includes no raw
 gameplay screenshots, full configs or player-containing logs/demos.
+
+Shadow checks: `Test-Shadow2.ps1` / `Verify-Shadow2.py`, `Test-ShadowMultiview.ps1`, and `Test-MapLightStability.ps1 -Map dm6`. Use your own KTX/game assets. The published provenance manifests record development runs, not tests on your hardware.

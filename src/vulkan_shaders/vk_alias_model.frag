@@ -1,7 +1,10 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+#include "vk_hdr.glsl"
 #extension GL_GOOGLE_include_directive : enable
 #define CV_SET 1
 #include "vk_competitive.glsl"
+#include "vk_shadows.glsl"
 #extension GL_EXT_nonuniform_qualifier : require
 
 // Bindless path: binding 0/1 are MAX_GLTEXTURES-sized runtime arrays (the
@@ -48,18 +51,20 @@ layout(location = 9) in float cvUp;
 
 layout(location = 0) out vec4 fragColour;
 
-void main()
+void shadeScene()
 {
 	uint texIndex = uint(pushConstants.textureIndex);
 	vec4 texColour = texture(modelTextureMode[texIndex], inTexCoord);
+	texColour.rgb = hdrMaterial(texColour.rgb);
 
 	if (inMode > 2.5) {
-		fragColour = inColor;
+		fragColour = vec4(hdrMaterial(inColor.rgb), inColor.a);
 		return;
 	}
 
 	if (inMode > 1.5) {
 		vec4 altTexColour = texture(modelTextureMode[texIndex], inAltTexCoord);
+		altTexColour.rgb = hdrMaterial(altTexColour.rgb);
 		vec3 rgb = inColor.rgb * texColour.rgb + inAltColor.rgb * altTexColour.rgb;
 		float mask = max(max(max(texColour.r, texColour.g), texColour.b), max(max(altTexColour.r, altTexColour.g), altTexColour.b));
 
@@ -70,18 +75,25 @@ void main()
 	if (inMode > 0.5) {
 		float alpha = max(texColour.a, step(0.003, max(max(texColour.r, texColour.g), texColour.b)));
 
-		fragColour = vec4(texColour.rgb, alpha * inColor.a);
+		fragColour = vec4(texColour.rgb * (hdrScene ? 2.0 : 1.0), alpha * inColor.a);
 		return;
 	}
 
 	if (inTextured > 0.5) {
 		float mixAmount = max(inMinLumaMix, texColour.a);
 
-		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(inColor.rgb, true), mixAmount), inColor.a);
+		fragColour = vec4(mix(texColour.rgb, texColour.rgb * cvLighting(pushConstants.weapon<.5?shadowLighting(inColor.rgb):inColor.rgb, true), mixAmount), inColor.a);
 	}
 	else {
-		fragColour = vec4(cvLighting(inColor.rgb, true), inColor.a);
+		fragColour = vec4(cvLighting(pushConstants.weapon<.5?shadowLighting(inColor.rgb):inColor.rgb, true), inColor.a);
 	}
 	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
 	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
+}
+
+// HDR-001: emission follows the same coverage as color, independently of albedo.
+layout(location=1) out vec4 fragEmission;
+void main() {
+ shadeScene();
+ fragEmission=vec4((inMode>.5 && inMode<2.5) ? fragColour.rgb : vec3(0), fragColour.a);
 }

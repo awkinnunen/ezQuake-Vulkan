@@ -1,0 +1,364 @@
+{
+  "author": "OpenAI Codex",
+  "date": "2026-09-15",
+  "hardware": "AMD Radeon(TM) Graphics, Vulkan 1.2.188",
+  "runtimeTests": {
+    "shadow2-controls": {
+      "logSHA256": "0b62333dd6a24fa0006c327ae1c695cf5c2798c15f54f1557a5f34544540d288",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-final-debug2": {
+      "logSHA256": "efae52ddbf62cd9be2e60f3bd7f97fe6383c1c16e80c0ee20f7257c97e954f36",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-final-multiview": {
+      "logSHA256": "c557d73cadf10093c9d09234d54d7b49efbc56a7a7d70d07f2d0fbba0e5798d9",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-menu": {
+      "logSHA256": "51f6810986cf61f92f842211d525e6d0d2a72bc1ac64600bea30bee1dc75da23",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-public": {
+      "logSHA256": "0942b32a185fa070ffc07c6f40bd9fa0f9d6c60511fcedc366c56f9abd358912",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-combat": {
+      "logSHA256": "5f825f09ac9f5d54def4258d3898bc71dedf09ff3b271e76eec5a45723f6555f",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-motion2": {
+      "logSHA256": "cebe9a60a3134fde79fde1d62434a2106923c86595c97bcb0753af3761a0e0d3",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-compatibility": {
+      "logSHA256": "3380ed3584da534c1b43878a4266b61b67556f57af370c988c6e0569cab454fb",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-compatibility-legacy-capture": {
+      "logSHA256": "ada2868ea30dced33e58b1318e9353d861878d503ba4733b730d291bbc3711cd",
+      "completionAndNoValidationErrors": true
+    },
+    "shadow2-toggle": {
+      "logSHA256": "67b7728c7cac31bfe2d4754445bb7fdf6153274ce81ff0b421dc151f3f787dd7",
+      "completionAndNoValidationErrors": true
+    }
+  },
+  "controls": {
+    "stablePairs": 19,
+    "changedPixels": {
+      "shadow / unoccluded": 152152,
+      "shadow / hard": 140488,
+      "hard / soft": 172619,
+      "soft / low": 71553,
+      "low / high": 102657,
+      "high / bias": 124597,
+      "bias / moved-light": 372162,
+      "moved-light / moved-actor": 50642,
+      "moved-actor / two-lights": 337495,
+      "two-lights / one-light": 338410,
+      "one-light / brush": 1097,
+      "brush / moved-brush": 2123,
+      "far-light / distance": 65537,
+      "sdr / no-msaa": 11401
+    },
+    "occlusionOnlyDarkens": true
+  },
+  "extendedPixels": {
+    "uncached / cached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "move / move-uncached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "actor / actor-uncached": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "eight / cached-eight": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "overflow / overflow-reference": {
+      "changedPixels": 0,
+      "meanAbsoluteDifference": 0.0
+    },
+    "baked / map-shadows": {
+      "changedPixels": 202751,
+      "meanAbsoluteDifference": 2.409340972222222
+    },
+    "map-shadows / spot-realtime": {
+      "changedPixels": 433178,
+      "meanAbsoluteDifference": 29.53531388888889
+    },
+    "spot-realtime / spot-soft": {
+      "changedPixels": 80806,
+      "meanAbsoluteDifference": 1.9366305555555556
+    },
+    "spot-soft / ambient": {
+      "changedPixels": 433161,
+      "meanAbsoluteDifference": 8.471872222222222
+    },
+    "ambient / map-radius": {
+      "changedPixels": 261175,
+      "meanAbsoluteDifference": 12.092004166666667
+    },
+    "quality512 / quality128": {
+      "changedPixels": 220835,
+      "meanAbsoluteDifference": 3.960545138888889
+    }
+  },
+  "extendedCases": [
+    {
+      "name": "uncached",
+      "shot": "ezquake000.png"
+    },
+    {
+      "name": "cached",
+      "shot": "ezquake001.png"
+    },
+    {
+      "name": "move",
+      "shot": "ezquake002.png"
+    },
+    {
+      "name": "move-uncached",
+      "shot": "ezquake003.png"
+    },
+    {
+      "name": "actor",
+      "shot": "ezquake004.png"
+    },
+    {
+      "name": "actor-uncached",
+      "shot": "ezquake005.png"
+    },
+    {
+      "name": "eight",
+      "shot": "ezquake006.png"
+    },
+    {
+      "name": "cached-eight-direct",
+      "shot": "ezquake007.png"
+    },
+    {
+      "name": "budget",
+      "shot": "ezquake008.png"
+    },
+    {
+      "name": "cached-eight",
+      "shot": "ezquake009.png"
+    },
+    {
+      "name": "fresh-eight",
+      "shot": "ezquake010.png"
+    },
+    {
+      "name": "overflow",
+      "shot": "ezquake011.png"
+    },
+    {
+      "name": "overflow-reference",
+      "shot": "ezquake012.png"
+    },
+    {
+      "name": "baked",
+      "shot": "ezquake013.png"
+    },
+    {
+      "name": "map-shadows",
+      "shot": "ezquake014.png"
+    },
+    {
+      "name": "spot-realtime",
+      "shot": "ezquake015.png"
+    },
+    {
+      "name": "spot-soft",
+      "shot": "ezquake016.png"
+    },
+    {
+      "name": "ambient",
+      "shot": "ezquake017.png"
+    },
+    {
+      "name": "map-radius",
+      "shot": "ezquake018.png"
+    },
+    {
+      "name": "map-eight",
+      "shot": "ezquake019.png"
+    },
+    {
+      "name": "quality512",
+      "shot": "ezquake020.png"
+    },
+    {
+      "name": "quality128",
+      "shot": "ezquake021.png"
+    },
+    {
+      "name": "off",
+      "shot": "ezquake022.png"
+    },
+    {
+      "name": "on-return",
+      "shot": "ezquake023.png"
+    }
+  ],
+  "multiview": {
+    "author": "OpenAI Codex",
+    "date": "2026-09-14",
+    "configuration": "Release",
+    "exeSHA256": "DF6F3435E9DA9708395C112F198EEAEBEE210A529713B2B2B8BA482C61952EB0",
+    "demoSHA256": "2C3608719580EB7A42463D7B577614FE567D99ED46B21B4D57492C0783A340D8",
+    "fixtureError": null,
+    "completed": true,
+    "stages": [
+      {
+        "mode": 0,
+        "vuidCount": 0,
+        "descriptorInvalidation": false,
+        "screenshots": 1
+      },
+      {
+        "mode": 2,
+        "vuidCount": 0,
+        "descriptorInvalidation": false,
+        "screenshots": 1
+      },
+      {
+        "mode": 4,
+        "vuidCount": 0,
+        "descriptorInvalidation": false,
+        "screenshots": 1
+      },
+      {
+        "mode": 0,
+        "vuidCount": 0,
+        "descriptorInvalidation": false,
+        "screenshots": 1
+      }
+    ],
+    "visualInspection": "Four distinct camera quadrants verified; HDR, MSAA, SSAO, bloom and map shadows enabled."
+  },
+  "disabledCompatibility": {
+    "currentStablePairs": 13,
+    "diagnosticExactBaselineImages": 26,
+    "currentChangedPixels": {
+      "msaa0-fxaa0-outline0": [
+        4967,
+        4967
+      ],
+      "msaa0-fxaa0-outline3": [
+        4756,
+        4756
+      ],
+      "msaa0-fxaa5-outline0": [
+        5277,
+        5277
+      ],
+      "msaa0-fxaa5-outline3": [
+        5052,
+        5052
+      ],
+      "msaa4-fxaa0-outline0": [
+        5101,
+        5101
+      ],
+      "msaa4-fxaa0-outline3": [
+        4904,
+        4904
+      ],
+      "msaa4-fxaa5-outline0": [
+        5275,
+        5275
+      ],
+      "msaa4-fxaa5-outline3": [
+        5086,
+        5086
+      ],
+      "ao-only": [
+        5275,
+        5275
+      ],
+      "cv-outline-ao-bloom": [
+        5076,
+        5076
+      ],
+      "clear-on": [
+        4904,
+        4904
+      ],
+      "reduced-view": [
+        21,
+        21
+      ],
+      "resize": [
+        4151,
+        4151
+      ]
+    },
+    "explanation": "Normal capture rebuilds the entity list before drawing, fixing duplicate static models/projected shadows. An isolated executable restores only the old single-view entity-list behaviour and matches all 26 retained pre-shadow images. Normal output intentionally retains the corrected capture.",
+    "diagnosticExecutableSHA256": "d28e0f195500b34b59cd3168f13ddafcafff2cb42e4d4c96b62cf77e971d8da2",
+    "diagnosticSource": {
+      "author": "OpenAI Codex",
+      "date": "2026-09-14",
+      "baseExecutableSHA256": "df6f3435e9da9708395c112f198eeaebee210a529713b2b2b8ba482c61952eb0",
+      "diagnosticExecutableSHA256": "d28e0f195500b34b59cd3168f13ddafcafff2cb42e4d4c96b62cf77e971d8da2",
+      "sourceHashes": {
+        "vk_main.c": "75726e55549128d57d2f5e9d08a9d38b2d29e2612a8499b2a13facef561abc3f",
+        "vk_world.c": "a1da92a23f33a8b84fa00cd06b9998b0598f2ab35bf603d42bde0b1257bc073c",
+        "vk_frame_profile.h": "3d017756c2e608661c50f092b6e44a1d40f2a12224aa4a4e70f9110878d36166"
+      }
+    }
+  },
+  "legacyDynamicLightingRestoredExactly": true,
+  "nativeRocketCombatStates": [
+    "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=483 overflow=0 size=256 alias=2 cached=0 culled=681 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=475 overflow=0 size=256 alias=2 cached=0 culled=701 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=523 overflow=0 size=256 alias=2 cached=0 culled=869 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=509 overflow=0 size=256 alias=2 cached=0 culled=925 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=490 overflow=0 size=256 alias=2 cached=0 culled=848 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=419 overflow=0 size=256 alias=2 cached=0 culled=643 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=522 overflow=0 size=256 alias=3 cached=0 culled=762 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,3 faces=12 draws=464 overflow=0 size=256 alias=2 cached=0 culled=688 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,3 faces=12 draws=511 overflow=0 size=256 alias=2 cached=0 culled=839 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,3 faces=12 draws=528 overflow=0 size=256 alias=2 cached=0 culled=984 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,3 faces=12 draws=499 overflow=0 size=256 alias=2 cached=0 culled=893 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,3 faces=12 draws=435 overflow=0 size=256 alias=2 cached=0 culled=675 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=498 overflow=0 size=256 alias=3 cached=0 culled=714 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=485 overflow=0 size=256 alias=2 cached=0 culled=787 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=501 overflow=0 size=256 alias=2 cached=0 culled=843 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=544 overflow=0 size=256 alias=2 cached=0 culled=968 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=501 overflow=0 size=256 alias=2 cached=0 culled=921 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,2 faces=12 draws=455 overflow=0 size=256 alias=2 cached=0 culled=745 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=474 overflow=0 size=256 alias=3 cached=0 culled=660 deferred=0 view=0 maplights=198 views=2,0,0,0",
+    "SHADOW_STATE enabled=1 lights=2 ids=0,1 faces=12 draws=487 overflow=0 size=256 alias=3 cached=0 culled=689 deferred=0 view=0 maplights=198 views=2,0,0,0"
+  ],
+  "menu": {
+    "controls": 13,
+    "keyboardAndMouseBounds": true,
+    "prerequisiteLockouts": true,
+    "savedValues": true
+  },
+  "publicProfile": {
+    "graphicsValues": 71,
+    "conditionalEffects": 55,
+    "wasdBindingsPreserved": true,
+    "pickupWeaponSelection": "8/8",
+    "crosshairSize": 2.5
+  },
+  "lifecycle": "Three maps, moving demo, forward/backward seek, skin reload, video restart, pause; shadow2-motion2 passed.",
+  "limits": [
+    "No RTX backend or RTX hardware test.",
+    "Allocation failure and unsupported formats were not forced on hardware.",
+    "Not a long-session, all-map or all-device guarantee; material and bounded-light approximations are documented in DYNAMIC-SHADOWS.md."
+  ],
+  "finalExecutables": {
+    "Debug": "5ac91cf1ac66685f035c422035969acc05f14643fbe181b1f2d396250998f368",
+    "Release": "df6f3435e9da9708395c112f198eeaebee210a529713b2b2b8ba482c61952eb0"
+  }
+}

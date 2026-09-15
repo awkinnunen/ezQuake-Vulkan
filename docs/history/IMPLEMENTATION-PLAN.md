@@ -1,5 +1,21 @@
 # Vulkan development implementation plan
 
+## VIS-04 / SHADOW-002 implementation status (2026-09-15)
+
+OpenAI Codex completed the requested shadow follow-up: up to eight point/spot
+lights, BSP/optional authored lights, baked-shadow/realtime lighting modes, cached
+world bounds and per-frame/view atlases, face/cone culling, bounded round-robin updates,
+shader specialization and thirteen live menu controls. Project defaults use four lights
+and four updates, preserving unrelated config values. See DYNAMIC-SHADOWS.md and
+provenance/shadow2-validation.json for exact scope and evidence.
+
+MULTIVIEW-001 is resolved: sky descriptor updates happen once per fenced frame;
+view-specific buffers/uniforms/atlases are immutable for earlier recorded views.
+The previously ignored 3D viewports and single-camera screenshot path were also fixed.
+Screenshots now rebuild entity lists so static models do not accumulate between captures.
+Source patch 21 and Source-Changes.json attribute these changes to Codex; upstream
+contributors and game asset authors retain their original attribution.
+
 Plan ID: PLAN-001. Revision: 2. Date: 2026-09-13.
 Author and source reviewer: OpenAI Codex, at the user's request.
 Status: implementation roadmap with LOCAL-007 progress recorded below.
@@ -33,8 +49,9 @@ base, not the corrected working tree.
 
 CV-001 adds the working Competitive Visuals menu, material/lighting/rim controls,
 world contact AO, conservative bright-pixel bloom and scene tone/exposure/sharpening.
-The scene remains 8-bit and model shadows remain projected: the HDR/emissive,
-dynamic-shadow and temporal work packages below are not completed by these controls.
+At the CV-001 baseline the scene remained 8-bit and model shadows were projected.
+RASTER-001 (2026-09-14) subsequently added optional HDR/emission and world SSAO;
+see RASTER-FEATURES.md. Dynamic-shadow and temporal work remain separate.
 See COMPETITIVE-VISUALS.md for the exact scope, UBO lifetime and acceptance evidence.
 
 Base: tibazera/ezquake-source, feature/sdl3-vulkan-pr,
@@ -512,6 +529,13 @@ appearance changes from regressions. Existing effects are not credited as new wo
 
 ### VIS-02 — Linear HDR scene, controlled tonemapping and bloom
 
+2026-09-14 implementation update (OpenAI Codex): HDR-001 implements the optional
+linear RGBA16F scene, emission MRT, manual exposure/tone curve, SDR conversion and
+emissive bloom selection. The existing small bloom kernel is retained; the wider
+downsample/upsample chain below remains BLOOM-PYRAMID. See RASTER-FEATURES.md for
+the actual implementation and validation; this section's remaining design is
+not a claim that all proposed features are shipped.
+
 Files: pass/target layer, vk_renderpass.c, vk_draw.c, world/model shaders;
 proposed vk_hdr.c and tone-map/bloom shaders. Depends on VK-08 and VIS-01.
 
@@ -542,6 +566,12 @@ no HUD bloom, correct screenshots and stable results on brightness transitions.
 Measure memory/bandwidth cost before enabling by default on integrated graphics.
 
 ### VIS-03 — Screen-space contact shading / ambient occlusion
+
+2026-09-14 implementation update (OpenAI Codex): SSAO-001 extends the existing
+world prepass/composite with projection-correct position reconstruction, bounded
+hemisphere samples and moving BSP world transforms. It uses a full-resolution,
+non-temporal gather and retains Contact mode. The half-resolution/filter/model
+extension below remains AO-EXTEND; no CACAO dependency was added.
 
 Files: pass layer, normal/depth shader paths; proposed vk_ao.c and AO shaders.
 Depends on VK-08 and VIS-01; integrate into the linear path when VIS-02 is selected.

@@ -1,0 +1,1452 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2a64328..c7d664e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -481,7 +481,7 @@ if(RENDERER_VULKAN)
+         add_custom_command(
+                 OUTPUT ${output_file}
+                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
+-                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl
++                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl ${VULKAN_SHADER_DIR}/vk_hdr.glsl
+                 COMMENT "Compiling Vulkan shader ${source_file}"
+                 VERBATIM
+         )
+diff --git a/src/competitive_visuals.c b/src/competitive_visuals.c
+index 4590853..9661039 100644
+--- a/src/competitive_visuals.c
++++ b/src/competitive_visuals.c
+@@ -43,10 +43,12 @@ static const cv_existing_t existing[] = {
+ #define CV_RESTART_ROW CV_TOTAL
+ static qbool videoApplied;
+ static int appliedMSAA, actualMSAA;
++static int appliedHDR, actualHDR;
++void CV_HDRVideoApplied(int requested, int actual) { appliedHDR=requested; actualHDR=actual; }
+ void CV_VideoApplied(int requested, int actual) { videoApplied=true; appliedMSAA=requested; actualMSAA=actual; }
+ static qbool RestartPending(void) {
+  cvar_t *v=Cvar_Find("vid_framebuffer_multisample");
+- return R_UseVulkan() && videoApplied && v && v->integer!=appliedMSAA;
++ return R_UseVulkan() && videoApplied && ((v && v->integer!=appliedMSAA) || (int)CV_Value(CV_hdr)!=appliedHDR);
+ }
+ static const char *pages[] = {"Profiles", "World", "Lighting", "Silhouettes", "Effects", "Image"};
+ static char notice[160], profile[32] = "competitive", saved[CV_TOTAL][64];
+@@ -75,10 +77,10 @@ static const cv_row_t layout[]={
+  {CV_edgestrength,3,6,1},{CV_edgewidth,3,6,1},{EXT(2),3,6,1},
+  {EXT(1),3,7,1},{CV_modelopacity,3,7,1},{EXT(3),3,7,1},
+  {CV_edgepalette,3,8,0},{CV_worldedge,3,8,1},{CV_teamedge,3,8,1},{CV_enemyedge,3,8,1},
+- {CV_bloom,4,9,0},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
+- {CV_ao,4,10,0},{CV_aoradius,4,10,1},{EXT(4),4,10,0},
++ {CV_bloom,4,9,0},{CV_bloomsource,4,9,1},{CV_bloomthreshold,4,9,1},{CV_bloomradius,4,9,1},
++ {CV_ao,4,10,0},{CV_aoradius,4,10,1},{CV_aomode,4,10,1},{CV_aoquality,4,10,1},{CV_aobias,4,10,1},{EXT(4),4,10,0},
+  {EXT(5),4,11,0},{EXT(6),4,11,0},
+- {CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
++ {CV_hdr,5,12,0},{CV_exposure,5,12,0},{CV_tonemap,5,12,0},{CV_sharpen,5,12,0},
+  {EXT(7),5,13,0},{EXT(8),5,13,0},{EXT(14),5,13,0},{CV_RESTART_ROW,5,13,0}
+ };
+ static cvar_t *Var(int index);
+@@ -103,8 +105,10 @@ static const char *Unavailable(int index) {
+   if((index==CV_bands||index==CV_softness) && CV_Value(CV_light)<1.5) return "Select Soft Cel to use cel bands.";
+  }
+  if(index>=CV_rimwidth && index<=CV_rimteam && CV_Value(CV_rim)<=0) return "Increase Player rim first.";
+- if(index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
+- if(index==CV_aoradius && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
++ if(index==CV_bloomsource && !actualHDR) return "Enable Linear HDR and Restart video first. SDR uses bright pixels.";
++ if(index==CV_bloomsource||index==CV_bloomthreshold||index==CV_bloomradius) { if(CV_Value(CV_bloom)<=0) return "Increase Bloom strength first."; }
++ if((index==CV_aoradius || index==CV_aomode || index==CV_aoquality || index==CV_aobias) && CV_Value(CV_ao)<=0) return "Increase World AO strength first.";
++ if((index==CV_aoquality || index==CV_aobias) && !CV_Value(CV_aomode)) return "Enable the SSAO method first.";
+  if(index==CV_edgewidth||index==CV_edgestrength||index==CV_worldedge||index==EXT(2)) {
+   if(!world) return "Enable World or Both outlines.";
+   if(!RuleSets_AllowEdgeOutline()) return "World edges blocked by ruleset.";
+@@ -130,12 +134,13 @@ static void Bounds(int index, float *lo, float *hi, float *step) {
+  else { const cv_existing_t *e=&existing[index-CV_COUNT]; *lo=e->lo; *hi=e->hi; *step=e->step; }
+ }
+ static qbool Toggle(int index) {
++ if(index==CV_aomode || index==CV_bloomsource) return false;
+  float lo,hi,step; Bounds(index,&lo,&hi,&step); return lo==0 && hi==1 && step==1;
+ }
+ static qbool Slider(int index) {
+  if(index==CV_RESTART_ROW) return false;
+  if(Toggle(index)) return false;
+- if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap;
++ if(index<CV_COUNT) return index!=CV_light && index!=CV_tonemap && index!=CV_aomode && index!=CV_bloomsource;
+  return existing[index-CV_COUNT].step>0 && existing[index-CV_COUNT].step<1;
+ }
+ static qbool SwitchedOn(cvar_t *v) {
+@@ -170,6 +175,8 @@ static void DrawControl(int index, int depth, int y) {
+  } else {
+   const char *choice=NULL;
+   if(Toggle(index)) choice=SwitchedOn(v)?"On":"Off";
++  else if(index==CV_aomode) choice=CV_Value(CV_aomode)?"SSAO":"Contact";
++  else if(index==CV_bloomsource) choice=CV_Value(CV_bloomsource)?"Emissive":"Bright pixels";
+   else if(index==CV_light) { const char *names[]={"Original","Gradient","Soft Cel"}; choice=names[(int)CV_Value(CV_light)]; }
+   else if(index==CV_tonemap) { const char *names[]={"Original","Soft shoulder","Filmic"}; choice=names[(int)CV_Value(CV_tonemap)]; }
+   else if(!strcmp(v->name,"gl_outline")) { const char *names[]={"Off","Models","World","Both"}; choice=names[(int)bound(0,v->value,3)]; }
+@@ -392,6 +399,9 @@ void CV_Draw(void) {
+   else if(indices[cursor]==EXT(7) && R_UseVulkan()) {
+    snprintf(line,sizeof(line),"Active MSAA: %dx%s",actualMSAA,RestartPending()?"; change pending":""); M_PrintWhite(16,180,line);
+   }
++  else if(indices[cursor]==CV_hdr && R_UseVulkan()) {
++   snprintf(line,sizeof(line),"Active HDR: %s%s",actualHDR?"RGBA16F":"Off",RestartPending()?"; restart pending":""); M_PrintWhite(16,180,line);
++  }
+  }
+  M_PrintWhite(16,190,general?"PgUp/Dn: page  F7: reset page":"PgUp/Dn: page  F6: compare  F7: reset");
+ }
+@@ -511,6 +521,11 @@ static qbool PhotoAllowed(void) {
+ void CV_TestView(void) {
+  if(!photoActive || !PhotoAllowed()) return;
+  cl.time=photoTime; r_refdef2.time=photoTime;
++ // View setup computed these before the fixture restored its frozen clock.
++ r_refdef2.powerup_scroll_params[0]=(float)cos(photoTime*1.5);
++ r_refdef2.powerup_scroll_params[1]=(float)sin(photoTime*1.1);
++ r_refdef2.powerup_scroll_params[2]=(float)cos(photoTime*-0.5);
++ r_refdef2.powerup_scroll_params[3]=(float)sin(photoTime*-0.5);
+  VectorCopy(photoOrigin,r_refdef.vieworg); VectorCopy(photoAngles,r_refdef.viewangles);
+ }
+ static void PhotoCommand(void) {
+@@ -540,6 +555,9 @@ static void PhotoCommand(void) {
+     cl.players[slot]=cl.players[cl.playernum]; cl.players[slot].teammate=i==0;
+     cl.players[slot].topcolor=i?13:4; cl.players[slot].bottomcolor=3;
+     ent->scoreboard=&cl.players[slot]; ent->renderfx=RF_PLAYERMODEL;
++    // HDR fixture: optional frozen powerup actor exercises real emissive
++    // shell draws. Existing photo actors and ordinary gameplay are unchanged.
++    if(i==0 && !strcmp(Cmd_Argv(3),"powerup")) ent->effects|=EF_BLUE;
+    }
+    R_AddEfrags(ent);
+   }
+@@ -587,9 +605,17 @@ static void Developer(void) {
+   Con_Printf("CV_PARAMS style=%d post=%d bloom=%g exposure=%g light=%g ao=%g\n",CV_Active(),CV_PostActive(),params.post[2],params.post[0],params.light[0],params.post2[1]);
+  }
+  Con_Printf("CV_VIDEO pending=%d requested=%g applied=%d actual=%d\n",RestartPending(),ExistingValue("vid_framebuffer_multisample"),appliedMSAA,actualMSAA);
++ Con_Printf("CV_HDR requested=%g applied=%d active=%d\n",CV_Value(CV_hdr),appliedHDR,actualHDR);
++}
++void CV_InitSettings(void) {
++ static qbool initialized;
++ int i;
++ if(initialized) return;
++ for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
++ initialized=true;
+ }
+ void CV_Init(void) {
+- int i; for(i=0;i<CV_COUNT;++i) Cvar_Register(&vars[i]);
++ CV_InitSettings();
+  Cmd_AddCommand("menu_competitive",CV_Open); Cmd_AddCommand("cv",Command);
+  Cmd_AddCommand("menu_visual_effects",CV_OpenEffects);
+  if(IsDeveloperMode()) Cmd_AddCommand("dev_competitive",Developer);
+diff --git a/src/competitive_visuals.h b/src/competitive_visuals.h
+index ae008a1..88885cd 100644
+--- a/src/competitive_visuals.h
++++ b/src/competitive_visuals.h
+@@ -41,16 +41,23 @@
+  X(aoradius,"World AO radius","12",2,32,1,4,"Set the world-space contact shading sample radius. Requires nonzero World AO strength.") \
+  X(exposure,"Exposure","1",.5,2,.05,5,"Adjust scene exposure before the HUD. One preserves the original exposure.") \
+  X(tonemap,"Tone curve","0",0,2,1,5,"Original response, a soft highlight shoulder, or a filmic tone curve. HUD is excluded.") \
+- X(sharpen,"Scene sharpness","0",0,.5,.025,5,"Sharpen scene detail after rendering. Zero disables sharpening. HUD is excluded.")
++ X(sharpen,"Scene sharpness","0",0,.5,.025,5,"Sharpen scene detail after rendering. Zero disables sharpening. HUD is excluded.") \
++ X(hdr,"Linear HDR","0",0,1,1,5,"Linear float scene, tone-mapped to SDR. F5 restarts video to apply. No HDR monitor or RTX needed.") \
++ X(aomode,"AO method","0",0,1,1,4,"Contact or world SSAO. Models, sky and transparent surfaces are excluded.") \
++ X(aoquality,"SSAO samples","16",8,32,8,4,"Hemisphere sampling quality: 8 to 32 taps. Higher quality costs more GPU time.") \
++ X(aobias,"SSAO bias","0.5",.1,2,.1,4,"World-unit offset to suppress self-shadowing on flat surfaces. Requires SSAO.") \
++ X(bloomsource,"Bloom source","1",0,1,1,4,"Bright pixels or emissive surfaces only. Requires bloom and active HDR for Emissive.")
+ #define CV_ENUM(id,label,def,lo,hi,step,page,help) CV_##id,
+ typedef enum { CV_OPTIONS(CV_ENUM) CV_COUNT } cv_id;
+ #undef CV_ENUM
+ typedef struct { float world[4], floor[4], wall[4], light[4], levels[4], shape[4], rim[4], rimcolor[4], post[4], post2[4], modelview[16]; } cv_params_t;
+ void CV_Init(void);
++void CV_InitSettings(void);
+ float CV_Value(cv_id id);
+ qbool CV_Active(void);
+ qbool CV_PostActive(void);
+ void CV_VideoApplied(int requested, int actual);
++void CV_HDRVideoApplied(int requested, int actual);
+ void CV_TestView(void);
+ qbool CV_RimAllowed(int effects, qbool player, qbool weapon, qbool blocked);
+ void CV_Params(cv_params_t *out);
+diff --git a/src/vk_aliasmodel.c b/src/vk_aliasmodel.c
+index a2c2af2..6769661 100644
+--- a/src/vk_aliasmodel.c
++++ b/src/vk_aliasmodel.c
+@@ -385,7 +385,7 @@ static qbool VK_AliasCreatePipeline(int blendMode)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+diff --git a/src/vk_draw.c b/src/vk_draw.c
+index 6d2f63b..ad484c6 100644
+--- a/src/vk_draw.c
++++ b/src/vk_draw.c
+@@ -69,6 +69,7 @@ typedef struct vk_post_process_push_s {
+ 	float invHeight;
+ 	int fxaaEnabled;
+ 	float fxaaQuality;
++	int bloomSource;
+ } vk_post_process_push_t;
+ 
+ typedef struct vk_world_outline_push_s {
+@@ -80,7 +81,10 @@ typedef struct vk_world_outline_push_s {
+ 	float invHeight;
+ 	float zFar;
+ 	float aoStrength, aoRadius, edges, edgeOpacity;
++	float padding[3];
++	float rayRight[4], rayUp[4], rayForward[4];
+ } vk_world_outline_push_t;
++typedef char vk_ao_push_size_check[(sizeof(vk_world_outline_push_t)==112)?1:-1];
+ 
+ static VkPipelineLayout hudImagePipelineLayout;
+ static VkPipelineLayout hudColorPipelineLayout;
+@@ -333,7 +337,7 @@ static qbool VK_HudCreateImagePipeline(void)
+ 	pipelineInfo.renderPass = VK_HudRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &hudImagePipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &hudImagePipeline) != VK_SUCCESS) {
+ 		hudImagePipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -469,7 +473,7 @@ static qbool VK_HudCreateColorPipeline(VkPrimitiveTopology topology, r_blendfunc
+ 	pipelineInfo.renderPass = VK_HudRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -497,7 +501,7 @@ static qbool VK_PostProcessCreatePipeline(void)
+ 	VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+ 	VkGraphicsPipelineCreateInfo pipelineInfo;
+ 	VkSamplerCreateInfo samplerInfo;
+-	VkDescriptorSetLayoutBinding binding;
++	VkDescriptorSetLayoutBinding binding, bindings[2];
+ 	VkDescriptorSetLayoutCreateInfo layoutInfo;
+ 	VkDescriptorSetLayout cvLayouts[2];
+ 
+@@ -530,8 +534,9 @@ static qbool VK_PostProcessCreatePipeline(void)
+ 
+ 		VK_InitialiseStructure(layoutInfo);
+ 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+-		layoutInfo.bindingCount = 1;
+-		layoutInfo.pBindings = &binding;
++		bindings[0]=bindings[1]=binding; bindings[1].binding=1;
++		layoutInfo.bindingCount = 2;
++		layoutInfo.pBindings = bindings;
+ 		if (vkCreateDescriptorSetLayout(vk_options.logicalDevice, &layoutInfo, NULL, &postProcessDescriptorSetLayout) != VK_SUCCESS) {
+ 			return false;
+ 		}
+@@ -626,7 +631,7 @@ static qbool VK_PostProcessCreatePipeline(void)
+ 	pipelineInfo.renderPass = VK_PostProcessRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &postProcessPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &postProcessPipeline) != VK_SUCCESS) {
+ 		postProcessPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -679,6 +684,9 @@ static VkDescriptorSet VK_PostProcessDescriptorSet(uint32_t imageIndex)
+ 	write.descriptorCount = 1;
+ 	write.pImageInfo = &imageInfo;
+ 	vkUpdateDescriptorSets(vk_options.logicalDevice, 1, &write, 0, NULL);
++    write.dstBinding=1;
++    if (VK_HDRActive()) imageInfo.imageView=VK_EmissionImageView(imageIndex);
++    vkUpdateDescriptorSets(vk_options.logicalDevice, 1, &write, 0, NULL);
+ 
+ 	vk_options.swapChain.postProcessDescriptorSets[imageIndex] = set;
+ 	return set;
+@@ -707,7 +715,7 @@ void VK_PostProcessTransitionForSampling(VkCommandBuffer commandBuffer, uint32_t
+ 
+ 	VK_InitialiseStructure(barrier);
+ 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+-	barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
++	barrier.oldLayout = (VK_HDRActive() ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+ 	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+ 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+ 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+@@ -720,6 +728,10 @@ void VK_PostProcessTransitionForSampling(VkCommandBuffer commandBuffer, uint32_t
+ 	barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+ 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+ 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
++    if (VK_HDRActive()) {
++        barrier.image=VK_EmissionImage(imageIndex);
++        vkCmdPipelineBarrier(commandBuffer,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,NULL,0,NULL,1,&barrier);
++    }
+ }
+ 
+ void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+@@ -750,6 +762,7 @@ void VK_PostProcessComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+ 	push.contrast = paletteActive ? bound(1.0f, v_contrast.value, 3.0f) : 1.0f;
+ 	push.invWidth = 1.0f / (float)max(1, vk_options.swapChain.imageSize.width);
+ 	push.invHeight = 1.0f / (float)max(1, vk_options.swapChain.imageSize.height);
++	push.bloomSource = (int)CV_Value(CV_bloomsource);
+ 	push.fxaaEnabled = vid_framebuffer_fxaa.integer != 0 ? 1 : 0;
+ 	// GLC/GLM select one of 17 distinct FXAA_QUALITY__PRESET shader variants
+ 	// (GL_FramebufferFxaaPreset); this single-pass approximation has no
+@@ -931,7 +944,7 @@ static qbool VK_WorldOutlineCreatePipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldOutlinePipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldOutlinePipeline) != VK_SUCCESS) {
+ 		worldOutlinePipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1010,6 +1023,22 @@ void VK_WorldOutlineComposite(VkCommandBuffer commandBuffer, uint32_t imageIndex
+ 	VkDescriptorSet descriptorSet;
+ 	vk_world_outline_push_t push;
+ 	float fbScaleX, fbScaleY;
++	float view[16], projection[16];
++	int axis;
++	memset(&push, 0, sizeof(push));
++	R_GetModelviewMatrix(view);
++	R_GetProjectionMatrix(projection);
++	// Vulkan world viewport fills the target. Reconstruct camera-relative world
++	// rays from the actual projection scales and inverse view rotation. Radial
++	// depth is independent of normal/reversed hardware depth conventions.
++	for (axis=0; axis<3; ++axis) {
++		push.rayRight[axis] = view[axis*4] / projection[0];
++		push.rayUp[axis] = view[axis*4+1] / projection[5];
++		push.rayForward[axis] = -view[axis*4+2] +
++			push.rayRight[axis]*projection[8] + push.rayUp[axis]*projection[9];
++	}
++	push.rayRight[3] = CV_Value(CV_aomode) ? CV_Value(CV_aoquality) : 0;
++	push.rayForward[3] = CV_Value(CV_aobias);
+ 
+ 	if (!VK_WorldOutlineCreatePipeline()) {
+ 		return;
+diff --git a/src/vk_local.h b/src/vk_local.h
+index 2ff7550..66412ab 100644
+--- a/src/vk_local.h
++++ b/src/vk_local.h
+@@ -96,6 +96,13 @@ void VK_DestroySwapChainFramebuffers(void);
+ 
+ // vk_renderpass.c
+ qbool VK_RenderPassCreate(void);
++// HDR-001, OpenAI Codex: scene format is latched at video initialization.
++void VK_ConfigureSceneFormat(void);
++VkFormat VK_SceneFormat(void);
++qbool VK_HDRActive(void);
++VkImage VK_EmissionImage(uint32_t imageIndex);
++VkImageView VK_EmissionImageView(uint32_t imageIndex);
++VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline);
+ void VK_RenderPassDelete(void);
+ VkRenderPass VK_MainRenderPass(void);
+ VkRenderPass VK_FrameRenderPass(qbool clear_color);
+diff --git a/src/vk_main.c b/src/vk_main.c
+index ec89772..34580fe 100644
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -43,7 +43,7 @@ static qbool vk_recreate_surface_requested;
+ // after the normals prepass. Keep command-buffer and render-pass state separate.
+ static qbool vk_scene_pass_started;
+ static qbool vk_scene_clear_color;
+-static VkClearValue vk_scene_clear_values[2];
++static VkClearValue vk_scene_clear_values[5];
+ // A freshly (re)created swapchain/MSAA image's real Vulkan layout is
+ // VK_IMAGE_LAYOUT_UNDEFINED -- it has never been rendered to or presented.
+ // vk_renderpass_main_noclear's LOAD op (picked whenever clear_color below
+@@ -670,6 +670,13 @@ void VK_BeginFrame(void)
+ 	vk_scene_clear_values[0].color.float32[1] = vk_options.clearColor[1];
+ 	vk_scene_clear_values[0].color.float32[2] = vk_options.clearColor[2];
+ 	vk_scene_clear_values[0].color.float32[3] = vk_options.clearColor[3] ? vk_options.clearColor[3] : 1.0f;
++	if (VK_HDRActive()) {
++        int channel;
++        for (channel=0; channel<3; ++channel) {
++            float c=max(0.0f,vk_scene_clear_values[0].color.float32[channel]);
++            vk_scene_clear_values[0].color.float32[channel]=c<=0.04045f ? c/12.92f : powf((c+0.055f)/1.055f,2.4f);
++        }
++    }
+ 	vk_scene_clear_values[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
+ 	vk_scene_clear_values[1].depthStencil.stencil = 0;
+ 	vk_options.swapChain.postProcessActive = VK_PostProcessActive();
+@@ -1059,6 +1066,7 @@ qbool VK_Initialise(SDL_Window* window)
+ 		return false;
+ 	}
+ 
++	VK_ConfigureSceneFormat();
+ 	if (!VK_RenderPassCreate()) {
+ 		VK_Shutdown(r_shutdown_full);
+ 		return false;
+diff --git a/src/vk_renderpass.c b/src/vk_renderpass.c
+index 2c38b5c..e2b0e2f 100644
+--- a/src/vk_renderpass.c
++++ b/src/vk_renderpass.c
+@@ -27,6 +27,68 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ #include "r_state.h"
+ 
+ #include "vk_local.h"
++#include "competitive_visuals.h"
++
++static VkFormat sceneFormat;
++VkFormat VK_SceneFormat(void) { return sceneFormat; }
++qbool VK_HDRActive(void) { return sceneFormat == VK_FORMAT_R16G16B16A16_SFLOAT; }
++void VK_ConfigureSceneFormat(void)
++{
++	VkFormatProperties format;
++	VkImageFormatProperties image;
++	VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
++		VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
++		VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
++	int requested;
++	// Video starts before M_Init. Adopt saved/temp cvars before selecting the
++	// first scene target, not only after a later user-triggered restart.
++	CV_InitSettings();
++	requested = (int)CV_Value(CV_hdr);
++	sceneFormat = vk_options.physicalDeviceSurfaceFormat.format;
++	vkGetPhysicalDeviceFormatProperties(vk_options.physicalDevice, VK_FORMAT_R16G16B16A16_SFLOAT, &format);
++	if (requested && (format.optimalTilingFeatures & needed) == needed &&
++		vkGetPhysicalDeviceImageFormatProperties(vk_options.physicalDevice, VK_FORMAT_R16G16B16A16_SFLOAT,
++		VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
++		0, &image) == VK_SUCCESS && (image.sampleCounts & vk_options.msaaSamples)) {
++		sceneFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
++	}
++	CV_HDRVideoApplied(requested, VK_HDRActive());
++	Con_Printf("vulkan: scene format %s (HDR requested %d, active %d)\n",
++		VK_HDRActive() ? "RGBA16F linear" : "SDR compatibility", requested, VK_HDRActive());
++	if (requested && !VK_HDRActive()) Con_Printf("vulkan: HDR format/sample combination unsupported; using SDR. Try lower MSAA.\n");
++}
++
++// Specialization is immutable per pipeline; HUD shaders have no constant 31.
++VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline)
++{
++	VkGraphicsPipelineCreateInfo copy = *info;
++	VkPipelineShaderStageCreateInfo stages[2];
++	VkBool32 flags[2] = {VK_HDRActive(), VK_FALSE};
++	VkSpecializationMapEntry entries[2] = {{31, 0, sizeof(VkBool32)}, {32, sizeof(VkBool32), sizeof(VkBool32)}};
++	VkSpecializationInfo spec = {2, entries, sizeof(flags), flags};
++	VkPipelineColorBlendStateCreateInfo blend;
++	VkPipelineColorBlendAttachmentState attachments[2];
++	uint32_t i;
++	if (info->pColorBlendState && info->pColorBlendState->attachmentCount) {
++		const VkPipelineColorBlendAttachmentState *b=info->pColorBlendState->pAttachments;
++		flags[1]=b->blendEnable && b->dstColorBlendFactor==VK_BLEND_FACTOR_ONE;
++	}
++	assert(info->stageCount <= 2);
++	for (i=0; i<info->stageCount; ++i) {
++		stages[i] = info->pStages[i];
++		assert(!stages[i].pSpecializationInfo);
++		if (stages[i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) stages[i].pSpecializationInfo = &spec;
++	}
++	copy.pStages = stages;
++	if (VK_HDRActive() && info->renderPass == VK_MainRenderPass()) {
++		blend = *info->pColorBlendState;
++		attachments[0] = attachments[1] = blend.pAttachments[0];
++		blend.attachmentCount = 2;
++		blend.pAttachments = attachments;
++		copy.pColorBlendState = &blend;
++	}
++	return vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &copy, NULL, pipeline);
++}
+ 
+ typedef enum {
+ 	vk_renderpass_main,
+@@ -38,6 +100,9 @@ typedef enum {
+ 	// valid to use with this one; only vkCmdBeginRenderPass needs to pick
+ 	// between them, done once per frame in VK_BeginFrame().
+ 	vk_renderpass_main_noclear,
++	// PERF-OPT-002, OpenAI Codex: single-view offscreen pass is terminal.
++	// Its resolved color is sampled; multisample color is never LOADed again.
++	vk_renderpass_main_terminal,
+ 	// Second pass used only when VK_PostProcessActive() is true: a single
+ 	// fullscreen-quad subpass that reads the offscreen color target the main
+ 	// pass just wrote (see VK_CreatePostProcessResources) via sampler, applies
+@@ -62,7 +127,8 @@ static VkRenderPass renderPasses[vk_renderpass_count];
+ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ {
+ 	qbool msaa = vk_options.msaaSamples > VK_SAMPLE_COUNT_1_BIT;
+-	VkAttachmentDescription attachments[3];
++	VkAttachmentDescription attachments[5];
++	VkAttachmentReference colors[2], resolves[2];
+ 	VkAttachmentReference colorAttachmentRef;
+ 	VkAttachmentReference depthAttachmentRef;
+ 	VkAttachmentReference resolveAttachmentRef;
+@@ -71,25 +137,21 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 	VkRenderPassCreateInfo renderPassInfo;
+ 
+ 	// Attachment 0: the color attachment every pipeline actually draws into.
+-	// Without MSAA this *is* the swapchain image (presented directly, hence
+-	// finalLayout PRESENT_SRC_KHR below). With MSAA it's the offscreen
+-	// multisampled image from VK_CreateSwapChainMSAAColorResources -- it's
+-	// never presented, only resolved into attachment 2, so it stays in
+-	// COLOR_ATTACHMENT_OPTIMAL the whole time and is never stored (resolve
+-	// reads it instead of a STORE_OP write).
++	// Without MSAA this is the scene image (swapchain in the direct path,
++	// otherwise offscreen). With MSAA it resolves into attachment 2.
++	// Only a terminal single-view offscreen pass can discard MSAA colour;
++	// resumed/direct LOAD paths must retain the multisample contents.
+ 	VK_InitialiseStructure(attachments[0]);
+-	attachments[0].format = vk_options.physicalDeviceSurfaceFormat.format;
++	attachments[0].format = VK_SceneFormat();
+ 	attachments[0].samples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
+ 	attachments[0].loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+-	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Resumed after world normals/AO.
++	attachments[0].storeOp = (msaa && id == vk_renderpass_main_terminal) ?
++		VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+ 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+-	if (msaa) {
+-		// The multisampled image is exclusively a render target -- LOAD's
+-		// "preserve previous content" only matters for the resolved/
+-		// presented attachment 2 below, so this one simply always starts
+-		// from COLOR_ATTACHMENT_OPTIMAL (its only other state, set by this
+-		// same finalLayout) rather than PRESENT_SRC_KHR, which it never is.
++	if (msaa || VK_HDRActive()) {
++		// MSAA/HDR images are render targets, never directly presented. A
++		// resumed pass preserves their contents in COLOR_ATTACHMENT_OPTIMAL.
+ 		attachments[0].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+ 		attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+ 	}
+@@ -111,7 +173,8 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 	// gl_misc.c, which only gates GL_COLOR_BUFFER_BIT on clear_color and
+ 	// always ORs in GL_DEPTH_BUFFER_BIT.
+ 	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+-	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Preserve depth across scene subpasses.
++	// Every scene pass CLEARs depth; no depth sampling or depth resolve exists.
++	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+ 	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+ 	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+@@ -124,7 +187,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 	// when multisampling.
+ 	if (msaa) {
+ 		VK_InitialiseStructure(attachments[2]);
+-		attachments[2].format = vk_options.physicalDeviceSurfaceFormat.format;
++		attachments[2].format = VK_SceneFormat();
+ 		attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
+ 		attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+ 		attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+@@ -132,6 +195,10 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 		attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+ 		attachments[2].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+ 		attachments[2].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
++		if (VK_HDRActive()) {
++			attachments[2].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++			attachments[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++		}
+ 	}
+ 
+ 	// attachment reference
+@@ -154,6 +221,24 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 	subpass.pColorAttachments = &colorAttachmentRef;
+ 	subpass.pDepthStencilAttachment = &depthAttachmentRef;
+ 	subpass.pResolveAttachments = msaa ? &resolveAttachmentRef : NULL;
++	if (VK_HDRActive()) {
++		// A separate linear emission target excludes ordinary bright albedo
++		// from emissive bloom. Same blend/coverage rules as scene color.
++		int emission = msaa ? 3 : 2;
++		attachments[emission] = attachments[0];
++		colors[0] = colorAttachmentRef;
++		colors[1].attachment = emission;
++		colors[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++		subpass.colorAttachmentCount = 2;
++		subpass.pColorAttachments = colors;
++		if (msaa) {
++			attachments[4] = attachments[2];
++			resolves[0] = resolveAttachmentRef;
++			resolves[1].attachment = 4;
++			resolves[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
++			subpass.pResolveAttachments = resolves;
++		}
++	}
+ 
+ 	// The depth image (unlike the swapchain color image) is a single resource
+ 	// shared by every frame in flight, not duplicated per-frame. EARLY_FRAGMENT_TESTS
+@@ -176,6 +261,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 	VK_InitialiseStructure(renderPassInfo);
+ 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+ 	renderPassInfo.attachmentCount = msaa ? 3 : 2;
++	if (VK_HDRActive()) renderPassInfo.attachmentCount = msaa ? 5 : 3;
+ 	renderPassInfo.pAttachments = attachments;
+ 	renderPassInfo.subpassCount = 1;
+ 	renderPassInfo.pSubpasses = &subpass;
+@@ -195,7 +281,9 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
+ 
+ qbool VK_RenderPassCreate(void)
+ {
+-	return VK_RenderPassCreateVariant(vk_renderpass_main, true) && VK_RenderPassCreateVariant(vk_renderpass_main_noclear, false);
++	return VK_RenderPassCreateVariant(vk_renderpass_main, true) &&
++		VK_RenderPassCreateVariant(vk_renderpass_main_noclear, false) &&
++		VK_RenderPassCreateVariant(vk_renderpass_main_terminal, true);
+ }
+ 
+ // Single subpass, single color attachment (the swapchain image), no depth --
+@@ -339,6 +427,10 @@ VkRenderPass VK_MainRenderPass(void)
+ 
+ VkRenderPass VK_FrameRenderPass(qbool clear_color)
+ {
++	// Deferred normals run before the single-view scene. Multiview can resume
++	// a pass, and direct gl_clear 0 frames can LOAD prior color: retain STORE.
++	if (clear_color && vk_options.swapChain.postProcessActive && !cl_multiview.integer)
++		return renderPasses[vk_renderpass_main_terminal];
+ 	return renderPasses[clear_color ? vk_renderpass_main : vk_renderpass_main_noclear];
+ }
+ 
+diff --git a/src/vk_sprite3d.c b/src/vk_sprite3d.c
+index 135de1b..b0a4bd8 100644
+--- a/src/vk_sprite3d.c
++++ b/src/vk_sprite3d.c
+@@ -334,7 +334,7 @@ static qbool VK_SpriteCreatePipeline(r_primitive_id primitive, vk_sprite_pipelin
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+diff --git a/src/vk_swapchain.c b/src/vk_swapchain.c
+index 00d3158..da9461f 100644
+--- a/src/vk_swapchain.c
++++ b/src/vk_swapchain.c
+@@ -126,7 +126,7 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
+ 			vk_options.swapChain.imageSize.height,
+ 			1,
+ 			vk_options.msaaSamples,
+-			vk_options.physicalDeviceSurfaceFormat.format,
++			VK_SceneFormat(),
+ 			VK_IMAGE_TILING_OPTIMAL,
+ 			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+ 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+@@ -140,7 +140,7 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
+ 	createImageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+ 	createImageViewInfo.image = vk_options.swapChain.msaaColorImage;
+ 	createImageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+-	createImageViewInfo.format = vk_options.physicalDeviceSurfaceFormat.format;
++	createImageViewInfo.format = VK_SceneFormat();
+ 	createImageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+ 	createImageViewInfo.subresourceRange.baseMipLevel = 0;
+ 	createImageViewInfo.subresourceRange.levelCount = 1;
+@@ -156,6 +156,34 @@ static qbool VK_CreateSwapChainMSAAColorResources(void)
+ 	return true;
+ }
+ 
++// HDR-001, OpenAI Codex: per-image emission resolves and shared MSAA target.
++typedef struct { VkImage image; VkImageView view; VkDeviceMemory memory; } vk_emission_target_t;
++static vk_emission_target_t *emissionTargets;
++static vk_emission_target_t emissionMSAA;
++static uint32_t emissionCount;
++VkImage VK_EmissionImage(uint32_t i) { return i<emissionCount ? emissionTargets[i].image : VK_NULL_HANDLE; }
++VkImageView VK_EmissionImageView(uint32_t i) { return i<emissionCount ? emissionTargets[i].view : VK_NULL_HANDLE; }
++static void VK_DestroyEmissionTarget(vk_emission_target_t *target)
++{
++	if (target->view) vkDestroyImageView(vk_options.logicalDevice, target->view, NULL);
++	if (target->image) vkDestroyImage(vk_options.logicalDevice, target->image, NULL);
++	if (target->memory) vkFreeMemory(vk_options.logicalDevice, target->memory, NULL);
++	memset(target,0,sizeof(*target));
++}
++static qbool VK_CreateEmissionTarget(vk_emission_target_t *target, VkSampleCountFlagBits samples)
++{
++	VkImageViewCreateInfo view = {0};
++	if (!VK_CreateImageResource(vk_options.swapChain.imageSize.width, vk_options.swapChain.imageSize.height,
++		1, samples, VK_SceneFormat(), VK_IMAGE_TILING_OPTIMAL,
++		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
++		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &target->image, &target->memory)) return false;
++	view.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
++	view.image=target->image; view.viewType=VK_IMAGE_VIEW_TYPE_2D; view.format=VK_SceneFormat();
++	view.subresourceRange.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
++	view.subresourceRange.levelCount=view.subresourceRange.layerCount=1;
++	return vkCreateImageView(vk_options.logicalDevice,&view,NULL,&target->view)==VK_SUCCESS;
++}
++
+ static void VK_DestroyPostProcessDescriptors(void)
+ {
+ 	if (vk_options.swapChain.postProcessDescriptorPool != VK_NULL_HANDLE) {
+@@ -223,6 +251,10 @@ void VK_DestroyPostProcessResources(void)
+ 	}
+ 
+ 	vk_options.swapChain.postProcessActive = false;
++	for (i=0; i<emissionCount; ++i) VK_DestroyEmissionTarget(&emissionTargets[i]);
++	Q_free(emissionTargets); emissionTargets=NULL; emissionCount=0;
++	VK_DestroyEmissionTarget(&emissionMSAA);
++
+ }
+ 
+ // Real gamma/contrast curve and/or FXAA only differ from the GLM/GLC shader
+@@ -236,7 +268,7 @@ void VK_DestroyPostProcessResources(void)
+ // a restart.
+ qbool VK_PostProcessActive(void)
+ {
+-	if (CV_Active() || CV_PostActive()) return true;
++	if (VK_HDRActive() || CV_Active() || CV_PostActive()) return true;
+ 	extern cvar_t v_gamma, v_contrast;
+ 	extern cvar_t vid_framebuffer_fxaa;
+ 	extern cvar_t vid_software_palette;
+@@ -281,17 +313,22 @@ qbool VK_CreatePostProcessResources(void)
+ 	vk_options.swapChain.postProcessFramebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.postProcessFramebuffers[0]));
+ 	vk_options.swapChain.postProcessCompositeFramebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.postProcessCompositeFramebuffers[0]));
+ 
+-	for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
++	if (VK_HDRActive()) {
++        emissionCount=vk_options.swapChain.imageCount;
++        emissionTargets=Q_calloc(emissionCount,sizeof(*emissionTargets));
++        if (msaa && !VK_CreateEmissionTarget(&emissionMSAA,vk_options.msaaSamples)) { VK_DestroyPostProcessResources(); return false; }
++    }
++    for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
+ 		VkImageViewCreateInfo viewInfo;
+ 		VkFramebufferCreateInfo framebufferInfo;
+-		VkImageView mainAttachments[3];
++		VkImageView mainAttachments[5];
+ 
+ 		if (!VK_CreateImageResource(
+ 				vk_options.swapChain.imageSize.width,
+ 				vk_options.swapChain.imageSize.height,
+ 				1,
+ 				VK_SAMPLE_COUNT_1_BIT,
+-				vk_options.physicalDeviceSurfaceFormat.format,
++				VK_SceneFormat(),
+ 				VK_IMAGE_TILING_OPTIMAL,
+ 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+ 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+@@ -305,7 +342,7 @@ qbool VK_CreatePostProcessResources(void)
+ 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+ 		viewInfo.image = vk_options.swapChain.postProcessColorImages[i];
+ 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+-		viewInfo.format = vk_options.physicalDeviceSurfaceFormat.format;
++		viewInfo.format = VK_SceneFormat();
+ 		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+ 		viewInfo.subresourceRange.baseMipLevel = 0;
+ 		viewInfo.subresourceRange.levelCount = 1;
+@@ -327,10 +364,16 @@ qbool VK_CreatePostProcessResources(void)
+ 			mainAttachments[1] = vk_options.swapChain.depthImageView;
+ 		}
+ 
++        if (VK_HDRActive()) {
++            if (!VK_CreateEmissionTarget(&emissionTargets[i],VK_SAMPLE_COUNT_1_BIT)) { VK_DestroyPostProcessResources(); return false; }
++            mainAttachments[msaa ? 3 : 2]=msaa ? emissionMSAA.view : emissionTargets[i].view;
++            if (msaa) mainAttachments[4]=emissionTargets[i].view;
++        }
++
+ 		VK_InitialiseStructure(framebufferInfo);
+ 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+ 		framebufferInfo.renderPass = mainRenderPass;
+-		framebufferInfo.attachmentCount = msaa ? 3 : 2;
++		framebufferInfo.attachmentCount = VK_HDRActive() ? (msaa ? 5 : 3) : (msaa ? 3 : 2);
+ 		framebufferInfo.pAttachments = mainAttachments;
+ 		framebufferInfo.width = vk_options.swapChain.imageSize.width;
+ 		framebufferInfo.height = vk_options.swapChain.imageSize.height;
+@@ -358,7 +401,7 @@ qbool VK_CreatePostProcessResources(void)
+ 
+ 	VK_InitialiseStructure(poolSize);
+ 	poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+-	poolSize.descriptorCount = vk_options.swapChain.imageCount;
++	poolSize.descriptorCount = vk_options.swapChain.imageCount * 2;
+ 
+ 	VK_InitialiseStructure(poolInfo);
+ 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+@@ -766,7 +809,7 @@ qbool VK_CreateSwapChainFramebuffers(void)
+ 	}
+ 
+ 	vk_options.swapChain.framebuffers = Q_calloc(vk_options.swapChain.imageCount, sizeof(vk_options.swapChain.framebuffers[0]));
+-	for (i = 0; i < vk_options.swapChain.imageCount; ++i) {
++	for (i = 0; i < vk_options.swapChain.imageCount && !VK_HDRActive(); ++i) {
+ 		// With MSAA, the render pass's color attachment 0 is the shared
+ 		// multisampled image (one resource for every swapchain image, like
+ 		// depth above) and the per-image swapchain view only appears as the
+diff --git a/src/vk_world.c b/src/vk_world.c
+index 7c2adc1..b542a78 100644
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -28,6 +28,7 @@ of the License, or (at your option) any later version.
+ #include "glsl/constants.glsl"
+ #include "tr_types.h"
+ #include "vk_local.h"
++#include "competitive_visuals.h"
+ 
+ extern const unsigned char vk_world_flat_vert_spv[];
+ extern const unsigned int vk_world_flat_vert_spv_len;
+@@ -122,14 +123,14 @@ typedef char vk_world_push_wallColor_check[(offsetof(vk_world_push_t, wallColor)
+ typedef char vk_world_push_flags_check[(offsetof(vk_world_push_t, flags) == 124) ? 1 : -1];
+ 
+ // Must match the push_constant block in vk_world_normals.vert /
+-// vk_world_normals.frag exactly. mat4 + vec4 + 2 floats = 88 bytes, well
+-// inside the 128-byte guaranteed minimum.
++// vk_world_normals.frag exactly. 128 bytes including the optional brush-to-world
++// transform used by SSAO. Camera.w holds zFar or a negative surface sentinel.
+ typedef struct vk_world_normals_push_s {
+ 	float mvp[16];
+ 	float cameraPosition[4];
+-	float surfaceType;
+-	float zFar;
++	float worldRows[12];
+ } vk_world_normals_push_t;
++typedef char vk_normals_push_size_check[(sizeof(vk_world_normals_push_t)==128)?1:-1];
+ 
+ static VkPipelineLayout worldFlatPipelineLayout;
+ static VkPipeline worldFlatPipeline;
+@@ -850,7 +851,7 @@ static qbool VK_WorldCreateFlatPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldFlatPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldFlatPipeline) != VK_SUCCESS) {
+ 		worldFlatPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1040,7 +1041,7 @@ static qbool VK_WorldCreateTexturedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldTexturedPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldTexturedPipeline) != VK_SUCCESS) {
+ 		worldTexturedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1246,7 +1247,7 @@ static qbool VK_WorldCreateOverlayPipeline(qbool luma)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
+ 		*pipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1442,7 +1443,7 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
+ 		worldAlphaTexturedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1639,7 +1640,7 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
+ 	pipelineInfo.renderPass = VK_MainRenderPass();
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldLightmappedPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldLightmappedPipeline) != VK_SUCCESS) {
+ 		worldLightmappedPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -1817,7 +1818,7 @@ static qbool VK_WorldCreateNormalsPipeline(void)
+ 	pipelineInfo.renderPass = renderPass;
+ 	pipelineInfo.subpass = 0;
+ 
+-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldNormalsPipeline) != VK_SUCCESS) {
++	if (VK_CreateScenePipeline(&pipelineInfo, &worldNormalsPipeline) != VK_SUCCESS) {
+ 		worldNormalsPipeline = VK_NULL_HANDLE;
+ 	}
+ 
+@@ -2195,9 +2196,21 @@ static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer ver
+ 		push.cameraPosition[0] = r_refdef.vieworg[0];
+ 		push.cameraPosition[1] = r_refdef.vieworg[1];
+ 		push.cameraPosition[2] = r_refdef.vieworg[2];
+-		push.cameraPosition[3] = 0.0f;
+-		push.surfaceType = worldDraws[i].surfaceType;
+-		push.zFar = zFar;
++		push.cameraPosition[3] = worldDraws[i].surfaceType > 0 ? -worldDraws[i].surfaceType : zFar;
++		push.worldRows[0] = push.worldRows[5] = push.worldRows[10] = 1;
++		if (CV_Value(CV_aomode) && CV_Value(CV_ao)>0) {
++			float view[16]; int axis, col, k;
++			R_GetModelviewMatrix(view);
++			if (memcmp(view,worldDraws[i].modelView,sizeof(view))) {
++				// inverse(camera view) * brush modelview; keep static world an
++				// exact identity to avoid introducing depth quantization drift.
++				for (axis=0; axis<3; ++axis) for (col=0; col<4; ++col) {
++					float value=col==3 ? r_refdef.vieworg[axis] : 0;
++					for (k=0; k<3; ++k) value+=view[axis*4+k]*worldDraws[i].modelView[col*4+k];
++					push.worldRows[axis*4+col]=value;
++				}
++			}
++		}
+ 
+ 		vkCmdPushConstants(commandBuffer, worldNormalsPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+ 		vkCmdDrawIndexed(commandBuffer, worldDraws[i].indexCount, 1, worldDraws[i].firstIndex, 0, 0);
+diff --git a/src/vulkan_shaders/vk_alias_model.frag b/src/vulkan_shaders/vk_alias_model.frag
+index 61ee740..92066cd 100644
+--- a/src/vulkan_shaders/vk_alias_model.frag
++++ b/src/vulkan_shaders/vk_alias_model.frag
+@@ -1,4 +1,6 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
+ #extension GL_GOOGLE_include_directive : enable
+ #define CV_SET 1
+ #include "vk_competitive.glsl"
+@@ -48,18 +50,20 @@ layout(location = 9) in float cvUp;
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+-void main()
++void shadeScene()
+ {
+ 	uint texIndex = uint(pushConstants.textureIndex);
+ 	vec4 texColour = texture(modelTextureMode[texIndex], inTexCoord);
++	texColour.rgb = hdrMaterial(texColour.rgb);
+ 
+ 	if (inMode > 2.5) {
+-		fragColour = inColor;
++		fragColour = vec4(hdrMaterial(inColor.rgb), inColor.a);
+ 		return;
+ 	}
+ 
+ 	if (inMode > 1.5) {
+ 		vec4 altTexColour = texture(modelTextureMode[texIndex], inAltTexCoord);
++		altTexColour.rgb = hdrMaterial(altTexColour.rgb);
+ 		vec3 rgb = inColor.rgb * texColour.rgb + inAltColor.rgb * altTexColour.rgb;
+ 		float mask = max(max(max(texColour.r, texColour.g), texColour.b), max(max(altTexColour.r, altTexColour.g), altTexColour.b));
+ 
+@@ -70,7 +74,7 @@ void main()
+ 	if (inMode > 0.5) {
+ 		float alpha = max(texColour.a, step(0.003, max(max(texColour.r, texColour.g), texColour.b)));
+ 
+-		fragColour = vec4(texColour.rgb, alpha * inColor.a);
++		fragColour = vec4(texColour.rgb * (hdrScene ? 2.0 : 1.0), alpha * inColor.a);
+ 		return;
+ 	}
+ 
+@@ -85,3 +89,10 @@ void main()
+ 	// Surface-bound, nonanimated and capped. CPU disables it for powerups.
+ 	fragColour.rgb += cvRim(cvNormal,cvPosition,cvUp);
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4((inMode>.5 && inMode<2.5) ? fragColour.rgb : vec3(0), fragColour.a);
++}
+diff --git a/src/vulkan_shaders/vk_hdr.glsl b/src/vulkan_shaders/vk_hdr.glsl
+new file mode 100644
+index 0000000..33d9be5
+--- /dev/null
++++ b/src/vulkan_shaders/vk_hdr.glsl
+@@ -0,0 +1,15 @@
++// HDR-001, OpenAI Codex, 2026-09-14. GPL-2.0-or-later.
++#ifndef VK_HDR_GLSL
++#define VK_HDR_GLSL
++layout(constant_id=31) const bool hdrScene = false;
++layout(constant_id=32) const bool hdrAdditive = false;
++vec3 hdrDecode(vec3 c) {
++ c=max(c,vec3(0));
++ return mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),greaterThan(c,vec3(.04045)));
++}
++vec3 hdrEncode(vec3 c) {
++ c=max(c,vec3(0));
++ return mix(c*12.92,1.055*pow(c,vec3(1.0/2.4))-.055,greaterThan(c,vec3(.0031308)));
++}
++vec3 hdrMaterial(vec3 c) { return hdrScene ? hdrDecode(c) : c; }
++#endif
+diff --git a/src/vulkan_shaders/vk_post_process.frag b/src/vulkan_shaders/vk_post_process.frag
+index 94909c3..8d43b9e 100644
+--- a/src/vulkan_shaders/vk_post_process.frag
++++ b/src/vulkan_shaders/vk_post_process.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ #define CV_SET 1
+ #include "vk_competitive.glsl"
+ 
+@@ -7,6 +9,7 @@ layout(location = 0) in vec2 texCoord;
+ layout(location = 0) out vec4 fragColour;
+ 
+ layout(binding = 0) uniform sampler2D sceneColor;
++layout(binding = 1) uniform sampler2D sceneEmission;
+ 
+ layout(push_constant) uniform PushConstants {
+ 	vec4 blend;     // damage/pickup/underwater tint, premultiplied like v_blend
+@@ -16,8 +19,20 @@ layout(push_constant) uniform PushConstants {
+ 	float invHeight;
+ 	int fxaaEnabled;
+ 	float fxaaQuality; // 0 = off; otherwise 0..1, see VK_FxaaQualityFromPreset
++	int bloomSource;
+ } pc;
+ 
++vec3 hdrTone(vec3 linear) {
++ linear=max(linear*cv.post.x,vec3(0));
++ if(cv.post.y>.5 && cv.post.y<1.5) linear=linear/(vec3(1)+linear*.35);
++ else if(cv.post.y>1.5) linear=clamp((linear*(2.51*linear+.03))/(linear*(2.43*linear+.59)+.14),0.0,1.0);
++ return hdrEncode(linear);
++}
++vec3 aaSample(vec2 uv) {
++ vec3 c=texture(sceneColor,uv).rgb;
++ return hdrScene ? hdrTone(c) : c;
++}
++
+ // Cheap edge-detect AA: blends towards the average of the 4 diagonal taps on
+ // high-contrast edges. Not the full NVIDIA FXAA 3.11 quality search (that
+ // header assumes a GLSL-text include pipeline; this engine embeds Vulkan
+@@ -38,10 +53,10 @@ layout(push_constant) uniform PushConstants {
+ vec3 ApplyFXAA(vec3 centerColor)
+ {
+ 	vec2 rcpFrame = vec2(pc.invWidth, pc.invHeight);
+-	vec3 nw = texture(sceneColor, texCoord + vec2(-1.0, -1.0) * rcpFrame).rgb;
+-	vec3 ne = texture(sceneColor, texCoord + vec2( 1.0, -1.0) * rcpFrame).rgb;
+-	vec3 sw = texture(sceneColor, texCoord + vec2(-1.0,  1.0) * rcpFrame).rgb;
+-	vec3 se = texture(sceneColor, texCoord + vec2( 1.0,  1.0) * rcpFrame).rgb;
++	vec3 nw = aaSample(texCoord + vec2(-1.0, -1.0) * rcpFrame);
++	vec3 ne = aaSample(texCoord + vec2( 1.0, -1.0) * rcpFrame);
++	vec3 sw = aaSample(texCoord + vec2(-1.0,  1.0) * rcpFrame);
++	vec3 se = aaSample(texCoord + vec2( 1.0,  1.0) * rcpFrame);
+ 
+ 	float lumaM = centerColor.g;
+ 	float lumaNW = nw.g;
+@@ -75,6 +90,7 @@ vec3 cvBloom() {
+  for(int y=-2;y<=2;++y) for(int x=-2;x<=2;++x) {
+   float w=exp(-float(x*x+y*y)*.65);
+   vec3 sampleColour=texture(sceneColor,texCoord+vec2(x,y)*pixel).rgb;
++  if(hdrScene && pc.bloomSource!=0) sampleColour=texture(sceneEmission,texCoord+vec2(x,y)*pixel).rgb;
+   float peak=max(sampleColour.r,max(sampleColour.g,sampleColour.b));
+   float contribution=max(0.0,peak-cv.post.w)/max(peak,.001);
+   glow+=sampleColour*contribution*w; weights+=w;
+@@ -92,6 +108,11 @@ vec3 cvTone(vec3 colour) {
+ void main()
+ {
+ 	vec3 colour = texture(sceneColor, texCoord).rgb;
++	if (hdrScene) {
++		// Float scene and bloom stay linear until the output tone curve.
++		if(cv.post.z>0.0) colour+=cvBloom();
++		colour=hdrTone(colour);
++	}
+ 
+ 	if (pc.fxaaEnabled != 0) {
+ 		colour = ApplyFXAA(colour);
+@@ -99,15 +120,17 @@ void main()
+ 
+ 	if(cv.post2.w>0.0) {
+   vec2 p=vec2(pc.invWidth,pc.invHeight);
+-  vec3 a=texture(sceneColor,texCoord+vec2(p.x,0)).rgb;
+-  vec3 b=texture(sceneColor,texCoord-vec2(p.x,0)).rgb;
+-  vec3 c=texture(sceneColor,texCoord+vec2(0,p.y)).rgb;
+-  vec3 d=texture(sceneColor,texCoord-vec2(0,p.y)).rgb;
++  vec3 a=aaSample(texCoord+vec2(p.x,0));
++  vec3 b=aaSample(texCoord-vec2(p.x,0));
++  vec3 c=aaSample(texCoord+vec2(0,p.y));
++  vec3 d=aaSample(texCoord-vec2(0,p.y));
+   vec3 lo=min(colour,min(min(a,b),min(c,d))), hi=max(colour,max(max(a,b),max(c,d)));
+   colour=clamp(colour+(colour-(a+b+c+d)*.25)*cv.post2.w,lo,hi);
+  }
+- if(cv.post.z>0.0) colour+=cvBloom();
+- colour=cvTone(colour);
++ if(!hdrScene) {
++  if(cv.post.z>0.0) colour+=cvBloom();
++  colour=cvTone(colour);
++ }
+ 
+  // Same formula as src/glsl/post_process_screen.fragment.glsl
+ 	// (EZ_POSTPROCESS_PALETTE path): blend/tint, then contrast, then gamma.
+diff --git a/src/vulkan_shaders/vk_sprite3d.frag b/src/vulkan_shaders/vk_sprite3d.frag
+index 3074c94..e66843f 100644
+--- a/src/vulkan_shaders/vk_sprite3d.frag
++++ b/src/vulkan_shaders/vk_sprite3d.frag
+@@ -1,4 +1,6 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
+ 
+ layout(set = 0, binding = 0) uniform sampler2D spriteTexture[2];
+ 
+@@ -12,12 +14,19 @@ layout(push_constant) uniform PushConstants {
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec4 texColour = texture(spriteTexture[0], inTexCoord);
+ 
+-	fragColour = texColour * inColor;
++	fragColour = vec4(hdrMaterial(texColour.rgb) * hdrMaterial(inColor.rgb), texColour.a * inColor.a);
+ 	if (pushConstants.alphaThreshold > 0.0 && fragColour.a <= pushConstants.alphaThreshold) {
+ 		discard;
+ 	}
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(hdrAdditive ? fragColour.rgb : vec3(0), fragColour.a);
++}
+diff --git a/src/vulkan_shaders/vk_world_alpha_textured.frag b/src/vulkan_shaders/vk_world_alpha_textured.frag
+index 5e92bcf..56af021 100644
+--- a/src/vulkan_shaders/vk_world_alpha_textured.frag
++++ b/src/vulkan_shaders/vk_world_alpha_textured.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -20,12 +22,12 @@ layout(location = 0) out vec4 fragColour;
+ // since Vulkan shaders are compiled standalone (no #include).
+ #define EZQ_SURFACE_UNDERWATER 16u
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec2 texCoord = inTexCoord;
+ 	if (pushConstants.surfaceType > 0.5 && pushConstants.surfaceType < 5.5) {
+ 		if (pushConstants.fastTurb > 0.5) {
+-			fragColour = vec4(pushConstants.color.rgb, 1.0);
++			fragColour = vec4(hdrMaterial(pushConstants.color.rgb), 1.0);
+ 			return;
+ 		}
+ 
+@@ -40,7 +42,7 @@ void main()
+ 		discard;
+ 	}
+ 
+-	fragColour = vec4(texColour.rgb, texColour.a);
++	fragColour = vec4(hdrMaterial(texColour.rgb), texColour.a);
+ 	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+@@ -56,3 +58,10 @@ void main()
+ 		fragColour = vec4(caustic * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(vec3(0), fragColour.a);
++}
+diff --git a/src/vulkan_shaders/vk_world_flat.frag b/src/vulkan_shaders/vk_world_flat.frag
+index 821b2bc..46688b3 100644
+--- a/src/vulkan_shaders/vk_world_flat.frag
++++ b/src/vulkan_shaders/vk_world_flat.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(location = 0) in vec3 inFlatColor;
+ layout(location = 1) in vec3 inDirection;
+@@ -108,12 +110,13 @@ vec3 sampleSkyboxFace(int face, vec2 uv)
+ 	return texture(skyboxFace5, uv).rgb;
+ }
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec3 base = (pushConstants.surfaceType > 0.5 || worldFlag(VK_WORLD_DRAWFLAT_COLOR))
+ 		? pushConstants.color.rgb
+ 		: max(inFlatColor, vec3(0.08));
+ 
++	base = hdrMaterial(base);
+ 	// True r_drawflat surfaces (not sky/turb, no fallback) still get shaded
+ 	// by the surface's real lightmap, same as GLC/GLM's drawflat mode -- a
+ 	// solid, completely unlit fill would otherwise flatten all depth cues.
+@@ -126,7 +129,7 @@ void main()
+ 			vec3 dir = normalize(inDirection);
+ 			int face = skyboxAxis(dir);
+ 
+-			base = sampleSkyboxFace(face, skyboxUv(face, dir));
++			base = hdrMaterial(sampleSkyboxFace(face, skyboxUv(face, dir)));
+ 		}
+ 		else if (pushConstants.useSkyTexture > 0.5) {
+ 			const float len = 3.09375;
+@@ -138,9 +141,16 @@ void main()
+ 			vec4 skyColour = texture(skyTexture, skyCoord);
+ 			vec4 cloudColour = texture(skyCloudTexture, cloudCoord);
+ 
+-			base = mix(skyColour.rgb, cloudColour.rgb, cloudColour.a);
++			base = mix(hdrMaterial(skyColour.rgb), hdrMaterial(cloudColour.rgb), cloudColour.a);
+ 		}
+ 	}
+ 
+ 	fragColour = vec4(base, 1.0);
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(vec3(0), fragColour.a);
++}
+diff --git a/src/vulkan_shaders/vk_world_lightmapped.frag b/src/vulkan_shaders/vk_world_lightmapped.frag
+index 709ebb8..f67a4d2 100644
+--- a/src/vulkan_shaders/vk_world_lightmapped.frag
++++ b/src/vulkan_shaders/vk_world_lightmapped.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D lightmapTexture[2];
+@@ -53,12 +55,12 @@ vec3 applyDrawflatTint(vec3 colour)
+ 	return colour;
+ }
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec2 texCoord = inTexCoord;
+ 	if (pushConstants.surfaceType > 0.5 && pushConstants.surfaceType < 5.5) {
+ 		if (pushConstants.fastTurb > 0.5) {
+-			fragColour = vec4(pushConstants.color.rgb, 1.0);
++			fragColour = vec4(hdrMaterial(pushConstants.color.rgb), 1.0);
+ 			return;
+ 		}
+ 
+@@ -82,7 +84,7 @@ void main()
+ 		discard;
+ 	}
+ 
+-	fragColour = vec4(applyDrawflatTint(texColour.rgb) * lightColour.rgb, 1.0);
++	fragColour = vec4(hdrMaterial(applyDrawflatTint(texColour.rgb)) * lightColour.rgb, 1.0);
+ 	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+@@ -98,3 +100,10 @@ void main()
+ 		fragColour = vec4(caustic * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(vec3(0), fragColour.a);
++}
+diff --git a/src/vulkan_shaders/vk_world_normals.frag b/src/vulkan_shaders/vk_world_normals.frag
+index 7a94004..2ae7c89 100644
+--- a/src/vulkan_shaders/vk_world_normals.frag
++++ b/src/vulkan_shaders/vk_world_normals.frag
+@@ -6,8 +6,9 @@ layout(location = 1) flat in float inSurfaceType;
+ layout(push_constant) uniform PushConstants {
+ 	mat4 mvp;
+ 	vec4 cameraPosition;
+-	float surfaceType;
+-	float zFar;
++	vec4 worldRow0;
++	vec4 worldRow1;
++	vec4 worldRow2;
+ } pushConstants;
+ 
+ layout(location = 0) out vec4 fragColour;
+@@ -28,7 +29,7 @@ void main()
+ 	// depth comparison), everything else uses actual distance from the
+ 	// camera normalized by zFar.
+ 	int surface = int(inSurfaceType);
+-	float depth = (surface != 0) ? -float(surface) : (distance(inWorldPos, pushConstants.cameraPosition.xyz) / max(pushConstants.zFar, 1.0));
++	float depth = (surface != 0) ? -float(surface) : (distance(inWorldPos, pushConstants.cameraPosition.xyz) / max(pushConstants.cameraPosition.w, 1.0));
+ 
+ 	fragColour = vec4(normal, depth);
+ }
+diff --git a/src/vulkan_shaders/vk_world_normals.vert b/src/vulkan_shaders/vk_world_normals.vert
+index 3d95c53..197761b 100644
+--- a/src/vulkan_shaders/vk_world_normals.vert
++++ b/src/vulkan_shaders/vk_world_normals.vert
+@@ -5,8 +5,9 @@ layout(location = 0) in vec3 inPosition;
+ layout(push_constant) uniform PushConstants {
+ 	mat4 mvp;
+ 	vec4 cameraPosition;
+-	float surfaceType;
+-	float zFar;
++	vec4 worldRow0;
++	vec4 worldRow1;
++	vec4 worldRow2;
+ } pushConstants;
+ 
+ // World-space position (not view-space -- vk_world.c's mvp push constant is
+@@ -28,6 +29,7 @@ void main()
+ 	clip.z = clip.z * 0.5 + clip.w * 0.5;
+ 
+ 	gl_Position = clip;
+-	outWorldPos = inPosition;
+-	outSurfaceType = pushConstants.surfaceType;
++	vec4 p=vec4(inPosition,1.0);
++	outWorldPos = vec3(dot(pushConstants.worldRow0,p),dot(pushConstants.worldRow1,p),dot(pushConstants.worldRow2,p));
++	outSurfaceType = max(0.0,-pushConstants.cameraPosition.w);
+ }
+diff --git a/src/vulkan_shaders/vk_world_outline.frag b/src/vulkan_shaders/vk_world_outline.frag
+index a8aa83d..f6d7d8d 100644
+--- a/src/vulkan_shaders/vk_world_outline.frag
++++ b/src/vulkan_shaders/vk_world_outline.frag
+@@ -1,4 +1,6 @@
+ #version 450
++#extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
+ 
+ layout(location = 0) in vec2 texCoord;
+ layout(location = 0) out vec4 fragColour;
+@@ -17,8 +19,47 @@ layout(push_constant) uniform PushConstants {
+ 	float aoRadius;
+ 	float edges;
+  float edgeOpacity;
++ // Explicit offsets match the bounded 112-byte C block.
++ layout(offset=64) vec4 rayRight;
++ vec4 rayUp;
++ vec4 rayForward;
+ } pc;
+ 
++// SSAO-001, OpenAI Codex: camera-relative world positions, not raw depth
++// differences. Hemisphere bias rejects coplanar self-occlusion; radial range
++// weighting rejects unrelated foreground surfaces and invalid sky/water samples.
++vec3 positionAt(vec2 uv, float distanceFromCamera) {
++ vec3 ray=pc.rayForward.xyz+pc.rayRight.xyz*(uv.x*2.0-1.0)+pc.rayUp.xyz*(1.0-uv.y*2.0);
++ return normalize(ray)*distanceFromCamera;
++}
++float ssaoContribution(vec3 normal, vec3 delta, float radius, float bias) {
++ float d=length(delta);
++ if(d<.001 || d>=radius) return 0.0;
++ float hemisphere=max(0.0,dot(normal,delta)-bias)/d;
++ return hemisphere*(1.0-smoothstep(radius*.25,radius,d));
++}
++float ssao(vec4 center) {
++ vec3 position=positionAt(texCoord,center.a*pc.zFar);
++ vec3 normal=normalize(center.rgb);
++ if(dot(normal,-position)<0.0) normal=-normal;
++ vec2 focal=.5/vec2(length(pc.rayRight.xyz),length(pc.rayUp.xyz));
++ vec2 radius=pc.aoRadius/max(length(position),1.0)*focal;
++ int samples=clamp(int(pc.rayRight.w),8,32);
++ float occlusion=0.0;
++ for(int i=0;i<32;++i) {
++  if(i>=samples) break;
++  float angle=float(i)*2.39996323;
++  float scale=sqrt((float(i)+.5)/float(samples));
++  vec2 uv=texCoord+vec2(cos(angle),sin(angle))*radius*scale;
++  if(any(lessThan(uv,vec2(0)))||any(greaterThan(uv,vec2(1)))) continue;
++  vec4 neighbour=texture(normalTexture,uv);
++  if(neighbour.a<=0.0) continue;
++  vec3 delta=positionAt(uv,neighbour.a*pc.zFar)-position;
++  occlusion+=ssaoContribution(normal,delta,pc.aoRadius,pc.rayForward.w);
++ }
++ return clamp(occlusion/float(samples)*4.0*pc.aoStrength,0.0,pc.aoStrength);
++}
++
+ // Port of GLM's fx_world_geometry.fragment.glsl -- see that file for the
+ // original. Same finite-difference edge test: a real normal discontinuity
+ // (vec_nequ) always draws an outline; otherwise a second-derivative depth
+@@ -49,7 +90,7 @@ void drawEdges()
+ 	    (right.a != 0.0 && vec_nequ(center.rgb, right.rgb)) ||
+ 	    (up.a    != 0.0 && vec_nequ(center.rgb, up.rgb   )) ||
+ 	    (down.a  != 0.0 && vec_nequ(center.rgb, down.rgb ))) {
+-		fragColour = vec4(pc.outlineColor, 1.0);
++		fragColour = vec4(hdrMaterial(pc.outlineColor), 1.0);
+ 		return;
+ 	}
+ 
+@@ -59,7 +100,7 @@ void drawEdges()
+ 	if (center.a != 0.0 && (
+ 	    (left.a != 0.0 && right.a != 0.0 && zDiffH) ||
+ 	    (down.a != 0.0 && up.a    != 0.0 && zDiffV))) {
+-		fragColour = vec4(pc.outlineColor, 1.0);
++		fragColour = vec4(hdrMaterial(pc.outlineColor), 1.0);
+ 		return;
+ 	}
+ 
+@@ -69,10 +110,12 @@ void drawEdges()
+ // Non-temporal world contact shading. Same-plane samples are excluded so a
+ // sloping wall cannot darken itself. Depth discontinuities beyond the radius
+ // and sky/water sentinels never occlude. Drawn before players and the HUD.
+-void main() {
++void shadeScene() {
+  vec4 center=texture(normalTexture,texCoord);
+  float ao=0.0;
+  if(pc.aoStrength>0.0 && center.a>0.0) {
++  if(pc.rayRight.w>0.0) ao=ssao(center);
++  else {
+   float depth=center.a*pc.zFar;
+   float pixels=clamp(pc.aoRadius/max(depth,1.0)/pc.invHeight*.5,1.0,40.0);
+   for(int i=0;i<8;++i) {
+@@ -85,8 +128,16 @@ void main() {
+     ao+=bend*smoothstep(0.0,pc.aoRadius*.2,dz)*(1.0-dz/pc.aoRadius);
+   }
+   ao=clamp(ao/8.0*pc.aoStrength*2.0,0.0,pc.aoStrength);
++  }
+  }
+  fragColour=vec4(0);
+  if(pc.edges>.5) { drawEdges(); fragColour.a *= pc.edgeOpacity; }
+  if(fragColour.a==0.0) fragColour=vec4(0,0,0,ao);
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(vec3(0), 0.0);
++}
+diff --git a/src/vulkan_shaders/vk_world_overlay.frag b/src/vulkan_shaders/vk_world_overlay.frag
+index 82afe99..6134794 100644
+--- a/src/vulkan_shaders/vk_world_overlay.frag
++++ b/src/vulkan_shaders/vk_world_overlay.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D overlayTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -11,7 +13,7 @@ layout(location = 1) in vec2 inDetailCoord;
+ 
+ layout(location = 0) out vec4 fragColour;
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec4 texColour = texture(overlayTexture[0], inTexCoord);
+ 
+@@ -24,5 +26,13 @@ void main()
+ 		discard;
+ 	}
+ 
+-	fragColour = texColour;
++	// Fullbright/luma overlay: linear emission may exceed display white.
++	fragColour = vec4(hdrMaterial(texColour.rgb) * (hdrScene ? 2.0 : 1.0), texColour.a);
++}
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(fragColour.rgb, fragColour.a);
+ }
+diff --git a/src/vulkan_shaders/vk_world_textured.frag b/src/vulkan_shaders/vk_world_textured.frag
+index 5f5327f..47b3baa 100644
+--- a/src/vulkan_shaders/vk_world_textured.frag
++++ b/src/vulkan_shaders/vk_world_textured.frag
+@@ -1,5 +1,7 @@
+ #version 450
+ #extension GL_GOOGLE_include_directive : require
++#include "vk_hdr.glsl"
++#extension GL_GOOGLE_include_directive : require
+ 
+ layout(set = 0, binding = 0) uniform sampler2D worldTexture[2];
+ layout(set = 1, binding = 0) uniform sampler2D detailTexture[2];
+@@ -51,12 +53,12 @@ vec3 applyDrawflatTint(vec3 colour)
+ 	return colour;
+ }
+ 
+-void main()
++void shadeScene()
+ {
+ 	vec2 texCoord = inTexCoord;
+ 	if (pushConstants.surfaceType > 0.5 && pushConstants.surfaceType < 5.5) {
+ 		if (pushConstants.fastTurb > 0.5) {
+-			fragColour = vec4(pushConstants.color.rgb, 1.0);
++			fragColour = vec4(hdrMaterial(pushConstants.color.rgb), 1.0);
+ 			return;
+ 		}
+ 
+@@ -74,7 +76,7 @@ void main()
+ 		discard;
+ 	}
+ 
+-	fragColour = vec4(applyDrawflatTint(texColour.rgb), 1.0);
++	fragColour = vec4(hdrMaterial(applyDrawflatTint(texColour.rgb)), 1.0);
+ 	if (worldFlag(VK_WORLD_DETAIL)) {
+ 		vec4 detail = texture(detailTexture[0], inDetailCoord);
+ 		fragColour = vec4(detail.rgb * fragColour.rgb * 2.0, fragColour.a);
+@@ -90,3 +92,10 @@ void main()
+ 		fragColour = vec4(caustic * fragColour.rgb * 2.0, fragColour.a);
+ 	}
+ }
++
++// HDR-001: emission follows the same coverage as color, independently of albedo.
++layout(location=1) out vec4 fragEmission;
++void main() {
++ shadeScene();
++ fragEmission=vec4(vec3(0), fragColour.a);
++}

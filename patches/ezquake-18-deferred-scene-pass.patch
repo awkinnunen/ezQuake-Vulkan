@@ -1,0 +1,259 @@
+diff --git a/src/vk_local.h b/src/vk_local.h
+--- a/src/vk_local.h
++++ b/src/vk_local.h
+@@ -200,6 +200,9 @@
+ 
+ // vk_main.c
+ VkCommandBuffer VK_CurrentCommandBuffer(void);
++// PERF-OPT-001: scene pass may be deferred while its command buffer is active.
++void VK_BeginScenePass(void);
++void VK_EndScenePass(void);
+ 
+ // (common)
+ typedef struct vk_options_s {
+diff --git a/src/vk_main.c b/src/vk_main.c
+--- a/src/vk_main.c
++++ b/src/vk_main.c
+@@ -39,6 +39,11 @@
+ vk_options_t vk_options;
+ static qbool vk_recreate_swapchain_requested;
+ static qbool vk_recreate_surface_requested;
++// PERF-OPT-001, OpenAI Codex, 2026-09-14: defer the initial scene pass until
++// after the normals prepass. Keep command-buffer and render-pass state separate.
++static qbool vk_scene_pass_started;
++static qbool vk_scene_clear_color;
++static VkClearValue vk_scene_clear_values[2];
+ // A freshly (re)created swapchain/MSAA image's real Vulkan layout is
+ // VK_IMAGE_LAYOUT_UNDEFINED -- it has never been rendered to or presented.
+ // vk_renderpass_main_noclear's LOAD op (picked whenever clear_color below
+@@ -317,14 +322,8 @@
+ 
+ static void VK_ClearRenderingSurface(qbool clear_color)
+ {
+-	// By the time R_Clear() calls this (from R_RenderView(), after
+-	// R_BeginRendering() -> renderer.BeginFrame() already ran), the render
+-	// pass for this frame has already begun with its loadOp baked in --
+-	// Vulkan render passes can't change that mid-recording. VK_BeginFrame()
+-	// (vk_main.c) makes the equivalent decision itself, before beginning the
+-	// render pass, by picking between vk_renderpass_main (CLEAR) and
+-	// vk_renderpass_main_noclear (LOAD) via VK_FrameRenderPass(). Nothing
+-	// left to do here.
++	// VK_BeginFrame latches the equivalent clear/load decision once, including
++	// swapchain initialization. A deferred scene pass uses that same decision.
+ 	(void)clear_color;
+ }
+ 
+@@ -494,8 +493,6 @@
+ {
+ 	VkResult result;
+ 	VkCommandBufferBeginInfo beginInfo = { 0 };
+-	VkRenderPassBeginInfo renderPassInfo = { 0 };
+-	VkClearValue clearValues[2] = { 0 };
+ 	VkCommandBuffer commandBuffer;
+ 	uint32_t frameIndex;
+ 	VkFence frameFence;
+@@ -667,23 +664,40 @@
+ 		--vk_force_clear_frames_remaining;
+ 	}
+ 
+-	clearValues[0].color.float32[0] = vk_options.clearColor[0];
+-	clearValues[0].color.float32[1] = vk_options.clearColor[1];
+-	clearValues[0].color.float32[2] = vk_options.clearColor[2];
+-	clearValues[0].color.float32[3] = vk_options.clearColor[3] ? vk_options.clearColor[3] : 1.0f;
+-	clearValues[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
+-	clearValues[1].depthStencil.stencil = 0;
+-
+-	// Real gamma/contrast/FXAA (VK_PostProcessActive) route the main pass into
+-	// the offscreen target instead of the swapchain image directly; the
+-	// composite pass that reads it back and writes the swapchain image runs
+-	// at the end of VK_EndFrame, after this render pass ends.
++	// Latch the actual clear values too: R_Clear can update the background
++	// color later in the frame (for example when entering fog).
++	vk_scene_clear_values[0].color.float32[0] = vk_options.clearColor[0];
++	vk_scene_clear_values[0].color.float32[1] = vk_options.clearColor[1];
++	vk_scene_clear_values[0].color.float32[2] = vk_options.clearColor[2];
++	vk_scene_clear_values[0].color.float32[3] = vk_options.clearColor[3] ? vk_options.clearColor[3] : 1.0f;
++	vk_scene_clear_values[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
++	vk_scene_clear_values[1].depthStencil.stencil = 0;
+ 	vk_options.swapChain.postProcessActive = VK_PostProcessActive();
+-
++	vk_scene_clear_color = clear_color || vk_options.swapChain.postProcessActive;
++	vk_scene_pass_started = false;
++	vk_options.frame.active = true;
++	vk_options.frame.hudStarted = false;
++
++	// The single-view normals/AO prepass runs before any scene draws. Starting
++	// the main pass now would clear, store and resolve MSAA color only to end
++	// it immediately for that prepass. Retain the existing multiview ordering.
++	if (!VK_WorldOutlineActive() || cl_multiview.integer) {
++		VK_BeginScenePass();
++	}
++}
++
++void VK_BeginScenePass(void)
++{
++	VkCommandBuffer commandBuffer = VK_CurrentCommandBuffer();
++	VkRenderPassBeginInfo renderPassInfo = { 0 };
++
++	if (commandBuffer == VK_NULL_HANDLE || vk_scene_pass_started || vk_options.frame.hudStarted) {
++		return;
++	}
+ 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+-	// An offscreen image ended the preceding frame as a sampled texture.
+-	// Discard it before the new scene instead of assuming PRESENT layout.
+-	renderPassInfo.renderPass = VK_FrameRenderPass(clear_color || vk_options.swapChain.postProcessActive);
++	// First use honors the frame's latched clear (including offscreen targets).
++	// A resumed pass LOADs color and clears depth, exactly as before this change.
++	renderPassInfo.renderPass = VK_FrameRenderPass(vk_scene_clear_color);
+ 	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
+ 		VK_PostProcessFramebuffer(vk_options.frame.imageIndex) : vk_options.swapChain.framebuffers[vk_options.frame.imageIndex];
+ 	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
+@@ -693,12 +707,20 @@
+ 	renderPassInfo.renderArea.offset.x = 0;
+ 	renderPassInfo.renderArea.offset.y = 0;
+ 	renderPassInfo.renderArea.extent = vk_options.swapChain.imageSize;
+-	renderPassInfo.clearValueCount = sizeof(clearValues) / sizeof(clearValues[0]);
+-	renderPassInfo.pClearValues = clearValues;
++	renderPassInfo.clearValueCount = sizeof(vk_scene_clear_values) / sizeof(vk_scene_clear_values[0]);
++	renderPassInfo.pClearValues = vk_scene_clear_values;
+ 
+ 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+-	vk_options.frame.active = true;
+-	vk_options.frame.hudStarted = false;
++	vk_scene_pass_started = true;
++}
++
++void VK_EndScenePass(void)
++{
++	if (vk_scene_pass_started) {
++		vkCmdEndRenderPass(VK_CurrentCommandBuffer());
++		vk_scene_pass_started = false;
++		vk_scene_clear_color = false;
++	}
+ }
+ 
+ VkCommandBuffer VK_CurrentCommandBuffer(void)
+@@ -714,7 +736,9 @@
+  VkCommandBuffer commandBuffer=VK_CurrentCommandBuffer();
+  VkRenderPassBeginInfo pass={0};
+  if(!commandBuffer||vk_options.frame.hudStarted) return;
+- vkCmdEndRenderPass(commandBuffer);
++ // Menus, loading screens and early scene exits still need initialized color.
++ VK_BeginScenePass();
++ VK_EndScenePass();
+  if(vk_options.swapChain.postProcessActive) {
+   VK_PostProcessTransitionForSampling(commandBuffer,vk_options.frame.imageIndex);
+   pass.renderPass=VK_PostProcessRenderPass();
+@@ -1078,9 +1102,15 @@
+ 	if (vk_options.frame.active && vk_options.frame.commandBuffers) {
+ 		VkCommandBuffer commandBuffer = vk_options.frame.commandBuffers[vk_options.frame.imageIndex];
+ 
++		if (vk_options.frame.hudStarted || vk_scene_pass_started) {
++			vkCmdEndRenderPass(commandBuffer);
++		}
+ 		vkEndCommandBuffer(commandBuffer);
+ 		vk_options.frame.active = false;
+ 	}
++	vk_scene_pass_started = false;
++	vk_scene_clear_color = false;
++	vk_options.frame.hudStarted = false;
+ }
+ 
+ void VK_Shutdown(r_shutdown_mode_t mode)
+diff --git a/src/vk_world.c b/src/vk_world.c
+--- a/src/vk_world.c
++++ b/src/vk_world.c
+@@ -2120,58 +2120,10 @@
+ 	}
+ }
+ 
+-// Reopens the main render pass mid-frame, after the normals prepass below has
+-// ended it. Mirrors VK_BeginFrame's own framebuffer selection exactly (the
+-// post-process offscreen target when active, the swapchain image otherwise) --
+-// getting this wrong would draw the rest of the frame into the wrong image.
+-//
+-// Uses the LOAD (noclear) variant so the colour the first main-pass instance
+-// produced survives. Note the depth attachment still CLEARs in *both*
+-// variants (see VK_RenderPassCreateVariant: depth always clears, matching
+-// GL_Clear()), which is precisely why this reopen has to happen before any
+-// world geometry is drawn -- at this point the first main-pass instance
+-// contained nothing but its own clear, so re-clearing depth loses nothing.
+-static void VK_WorldBeginMainRenderPassNoClear(VkCommandBuffer commandBuffer)
+-{
+-	VkRenderPassBeginInfo renderPassInfo = { 0 };
+-	VkClearValue clearValues[3] = { { { { 0 } } } };
+-	uint32_t imageIndex = vk_options.frame.imageIndex;
+-
+-	clearValues[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
+-	clearValues[1].depthStencil.stencil = 0;
+-
+-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+-	renderPassInfo.renderPass = VK_FrameRenderPass(false);
+-	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
+-		VK_PostProcessFramebuffer(imageIndex) : vk_options.swapChain.framebuffers[imageIndex];
+-	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
+-		renderPassInfo.framebuffer = vk_options.swapChain.framebuffers[imageIndex];
+-	}
+-	renderPassInfo.renderArea.offset.x = 0;
+-	renderPassInfo.renderArea.offset.y = 0;
+-	renderPassInfo.renderArea.extent = vk_options.swapChain.imageSize;
+-	renderPassInfo.clearValueCount = sizeof(clearValues) / sizeof(clearValues[0]);
+-	renderPassInfo.pClearValues = clearValues;
+-
+-	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+-}
+-
+-// gl_outline & 2 normals prepass. Called from VK_RenderView with the main
+-// render pass ALREADY ENDED by the caller, and leaves it re-begun on return
+-// (so the caller's existing draw loop continues unchanged).
+-//
+-// Why a separate geometry pass at all, when GLM gets this for free: GLM's
+-// GL_FramebufferStartWorldNormals attaches a second colour target and its
+-// world shaders write normals via MRT in the same draw. Replicating that here
+-// would mean giving all five world pipelines a second colour attachment plus
+-// a matching main-render-pass variant for every MSAA/post-process
+-// combination. Redrawing position-only geometry into a tiny dedicated pass is
+-// far less invasive and touches none of the existing pipelines -- at the cost
+-// of a second pass over the world's vertices, which is why the whole thing is
+-// gated on VK_WorldOutlineActive().
+-//
+-// Returns false if anything was unavailable, in which case the main render
+-// pass has NOT been disturbed and the caller should just proceed normally.
++// PERF-OPT-001, OpenAI Codex, 2026-09-14.
++// The normals/AO prepass runs outside the scene render pass. The caller starts
++// (or resumes) the scene afterward, even if these resources are unavailable.
++// Its normal/depth output and draw ordering are unchanged.
+ static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, VkBuffer indexBuffer)
+ {
+ 	VkRenderPassBeginInfo renderPassInfo = { 0 };
+@@ -2418,25 +2370,13 @@
+ 		}
+ 	}
+ 
+-	// gl_outline & 2 (world outline). The normals prepass needs its own render
+-	// pass, and Vulkan render passes cannot nest -- so the main render pass
+-	// VK_BeginFrame opened has to be closed and reopened around it. This is
+-	// the earliest point in the frame where worldDraws[] is fully populated
+-	// (R_DrawWorld/R_DrawEntities already ran, feeding VK_WorldQueueModel) AND
+-	// nothing has been drawn into the main pass yet beyond its own clear --
+-	// which is what makes closing it here lossless, since the LOAD variant
+-	// used to reopen it still re-clears depth. Doing this any later (e.g. after
+-	// the opaque loop) would throw away the world's depth buffer.
+-	//
+-	// Everything is inside the same command buffer, sequentially; no extra
+-	// barrier is needed beyond the normals render pass's own attachment
+-	// finalLayout, and render-pass boundaries themselves guarantee the
+-	// write-then-sample ordering the composite depends on.
++	// A deferred first scene pass has nothing to end; its clear is preserved.
++	// Multiview keeps the prior end/prepass/resume sequence and LOAD behavior.
+ 	if (VK_WorldOutlineActive()) {
+-		vkCmdEndRenderPass(commandBuffer);
++		VK_EndScenePass();
+ 		worldOutline = VK_DrawWorldNormalsPass(commandBuffer, vertexBuffer, indexBuffer);
+-		VK_WorldBeginMainRenderPassNoClear(commandBuffer);
+-	}
++	}
++	VK_BeginScenePass();
+ 
+ 	VK_WorldSetViewportScissor(commandBuffer);
+ 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);

@@ -481,7 +481,7 @@ if(RENDERER_VULKAN)
         add_custom_command(
                 OUTPUT ${output_file}
                 COMMAND ${GLSLANG_VALIDATOR} -V ${source_file} -o ${output_file}
-                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl
+                DEPENDS ${source_file} ${VULKAN_SHADER_DIR}/vk_world_push.glsl ${VULKAN_SHADER_DIR}/vk_world_flags.h ${VULKAN_SHADER_DIR}/vk_skybox_uv.glsl ${VULKAN_SHADER_DIR}/vk_alias_lighting.glsl ${VULKAN_SHADER_DIR}/vk_competitive.glsl ${VULKAN_SHADER_DIR}/vk_hdr.glsl ${VULKAN_SHADER_DIR}/vk_shadows.glsl ${VULKAN_SHADER_DIR}/vk_shadow_face.glsl
                 COMMENT "Compiling Vulkan shader ${source_file}"
                 VERBATIM
         )
@@ -511,6 +511,8 @@ if(RENDERER_VULKAN)
     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_normals.vert vk_world_normals_vert.spv)
     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_normals.frag vk_world_normals_frag.spv)
     add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_world_outline.frag vk_world_outline_frag.spv)
+    add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_shadow.vert vk_shadow_vert.spv)
+    add_vulkan_shader(vulkan_spirv_shaders ${VULKAN_SHADER_DIR}/vk_shadow.frag vk_shadow_frag.spv)
     add_resources(shaders_vulkan ${vulkan_spirv_shaders})
 
     set(vulkan_renderer_headers
@@ -541,6 +543,7 @@ if(RENDERER_VULKAN)
             ${SOURCE_DIR}/vk_window_surface.c
             ${SOURCE_DIR}/vk_competitive.c
             ${SOURCE_DIR}/vk_world.c
+            ${SOURCE_DIR}/vk_shadows.c
             ${vulkan_renderer_headers}
     )
     source_group(TREE ${SOURCE_DIR} PREFIX "Source Files/vulkan" FILES ${vulkan_renderer})

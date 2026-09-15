@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // gl_lightmaps.c: lightmap-related code
 
 #include "quakedef.h"
+#include "vk_shadows.h"
 #include "gl_model.h"
 #include "rulesets.h"
 #include "utils.h"
@@ -89,6 +90,9 @@ static void R_BuildDlightList (msurface_t *surf)
 		}
 
 		dlightbits &= ~(1<<lnum);
+#ifdef RENDERER_OPTION_VULKAN
+		if(VK_ShadowManagedLight(lnum)) continue;
+#endif
 
 		dist = PlaneDiff(cl_dlights[lnum].origin, surf->plane);
 		irad = (cl_dlights[lnum].radius - fabs(dist)) * 256;

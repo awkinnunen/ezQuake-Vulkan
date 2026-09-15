@@ -3,13 +3,18 @@
 CV-001, 2026-09-13. Implementation and documentation: OpenAI Codex, directed by
 the user. Based on tibazera's Vulkan ezQuake renderer; no replacement game assets.
 
+2026-09-14 update, OpenAI Codex: Linear HDR, SSAO method/samples/bias and bloom
+source are implemented. At the user's request, project/ESDF/WASD profiles enable
+HDR, SSAO and emissive bloom while retaining their prior effect strengths.
+See [RASTER-FEATURES.md](RASTER-FEATURES.md) for current controls and evidence.
+
 ## Using the feature
 
 Launch `Start-Vulkan-Fullscreen.cmd` and open **Options > Graphics**:
 
 - **Competitive Visuals** (`menu_competitive`): 34 settings on Profiles, World,
   Lighting and Silhouettes pages, focused on readability and player distinction.
-- **Visual Effects** (`menu_visual_effects`): 14 settings on Effects and Image
+- **Visual Effects** (`menu_visual_effects`): 19 settings on Effects and Image
   pages, including bloom, contact AO, projected shadows, surface decoration,
   exposure, tone curve, sharpening, AA and texture filtering.
 
@@ -29,13 +34,14 @@ F6 compares the competitive look with the original; F7 resets the current page.
 Clean, Soft Cel, Original and comparison leave general effects unchanged.
 General effects work independently of the competitive Enabled switch.
 
-MSAA is applied when video initializes. A persistent warning appears after a
-pending MSAA change; **Restart video (F5)** applies it and clears the warning.
-The MSAA row reports the actual active sample count, including hardware limits.
+MSAA and Linear HDR are applied when video initializes. A persistent warning
+appears after either changes; **Restart video (F5)** applies it and clears the
+warning. Their rows report the active sample count/HDR state, including hardware
+limits and fallback. SSAO method/samples/bias and bloom source update live.
 The original game remains loaded. Other settings in these two menus update live,
 subject to assets, relevant geometry and server rules.
 
-All 48 controls have stable rendered-image evidence in
+The prior 48-control version has stable rendered-image evidence in
 [VISUAL-TEST-RESULTS.md](VISUAL-TEST-RESULTS.md), alongside menu and dependency tests.
 
 The user approved the saved visual settings as project configuration defaults
@@ -115,15 +121,14 @@ matrix work. This is not the separate bounded-model fallback milestone.
 The scene-to-HUD split fixes the next-frame offscreen image layout, uses compatible
 single-sample HUD/composite passes, and preserves MSAA colour/depth when the scene
 pass is resumed after world normals. Multiview uses the engine's two-pass 3D/2D
-schedule; recorded multiview acceptance is still pending.
+schedule; SHADOW-002 now verifies 0/2/4/0 views with the new raster effects.
 
-The scene target remains **8-bit**: exposure/tone curves and bloom are implemented,
-but this is not a floating-point HDR pipeline. Bloom currently selects bright
-pixels, without a dedicated emissive mask/contribution control. AO is world-only
-contact shading, not full scene/model SSAO. The shadow slider controls inherited
-projected model shadows, not new shadow maps. Full HDR/emissive buffers, dynamic
-shadow maps and budgets, temporal AA/upscaling and temporal accumulation remain
-backend work in IMPLEMENTATION-PLAN.md. No inert controls are presented for them.
+RASTER-001 subsequently added an optional floating-point HDR scene target and
+scene-depth SSAO; see RASTER-FEATURES.md. SHADOW-001/002 added dynamic and map-light
+shadow maps, spots, caching and budgets; see DYNAMIC-SHADOWS.md. The Model shadows
+slider still controls inherited projected shadows independently. Temporal
+AA/upscaling and temporal accumulation remain backend work
+in IMPLEMENTATION-PLAN.md. No inert controls are presented for them.
 The existing Vulkan FXAA remains an approximation, not NVIDIA quality-preset parity.
 
 ## Validation
@@ -238,3 +243,8 @@ On/Off and changes the intended enabled Vivid/legacy-profile value from 0.5 to 1
 The active config already has 0 and that user setting is preserved. Other visual
 ranges are unchanged. Vivid still deliberately disables MSAA, FXAA, detail
 overlays and palette overrides; it is a style profile, not All Effects.
+
+
+## Dynamic shadows (SHADOW-001)
+
+Thirteen live controls are on the general Visual Effects / Effects page under Light and shadow maps, with prerequisite help and disabled dependent rows. They are independent of Competitive Visuals styling. The existing Shadow level control still means styled-lighting brightness, and Model shadows still means legacy projected shadows. See DYNAMIC-SHADOWS.md.

@@ -27,6 +27,91 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "r_state.h"
 
 #include "vk_local.h"
+#include "competitive_visuals.h"
+#include "vk_shadows.h"
+
+static VkFormat sceneFormat;
+VkFormat VK_SceneFormat(void) { return sceneFormat; }
+qbool VK_HDRActive(void) { return sceneFormat == VK_FORMAT_R16G16B16A16_SFLOAT; }
+void VK_ConfigureSceneFormat(void)
+{
+	VkFormatProperties format;
+	VkImageFormatProperties image;
+	VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+		VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+		VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+	int requested;
+	// Video starts before M_Init. Adopt saved/temp cvars before selecting the
+	// first scene target, not only after a later user-triggered restart.
+	CV_InitSettings();
+	requested = (int)CV_Value(CV_hdr);
+	sceneFormat = vk_options.physicalDeviceSurfaceFormat.format;
+	vkGetPhysicalDeviceFormatProperties(vk_options.physicalDevice, VK_FORMAT_R16G16B16A16_SFLOAT, &format);
+	if (requested && (format.optimalTilingFeatures & needed) == needed &&
+		vkGetPhysicalDeviceImageFormatProperties(vk_options.physicalDevice, VK_FORMAT_R16G16B16A16_SFLOAT,
+		VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+		0, &image) == VK_SUCCESS && (image.sampleCounts & vk_options.msaaSamples)) {
+		sceneFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+	}
+	CV_HDRVideoApplied(requested, VK_HDRActive());
+	Con_Printf("vulkan: scene format %s (HDR requested %d, active %d)\n",
+		VK_HDRActive() ? "RGBA16F linear" : "SDR compatibility", requested, VK_HDRActive());
+	if (requested && !VK_HDRActive()) Con_Printf("vulkan: HDR format/sample combination unsupported; using SDR. Try lower MSAA.\n");
+}
+
+// Specialization is immutable per pipeline; HUD shaders have no constant 31.
+static VkResult ScenePipeline(const VkGraphicsPipelineCreateInfo *info, VkPipeline *pipeline, qbool shadows)
+{
+	VkGraphicsPipelineCreateInfo copy = *info;
+	VkPipelineShaderStageCreateInfo stages[2];
+	VkBool32 flags[3] = {VK_HDRActive(), VK_FALSE, shadows};
+	VkSpecializationMapEntry entries[3] = {{31, 0, sizeof(VkBool32)}, {32, sizeof(VkBool32), sizeof(VkBool32)}, {33, 2*sizeof(VkBool32), sizeof(VkBool32)}};
+	VkSpecializationInfo spec = {3, entries, sizeof(flags), flags};
+	VkPipelineColorBlendStateCreateInfo blend;
+	VkPipelineColorBlendAttachmentState attachments[2];
+	uint32_t i;
+	if (info->pColorBlendState && info->pColorBlendState->attachmentCount) {
+		const VkPipelineColorBlendAttachmentState *b=info->pColorBlendState->pAttachments;
+		flags[1]=b->blendEnable && b->dstColorBlendFactor==VK_BLEND_FACTOR_ONE;
+	}
+	assert(info->stageCount <= 2);
+	for (i=0; i<info->stageCount; ++i) {
+		stages[i] = info->pStages[i];
+		assert(!stages[i].pSpecializationInfo);
+		if (stages[i].stage == VK_SHADER_STAGE_FRAGMENT_BIT) stages[i].pSpecializationInfo = &spec;
+	}
+	copy.pStages = stages;
+	if (VK_HDRActive() && info->renderPass == VK_MainRenderPass()) {
+		blend = *info->pColorBlendState;
+		attachments[0] = attachments[1] = blend.pAttachments[0];
+		blend.attachmentCount = 2;
+		blend.pAttachments = attachments;
+		copy.pColorBlendState = &blend;
+	}
+	return vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &copy, NULL, pipeline);
+}
+
+// SHADOW-002: specialization removes the shadow loop and its register cost when off.
+static struct {VkPipeline on,off;} shadowVariants[64];
+static int shadowVariantCount;
+VkResult VK_CreateScenePipeline(const VkGraphicsPipelineCreateInfo *info,VkPipeline *pipeline) {return ScenePipeline(info,pipeline,true);}
+VkResult VK_CreateShadowScenePipeline(const VkGraphicsPipelineCreateInfo *info,VkPipeline *pipeline) {
+ VkResult result;VkPipeline off;
+ if(shadowVariantCount==64) return VK_ERROR_TOO_MANY_OBJECTS;
+ result=ScenePipeline(info,&off,false);if(result!=VK_SUCCESS)return result;
+ result=ScenePipeline(info,pipeline,true);
+ if(result!=VK_SUCCESS){vkDestroyPipeline(vk_options.logicalDevice,off,NULL);return result;}
+ shadowVariants[shadowVariantCount].on=*pipeline;shadowVariants[shadowVariantCount++].off=off;return result;
+}
+VkPipeline VK_ShadowScenePipeline(VkPipeline pipeline) {
+ int i;if(VK_ShadowWorkPending())return pipeline;
+ for(i=0;i<shadowVariantCount;++i)if(shadowVariants[i].on==pipeline)return shadowVariants[i].off;
+ return pipeline;
+}
+void VK_ShadowPipelineShutdown(void) {
+ int i;for(i=0;i<shadowVariantCount;++i)vkDestroyPipeline(vk_options.logicalDevice,shadowVariants[i].off,NULL);
+ shadowVariantCount=0;
+}
 
 typedef enum {
 	vk_renderpass_main,
@@ -38,6 +123,9 @@ typedef enum {
 	// valid to use with this one; only vkCmdBeginRenderPass needs to pick
 	// between them, done once per frame in VK_BeginFrame().
 	vk_renderpass_main_noclear,
+	// PERF-OPT-002, OpenAI Codex: single-view offscreen pass is terminal.
+	// Its resolved color is sampled; multisample color is never LOADed again.
+	vk_renderpass_main_terminal,
 	// Second pass used only when VK_PostProcessActive() is true: a single
 	// fullscreen-quad subpass that reads the offscreen color target the main
 	// pass just wrote (see VK_CreatePostProcessResources) via sampler, applies
@@ -62,7 +150,8 @@ static VkRenderPass renderPasses[vk_renderpass_count];
 static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 {
 	qbool msaa = vk_options.msaaSamples > VK_SAMPLE_COUNT_1_BIT;
-	VkAttachmentDescription attachments[3];
+	VkAttachmentDescription attachments[5];
+	VkAttachmentReference colors[2], resolves[2];
 	VkAttachmentReference colorAttachmentRef;
 	VkAttachmentReference depthAttachmentRef;
 	VkAttachmentReference resolveAttachmentRef;
@@ -71,25 +160,21 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	VkRenderPassCreateInfo renderPassInfo;
 
 	// Attachment 0: the color attachment every pipeline actually draws into.
-	// Without MSAA this *is* the swapchain image (presented directly, hence
-	// finalLayout PRESENT_SRC_KHR below). With MSAA it's the offscreen
-	// multisampled image from VK_CreateSwapChainMSAAColorResources -- it's
-	// never presented, only resolved into attachment 2, so it stays in
-	// COLOR_ATTACHMENT_OPTIMAL the whole time and is never stored (resolve
-	// reads it instead of a STORE_OP write).
+	// Without MSAA this is the scene image (swapchain in the direct path,
+	// otherwise offscreen). With MSAA it resolves into attachment 2.
+	// Only a terminal single-view offscreen pass can discard MSAA colour;
+	// resumed/direct LOAD paths must retain the multisample contents.
 	VK_InitialiseStructure(attachments[0]);
-	attachments[0].format = vk_options.physicalDeviceSurfaceFormat.format;
+	attachments[0].format = VK_SceneFormat();
 	attachments[0].samples = vk_options.msaaSamples ? vk_options.msaaSamples : VK_SAMPLE_COUNT_1_BIT;
 	attachments[0].loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Resumed after world normals/AO.
+	attachments[0].storeOp = (msaa && id == vk_renderpass_main_terminal) ?
+		VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
 	attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	if (msaa) {
-		// The multisampled image is exclusively a render target -- LOAD's
-		// "preserve previous content" only matters for the resolved/
-		// presented attachment 2 below, so this one simply always starts
-		// from COLOR_ATTACHMENT_OPTIMAL (its only other state, set by this
-		// same finalLayout) rather than PRESENT_SRC_KHR, which it never is.
+	if (msaa || VK_HDRActive()) {
+		// MSAA/HDR images are render targets, never directly presented. A
+		// resumed pass preserves their contents in COLOR_ATTACHMENT_OPTIMAL.
 		attachments[0].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	}
@@ -111,7 +196,8 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	// gl_misc.c, which only gates GL_COLOR_BUFFER_BIT on clear_color and
 	// always ORs in GL_DEPTH_BUFFER_BIT.
 	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Preserve depth across scene subpasses.
+	// Every scene pass CLEARs depth; no depth sampling or depth resolve exists.
+	attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -124,7 +210,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	// when multisampling.
 	if (msaa) {
 		VK_InitialiseStructure(attachments[2]);
-		attachments[2].format = vk_options.physicalDeviceSurfaceFormat.format;
+		attachments[2].format = VK_SceneFormat();
 		attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
 		attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -132,6 +218,10 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 		attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		attachments[2].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 		attachments[2].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		if (VK_HDRActive()) {
+			attachments[2].initialLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			attachments[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
 	}
 
 	// attachment reference
@@ -154,6 +244,24 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	subpass.pColorAttachments = &colorAttachmentRef;
 	subpass.pDepthStencilAttachment = &depthAttachmentRef;
 	subpass.pResolveAttachments = msaa ? &resolveAttachmentRef : NULL;
+	if (VK_HDRActive()) {
+		// A separate linear emission target excludes ordinary bright albedo
+		// from emissive bloom. Same blend/coverage rules as scene color.
+		int emission = msaa ? 3 : 2;
+		attachments[emission] = attachments[0];
+		colors[0] = colorAttachmentRef;
+		colors[1].attachment = emission;
+		colors[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		subpass.colorAttachmentCount = 2;
+		subpass.pColorAttachments = colors;
+		if (msaa) {
+			attachments[4] = attachments[2];
+			resolves[0] = resolveAttachmentRef;
+			resolves[1].attachment = 4;
+			resolves[1].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			subpass.pResolveAttachments = resolves;
+		}
+	}
 
 	// The depth image (unlike the swapchain color image) is a single resource
 	// shared by every frame in flight, not duplicated per-frame. EARLY_FRAGMENT_TESTS
@@ -176,6 +284,7 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 	VK_InitialiseStructure(renderPassInfo);
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	renderPassInfo.attachmentCount = msaa ? 3 : 2;
+	if (VK_HDRActive()) renderPassInfo.attachmentCount = msaa ? 5 : 3;
 	renderPassInfo.pAttachments = attachments;
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
@@ -195,7 +304,9 @@ static qbool VK_RenderPassCreateVariant(vk_renderpass_id id, qbool clearColor)
 
 qbool VK_RenderPassCreate(void)
 {
-	return VK_RenderPassCreateVariant(vk_renderpass_main, true) && VK_RenderPassCreateVariant(vk_renderpass_main_noclear, false);
+	return VK_RenderPassCreateVariant(vk_renderpass_main, true) &&
+		VK_RenderPassCreateVariant(vk_renderpass_main_noclear, false) &&
+		VK_RenderPassCreateVariant(vk_renderpass_main_terminal, true);
 }
 
 // Single subpass, single color attachment (the swapchain image), no depth --
@@ -339,6 +450,10 @@ VkRenderPass VK_MainRenderPass(void)
 
 VkRenderPass VK_FrameRenderPass(qbool clear_color)
 {
+	// Deferred normals run before the single-view scene. Multiview can resume
+	// a pass, and direct gl_clear 0 frames can LOAD prior color: retain STORE.
+	if (clear_color && vk_options.swapChain.postProcessActive && !cl_multiview.integer)
+		return renderPasses[vk_renderpass_main_terminal];
 	return renderPasses[clear_color ? vk_renderpass_main : vk_renderpass_main_noclear];
 }
 

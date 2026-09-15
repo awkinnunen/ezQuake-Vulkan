@@ -3,7 +3,7 @@ param([string]$Label='public-profiles')
 $ErrorActionPreference='Stop'
 $taskRoot=Split-Path $PSScriptRoot -Parent
 & "$PSScriptRoot/Test-VulkanRuntime.ps1" -Label $Label -Configuration Debug -TimeoutSeconds 90 -Commands @(
- 'exec ezv-wasd-defaults.cfg','cfg_save_onquit 0','developer 1','dev_competitive runtime',
+ 'exec ezv-wasd-defaults.cfg','cfg_save_onquit 0','developer 1','dev_competitive runtime','dev_competitive video',
  'bind w','bind a','bind s','bind d','+legacy_fw','bind CAPSLOCK','-legacy_fw','bind CAPSLOCK',
  'cv save public-verified','cfg_save public-result','echo PUBLIC_PROFILE_COMPLETE','dev_competitive checkpoint'
 ) -PrepareProfile {

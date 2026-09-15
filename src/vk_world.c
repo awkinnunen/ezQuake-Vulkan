@@ -28,6 +28,8 @@ of the License, or (at your option) any later version.
 #include "glsl/constants.glsl"
 #include "tr_types.h"
 #include "vk_local.h"
+#include "competitive_visuals.h"
+#include "vk_shadows.h"
 
 extern const unsigned char vk_world_flat_vert_spv[];
 extern const unsigned int vk_world_flat_vert_spv_len;
@@ -122,14 +124,14 @@ typedef char vk_world_push_wallColor_check[(offsetof(vk_world_push_t, wallColor)
 typedef char vk_world_push_flags_check[(offsetof(vk_world_push_t, flags) == 124) ? 1 : -1];
 
 // Must match the push_constant block in vk_world_normals.vert /
-// vk_world_normals.frag exactly. mat4 + vec4 + 2 floats = 88 bytes, well
-// inside the 128-byte guaranteed minimum.
+// vk_world_normals.frag exactly. 128 bytes including the optional brush-to-world
+// transform used by SSAO. Camera.w holds zFar or a negative surface sentinel.
 typedef struct vk_world_normals_push_s {
 	float mvp[16];
 	float cameraPosition[4];
-	float surfaceType;
-	float zFar;
+	float worldRows[12];
 } vk_world_normals_push_t;
+typedef char vk_normals_push_size_check[(sizeof(vk_world_normals_push_t)==128)?1:-1];
 
 static VkPipelineLayout worldFlatPipelineLayout;
 static VkPipeline worldFlatPipeline;
@@ -475,26 +477,25 @@ static VkShaderModule VK_WorldCreateShaderModule(const unsigned char* bytes, uns
 	return shaderModule;
 }
 
+// SHADOW-002 / MULTIVIEW-001: consume the engine's actual per-view rectangle.
+void VK_SceneViewport(VkViewport *viewport,VkRect2D *scissor) {
+ int rectangle[4],width=vk_options.swapChain.imageSize.width,height=vk_options.swapChain.imageSize.height;
+ memset(viewport,0,sizeof(*viewport));memset(scissor,0,sizeof(*scissor));
+ viewport->width=(float)width;viewport->height=(float)height;viewport->maxDepth=1;
+ scissor->extent=vk_options.swapChain.imageSize;
+ if(CL_MultiviewEnabled()) {
+  R_GetViewport(rectangle);
+  viewport->x=(float)rectangle[0];viewport->y=(float)(height-rectangle[1]-rectangle[3]);
+  viewport->width=(float)max(1,rectangle[2]);viewport->height=(float)max(1,rectangle[3]);
+  scissor->offset.x=bound(0,(int)viewport->x,width-1);scissor->offset.y=bound(0,(int)viewport->y,height-1);
+  scissor->extent.width=bound(1,rectangle[2],width-scissor->offset.x);scissor->extent.height=bound(1,rectangle[3],height-scissor->offset.y);
+ }
+}
+
 static void VK_WorldSetViewportScissor(VkCommandBuffer commandBuffer)
 {
-	VkViewport viewport;
-	VkRect2D scissor;
-
-	VK_InitialiseStructure(viewport);
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)vk_options.swapChain.imageSize.width;
-	viewport.height = (float)vk_options.swapChain.imageSize.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	VK_InitialiseStructure(scissor);
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent = vk_options.swapChain.imageSize;
-
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
+ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
 }
 
 static qbool VK_WorldEnsureDrawCapacity(void)
@@ -850,7 +851,7 @@ static qbool VK_WorldCreateFlatPipeline(void)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldFlatPipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldFlatPipeline) != VK_SUCCESS) {
 		worldFlatPipeline = VK_NULL_HANDLE;
 	}
 
@@ -1040,7 +1041,7 @@ static qbool VK_WorldCreateTexturedPipeline(void)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldTexturedPipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldTexturedPipeline) != VK_SUCCESS) {
 		worldTexturedPipeline = VK_NULL_HANDLE;
 	}
 
@@ -1246,7 +1247,7 @@ static qbool VK_WorldCreateOverlayPipeline(qbool luma)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
 		*pipeline = VK_NULL_HANDLE;
 	}
 
@@ -1442,7 +1443,7 @@ static qbool VK_WorldCreateAlphaTexturedPipeline(void)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldAlphaTexturedPipeline) != VK_SUCCESS) {
 		worldAlphaTexturedPipeline = VK_NULL_HANDLE;
 	}
 
@@ -1639,7 +1640,7 @@ static qbool VK_WorldCreateLightmappedPipeline(void)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldLightmappedPipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldLightmappedPipeline) != VK_SUCCESS) {
 		worldLightmappedPipeline = VK_NULL_HANDLE;
 	}
 
@@ -1817,7 +1818,7 @@ static qbool VK_WorldCreateNormalsPipeline(void)
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, &worldNormalsPipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, &worldNormalsPipeline) != VK_SUCCESS) {
 		worldNormalsPipeline = VK_NULL_HANDLE;
 	}
 
@@ -1923,11 +1924,14 @@ void VK_PrepareModelRendering(qbool vid_restart)
 	}
 }
 
+void VK_WorldBeginFrame(void) {worldFlatSkyUpdatedThisFrame[vk_options.frame.currentFrame]=false;}
+
 void VK_PreRenderView(void)
 {
 	worldDrawCount = 0;
 	worldIndexCount = 0;
 	VK_AliasModelFrameReset();
+	VK_ShadowSelect();
 }
 
 void VK_DrawWorld(void)
@@ -2088,7 +2092,7 @@ static qbool VK_WorldDrawOverlay(VkCommandBuffer commandBuffer, const vk_world_d
 		return false;
 	}
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldOverlayPipelineLayout, 0, 2, descriptorSets, 0, NULL);
 	vkCmdPushConstants(commandBuffer, worldOverlayPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(*push), push);
 	vkCmdDrawIndexed(commandBuffer, draw->indexCount, 1, draw->firstIndex, 0, 0);
@@ -2108,7 +2112,7 @@ static void VK_WorldBindIfChanged(VkCommandBuffer commandBuffer, VkPipeline pipe
 		(memcmp(lastSets, descriptorSets, descriptorSetCount * sizeof(VkDescriptorSet)) != 0);
 
 	if (pipelineChanged) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
 		*lastPipeline = pipeline;
 	}
 	// A pipeline change invalidates descriptor-set compatibility guarantees even
@@ -2120,58 +2124,10 @@ static void VK_WorldBindIfChanged(VkCommandBuffer commandBuffer, VkPipeline pipe
 	}
 }
 
-// Reopens the main render pass mid-frame, after the normals prepass below has
-// ended it. Mirrors VK_BeginFrame's own framebuffer selection exactly (the
-// post-process offscreen target when active, the swapchain image otherwise) --
-// getting this wrong would draw the rest of the frame into the wrong image.
-//
-// Uses the LOAD (noclear) variant so the colour the first main-pass instance
-// produced survives. Note the depth attachment still CLEARs in *both*
-// variants (see VK_RenderPassCreateVariant: depth always clears, matching
-// GL_Clear()), which is precisely why this reopen has to happen before any
-// world geometry is drawn -- at this point the first main-pass instance
-// contained nothing but its own clear, so re-clearing depth loses nothing.
-static void VK_WorldBeginMainRenderPassNoClear(VkCommandBuffer commandBuffer)
-{
-	VkRenderPassBeginInfo renderPassInfo = { 0 };
-	VkClearValue clearValues[3] = { { { { 0 } } } };
-	uint32_t imageIndex = vk_options.frame.imageIndex;
-
-	clearValues[1].depthStencil.depth = glConfig.reversed_depth ? 0.0f : 1.0f;
-	clearValues[1].depthStencil.stencil = 0;
-
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = VK_FrameRenderPass(false);
-	renderPassInfo.framebuffer = vk_options.swapChain.postProcessActive ?
-		VK_PostProcessFramebuffer(imageIndex) : vk_options.swapChain.framebuffers[imageIndex];
-	if (renderPassInfo.framebuffer == VK_NULL_HANDLE) {
-		renderPassInfo.framebuffer = vk_options.swapChain.framebuffers[imageIndex];
-	}
-	renderPassInfo.renderArea.offset.x = 0;
-	renderPassInfo.renderArea.offset.y = 0;
-	renderPassInfo.renderArea.extent = vk_options.swapChain.imageSize;
-	renderPassInfo.clearValueCount = sizeof(clearValues) / sizeof(clearValues[0]);
-	renderPassInfo.pClearValues = clearValues;
-
-	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-}
-
-// gl_outline & 2 normals prepass. Called from VK_RenderView with the main
-// render pass ALREADY ENDED by the caller, and leaves it re-begun on return
-// (so the caller's existing draw loop continues unchanged).
-//
-// Why a separate geometry pass at all, when GLM gets this for free: GLM's
-// GL_FramebufferStartWorldNormals attaches a second colour target and its
-// world shaders write normals via MRT in the same draw. Replicating that here
-// would mean giving all five world pipelines a second colour attachment plus
-// a matching main-render-pass variant for every MSAA/post-process
-// combination. Redrawing position-only geometry into a tiny dedicated pass is
-// far less invasive and touches none of the existing pipelines -- at the cost
-// of a second pass over the world's vertices, which is why the whole thing is
-// gated on VK_WorldOutlineActive().
-//
-// Returns false if anything was unavailable, in which case the main render
-// pass has NOT been disturbed and the caller should just proceed normally.
+// PERF-OPT-001, OpenAI Codex, 2026-09-14.
+// The normals/AO prepass runs outside the scene render pass. The caller starts
+// (or resumes) the scene afterward, even if these resources are unavailable.
+// Its normal/depth output and draw ordering are unchanged.
 static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, VkBuffer indexBuffer)
 {
 	VkRenderPassBeginInfo renderPassInfo = { 0 };
@@ -2213,7 +2169,7 @@ static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer ver
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	VK_WorldSetViewportScissor(commandBuffer);
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldNormalsPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(worldNormalsPipeline));
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
 	vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -2243,9 +2199,21 @@ static qbool VK_DrawWorldNormalsPass(VkCommandBuffer commandBuffer, VkBuffer ver
 		push.cameraPosition[0] = r_refdef.vieworg[0];
 		push.cameraPosition[1] = r_refdef.vieworg[1];
 		push.cameraPosition[2] = r_refdef.vieworg[2];
-		push.cameraPosition[3] = 0.0f;
-		push.surfaceType = worldDraws[i].surfaceType;
-		push.zFar = zFar;
+		push.cameraPosition[3] = worldDraws[i].surfaceType > 0 ? -worldDraws[i].surfaceType : zFar;
+		push.worldRows[0] = push.worldRows[5] = push.worldRows[10] = 1;
+		if (CV_Value(CV_aomode) && CV_Value(CV_ao)>0) {
+			float view[16]; int axis, col, k;
+			R_GetModelviewMatrix(view);
+			if (memcmp(view,worldDraws[i].modelView,sizeof(view))) {
+				// inverse(camera view) * brush modelview; keep static world an
+				// exact identity to avoid introducing depth quantization drift.
+				for (axis=0; axis<3; ++axis) for (col=0; col<4; ++col) {
+					float value=col==3 ? r_refdef.vieworg[axis] : 0;
+					for (k=0; k<3; ++k) value+=view[axis*4+k]*worldDraws[i].modelView[col*4+k];
+					push.worldRows[axis*4+col]=value;
+				}
+			}
+		}
 
 		vkCmdPushConstants(commandBuffer, worldNormalsPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 		vkCmdDrawIndexed(commandBuffer, worldDraws[i].indexCount, 1, worldDraws[i].firstIndex, 0, 0);
@@ -2277,7 +2245,7 @@ void VK_RenderView(void)
 	// VK_BeginFrame's fence wait for vk_options.frame.currentFrame has
 	// already returned, so that submission has retired and it's safe to
 	// allow one fresh vkUpdateDescriptorSets for this new frame.
-	worldFlatSkyUpdatedThisFrame[vk_options.frame.currentFrame] = false;
+	/* Reset once after the frame fence, not between multiview views. */
 	int texturedDraws = 0;
 	int lightmappedDraws = 0;
 	int blendedDraws = 0;
@@ -2418,25 +2386,24 @@ void VK_RenderView(void)
 		}
 	}
 
-	// gl_outline & 2 (world outline). The normals prepass needs its own render
-	// pass, and Vulkan render passes cannot nest -- so the main render pass
-	// VK_BeginFrame opened has to be closed and reopened around it. This is
-	// the earliest point in the frame where worldDraws[] is fully populated
-	// (R_DrawWorld/R_DrawEntities already ran, feeding VK_WorldQueueModel) AND
-	// nothing has been drawn into the main pass yet beyond its own clear --
-	// which is what makes closing it here lossless, since the LOAD variant
-	// used to reopen it still re-clears depth. Doing this any later (e.g. after
-	// the opaque loop) would throw away the world's depth buffer.
-	//
-	// Everything is inside the same command buffer, sequentially; no extra
-	// barrier is needed beyond the normals render pass's own attachment
-	// finalLayout, and render-pass boundaries themselves guarantee the
-	// write-then-sample ordering the composite depends on.
-	if (VK_WorldOutlineActive()) {
-		vkCmdEndRenderPass(commandBuffer);
-		worldOutline = VK_DrawWorldNormalsPass(commandBuffer, vertexBuffer, indexBuffer);
-		VK_WorldBeginMainRenderPassNoClear(commandBuffer);
+	if (VK_ShadowWorkPending()) {
+		VK_EndScenePass();
+		VK_ShadowRender();
 	}
+	// A deferred first scene pass has nothing to end; its clear is preserved.
+	// Multiview keeps the prior end/prepass/resume sequence and LOAD behavior.
+	if (VK_WorldOutlineActive()) {
+		VK_EndScenePass();
+		worldOutline = VK_DrawWorldNormalsPass(commandBuffer, vertexBuffer, indexBuffer);
+	}
+	VK_BeginScenePass();
+ if(CL_MultiviewEnabled()) {
+  VkViewport viewport;VkRect2D scissor;VkClearAttachment clear={0};VkClearRect rect;
+  VK_SceneViewport(&viewport,&scissor);rect.rect=scissor;rect.baseArrayLayer=0;rect.layerCount=1;
+  clear.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;clear.clearValue.depthStencil.depth=glConfig.reversed_depth?0:1;
+  vkCmdClearAttachments(commandBuffer,1,&clear,1,&rect);
+ }
+
 
 	VK_WorldSetViewportScissor(commandBuffer);
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
@@ -2607,7 +2574,7 @@ void VK_RenderView(void)
 						&lastBoundPipeline, lastBoundDescriptorSets, &lastBoundDescriptorSetCount);
 				}
 				else if (worldFlatPipeline != lastBoundPipeline) {
-					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, worldFlatPipeline);
+					vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(worldFlatPipeline));
 					lastBoundPipeline = worldFlatPipeline;
 					lastBoundDescriptorSetCount = 0;
 				}

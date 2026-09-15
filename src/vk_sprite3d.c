@@ -21,6 +21,7 @@ of the License, or (at your option) any later version.
 #include "r_texture.h"
 #include "tr_types.h"
 #include "vk_local.h"
+#include "vk_shadows.h"
 
 extern const unsigned char vk_sprite3d_vert_spv[];
 extern const unsigned int vk_sprite3d_vert_spv_len;
@@ -138,24 +139,8 @@ static VkPrimitiveTopology VK_SpriteTopology(r_primitive_id primitive)
 
 static void VK_SpriteSetViewportScissor(VkCommandBuffer commandBuffer)
 {
-	VkViewport viewport;
-	VkRect2D scissor;
-
-	VK_InitialiseStructure(viewport);
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)vk_options.swapChain.imageSize.width;
-	viewport.height = (float)vk_options.swapChain.imageSize.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	VK_InitialiseStructure(scissor);
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent = vk_options.swapChain.imageSize;
-
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
+ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
 }
 
 static qbool VK_SpriteCreatePipeline(r_primitive_id primitive, vk_sprite_pipeline_id_t pipelineId)
@@ -334,7 +319,7 @@ static qbool VK_SpriteCreatePipeline(r_primitive_id primitive, vk_sprite_pipelin
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
+	if (VK_CreateScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
 		*pipeline = VK_NULL_HANDLE;
 	}
 

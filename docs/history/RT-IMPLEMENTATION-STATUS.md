@@ -6,8 +6,11 @@ of the summary of RT-PLAN-002, corresponding to milestones RT-00 through RT-06.
 ## Current deliverable
 
 The first dependency test is implemented and packaged. This is **not a playable
-ezQuake RT renderer**, and steps 1 through 7 are not complete. The user reported
-that the RTX 3060 machine is unavailable and will run the first hardware test.
+ezQuake RT renderer**, and steps 1 through 7 are not complete. The user subsequently
+reported that the first test stopped after GPU detection, before a usable log or
+image. RT development is paused pending a suitable development GPU at the user's
+request. See RT-STARTUP-001 in [BUGS.md](BUGS.md). Status correction by OpenAI Codex,
+2026-09-14; the implementation and validation entries below retain their original scope.
 
 | Requested step | Plan milestone | Actual status |
 |---|---|---|

@@ -1,0 +1,10 @@
+{
+  "settingsAuthor": "User",
+  "packagingAuthor": "OpenAI Codex",
+  "date": "2026-09-15",
+  "graphicsCount": 71,
+  "conditionalCount": 55,
+  "graphicsSHA256": "36a6b691033d8dd5b6e62e4ec21b1932154c86f3b0f1f44b2cbc40fa2ec48850",
+  "conditionalSHA256": "c3f77eb900c1406c2ecf3336d28e946647e184a7790800ef7892e84ba10d9a5f",
+  "validation": "public-latest-final-20260915: runtime overlay and saved values passed"
+}

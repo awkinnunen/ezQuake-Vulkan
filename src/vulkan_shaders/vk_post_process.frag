@@ -1,5 +1,7 @@
 #version 450
 #extension GL_GOOGLE_include_directive : require
+#include "vk_hdr.glsl"
+#extension GL_GOOGLE_include_directive : require
 #define CV_SET 1
 #include "vk_competitive.glsl"
 
@@ -7,6 +9,7 @@ layout(location = 0) in vec2 texCoord;
 layout(location = 0) out vec4 fragColour;
 
 layout(binding = 0) uniform sampler2D sceneColor;
+layout(binding = 1) uniform sampler2D sceneEmission;
 
 layout(push_constant) uniform PushConstants {
 	vec4 blend;     // damage/pickup/underwater tint, premultiplied like v_blend
@@ -16,7 +19,19 @@ layout(push_constant) uniform PushConstants {
 	float invHeight;
 	int fxaaEnabled;
 	float fxaaQuality; // 0 = off; otherwise 0..1, see VK_FxaaQualityFromPreset
+	int bloomSource;
 } pc;
+
+vec3 hdrTone(vec3 linear) {
+ linear=max(linear*cv.post.x,vec3(0));
+ if(cv.post.y>.5 && cv.post.y<1.5) linear=linear/(vec3(1)+linear*.35);
+ else if(cv.post.y>1.5) linear=clamp((linear*(2.51*linear+.03))/(linear*(2.43*linear+.59)+.14),0.0,1.0);
+ return hdrEncode(linear);
+}
+vec3 aaSample(vec2 uv) {
+ vec3 c=texture(sceneColor,uv).rgb;
+ return hdrScene ? hdrTone(c) : c;
+}
 
 // Cheap edge-detect AA: blends towards the average of the 4 diagonal taps on
 // high-contrast edges. Not the full NVIDIA FXAA 3.11 quality search (that
@@ -38,10 +53,10 @@ layout(push_constant) uniform PushConstants {
 vec3 ApplyFXAA(vec3 centerColor)
 {
 	vec2 rcpFrame = vec2(pc.invWidth, pc.invHeight);
-	vec3 nw = texture(sceneColor, texCoord + vec2(-1.0, -1.0) * rcpFrame).rgb;
-	vec3 ne = texture(sceneColor, texCoord + vec2( 1.0, -1.0) * rcpFrame).rgb;
-	vec3 sw = texture(sceneColor, texCoord + vec2(-1.0,  1.0) * rcpFrame).rgb;
-	vec3 se = texture(sceneColor, texCoord + vec2( 1.0,  1.0) * rcpFrame).rgb;
+	vec3 nw = aaSample(texCoord + vec2(-1.0, -1.0) * rcpFrame);
+	vec3 ne = aaSample(texCoord + vec2( 1.0, -1.0) * rcpFrame);
+	vec3 sw = aaSample(texCoord + vec2(-1.0,  1.0) * rcpFrame);
+	vec3 se = aaSample(texCoord + vec2( 1.0,  1.0) * rcpFrame);
 
 	float lumaM = centerColor.g;
 	float lumaNW = nw.g;
@@ -75,6 +90,7 @@ vec3 cvBloom() {
  for(int y=-2;y<=2;++y) for(int x=-2;x<=2;++x) {
   float w=exp(-float(x*x+y*y)*.65);
   vec3 sampleColour=texture(sceneColor,texCoord+vec2(x,y)*pixel).rgb;
+  if(hdrScene && pc.bloomSource!=0) sampleColour=texture(sceneEmission,texCoord+vec2(x,y)*pixel).rgb;
   float peak=max(sampleColour.r,max(sampleColour.g,sampleColour.b));
   float contribution=max(0.0,peak-cv.post.w)/max(peak,.001);
   glow+=sampleColour*contribution*w; weights+=w;
@@ -92,6 +108,11 @@ vec3 cvTone(vec3 colour) {
 void main()
 {
 	vec3 colour = texture(sceneColor, texCoord).rgb;
+	if (hdrScene) {
+		// Float scene and bloom stay linear until the output tone curve.
+		if(cv.post.z>0.0) colour+=cvBloom();
+		colour=hdrTone(colour);
+	}
 
 	if (pc.fxaaEnabled != 0) {
 		colour = ApplyFXAA(colour);
@@ -99,15 +120,17 @@ void main()
 
 	if(cv.post2.w>0.0) {
   vec2 p=vec2(pc.invWidth,pc.invHeight);
-  vec3 a=texture(sceneColor,texCoord+vec2(p.x,0)).rgb;
-  vec3 b=texture(sceneColor,texCoord-vec2(p.x,0)).rgb;
-  vec3 c=texture(sceneColor,texCoord+vec2(0,p.y)).rgb;
-  vec3 d=texture(sceneColor,texCoord-vec2(0,p.y)).rgb;
+  vec3 a=aaSample(texCoord+vec2(p.x,0));
+  vec3 b=aaSample(texCoord-vec2(p.x,0));
+  vec3 c=aaSample(texCoord+vec2(0,p.y));
+  vec3 d=aaSample(texCoord-vec2(0,p.y));
   vec3 lo=min(colour,min(min(a,b),min(c,d))), hi=max(colour,max(max(a,b),max(c,d)));
   colour=clamp(colour+(colour-(a+b+c+d)*.25)*cv.post2.w,lo,hi);
  }
- if(cv.post.z>0.0) colour+=cvBloom();
- colour=cvTone(colour);
+ if(!hdrScene) {
+  if(cv.post.z>0.0) colour+=cvBloom();
+  colour=cvTone(colour);
+ }
 
  // Same formula as src/glsl/post_process_screen.fragment.glsl
 	// (EZ_POSTPROCESS_PALETTE path): blend/tint, then contrast, then gamma.

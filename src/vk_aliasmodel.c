@@ -25,6 +25,7 @@ of the License, or (at your option) any later version.
 #include "tr_types.h"
 #include "vk_local.h"
 #include "competitive_visuals.h"
+#include "vk_shadows.h"
 
 extern const unsigned char vk_alias_model_vert_spv[];
 extern const unsigned int vk_alias_model_vert_spv_len;
@@ -148,24 +149,8 @@ static VkShaderModule VK_AliasCreateShaderModule(const unsigned char* bytes, uns
 
 static void VK_AliasSetViewportScissor(VkCommandBuffer commandBuffer)
 {
-	VkViewport viewport;
-	VkRect2D scissor;
-
-	VK_InitialiseStructure(viewport);
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)vk_options.swapChain.imageSize.width;
-	viewport.height = (float)vk_options.swapChain.imageSize.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	VK_InitialiseStructure(scissor);
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent = vk_options.swapChain.imageSize;
-
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+ VkViewport viewport;VkRect2D scissor;VK_SceneViewport(&viewport,&scissor);
+ vkCmdSetViewport(commandBuffer,0,1,&viewport);vkCmdSetScissor(commandBuffer,0,1,&scissor);
 }
 
 static qbool VK_AliasEnsureDrawCapacity(void)
@@ -385,7 +370,7 @@ static qbool VK_AliasCreatePipeline(int blendMode)
 	pipelineInfo.renderPass = VK_MainRenderPass();
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(vk_options.logicalDevice, vk_options.pipelineCache, 1, &pipelineInfo, NULL, pipeline) != VK_SUCCESS) {
+	if (VK_CreateShadowScenePipeline(&pipelineInfo, pipeline) != VK_SUCCESS) {
 		*pipeline = VK_NULL_HANDLE;
 	}
 
@@ -579,6 +564,8 @@ static void VK_AliasQueuePreparedDraw(
 
 	draw = &aliasDraws[aliasDrawCount++];
 	CV_PlayerParams(&draw->cv, ent, ent->effects, render_effects, modelView);
+	if(mode==VK_ALIAS_MODE_NORMAL && !(render_effects&(RF_WEAPONMODEL|RF_ADDITIVEBLEND|RF_ALPHABLEND)) && color[3]>=1)
+		VK_ShadowAddAlias(firstVertex,vertexCount,modelView,lerpfrac,textureReady?texture:solidwhite_texture,model->radius);
 	draw->firstVertex = (uint32_t)firstVertex;
 	draw->vertexCount = (uint32_t)vertexCount;
 	memcpy(draw->mvp, mvp, sizeof(draw->mvp));
@@ -877,7 +864,7 @@ void VK_RenderAliasModels(qbool postscene)
 				aliasOpaquePipeline;
 
 			if (pipeline != lastPipeline) {
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VK_ShadowScenePipeline(pipeline));
 				lastPipeline = pipeline;
 			}
 		}
