@@ -1,4 +1,4 @@
-ezQuake Vulkan Starter 0.1.0
+ezQuake Vulkan Starter 0.1.1
 Unofficial nQuake-based installation for Windows x64.
 
 Extract the Starter ZIP, run Install.cmd, and choose a NEW installation folder.
@@ -41,7 +41,10 @@ https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1
 https://github.com/nQuake/distfiles/releases/tag/snapshot
 https://github.com/nQuake/client-win32
 
-This Starter ZIP contains installer code and its download manifest, not game data.
+This Starter ZIP includes installer source, Quick profiles and five original
+legacy crosshair PNGs authorized for inclusion by the user. Image authors are not
+established and no new image license is asserted; see crosshairs.json.
+Set crosshairsize to change their size (default 2.5). Engine/base game data download separately.
 Downloaded components retain their separate licenses and authorship. Quake game
 assets are not relicensed under the engine's GPL. See installed licenses,
 LICENSE, engine/LICENSE, engine/notices and engine/docs/ATTRIBUTION.md. Engine

@@ -34,12 +34,30 @@ try {
     }
     $engine=Join-Path $stage 'engine'
     [IO.Directory]::Move((Join-Path $stage ('engine-download/'+$lock.engineFolder)),$engine)
+    # INPUT-005: overlay only the approved Quick profiles/images into the fresh stage.
+    # Source-tree invocation is supported for the installer regression tests.
+    $payload=Join-Path $PSScriptRoot 'profiles'
+    if (!(Test-Path -LiteralPath $payload)) { $payload=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../profiles')) }
+    $profileFiles=@('qw/ezv-wasd.cfg','qw/ezv-sdfe.cfg','qw/ezv-crosshairs.cfg')
+    foreach ($weapon in @('sg','ng','gl','rl','lg')) { $profileFiles+="ezquake/crosshairs/legacy_$weapon.png" }
+    $profileHashes=[ordered]@{}
+    foreach ($relative in $profileFiles) {
+        $source=Join-Path $payload $relative
+        $target=Join-Path $stage $relative
+        if (Test-Path -LiteralPath $target) { throw "Unexpected upstream profile: $relative" }
+        New-Item -ItemType Directory -Force (Split-Path $target -Parent) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $target
+        $profileHashes[$relative]=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    $notice=Join-Path $PSScriptRoot 'crosshairs.json'
+    if (!(Test-Path -LiteralPath $notice)) { $notice=Join-Path $PSScriptRoot '../../../provenance/crosshairs.json' }
+    Copy-Item -LiteralPath $notice -Destination (Join-Path $stage 'crosshairs.json')
     # Preserve nQuake's first-run mechanism and its original autoexec verbatim.
     # nQuake loads preset.cfg once, after nquake_default.cfg. No forced overlay on later runs.
     $preset=Join-Path $stage 'ezquake/configs/preset.cfg'
     if (Test-Path -LiteralPath $preset) { throw 'Unexpected upstream preset.cfg; review the upstream package before updating Starter.' }
     $bootstrap=Get-Content -LiteralPath (Join-Path $engine 'ezv-dist-first-run.cfg') -Raw
-    [IO.File]::WriteAllText($preset,('// Starter first-run preset: Balanced and Quick WASD.'+"`r`n"+$bootstrap+"`r`ncl_onload menu`r`n"),[Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($preset,('// Starter first-run preset: Balanced and Quick WASD.'+"`r`n"+$bootstrap+"`r`nexec ezv-crosshairs.cfg`r`ncl_onload menu`r`n"),[Text.UTF8Encoding]::new($false))
     & (Join-Path $engine 'Start.ps1') -GameDirectory $stage -PrepareOnly | Out-Null
     $pak0=Join-Path $stage 'id1/pak0.pak'
     if (@(Get-PakEntries $pak0) -notcontains 'progs.dat') { throw 'Shareware game logic is missing.' }
@@ -50,7 +68,7 @@ try {
     Copy-Item -LiteralPath "$PSScriptRoot/README.txt" -Destination (Join-Path $stage 'START-HERE.txt')
     Copy-Item -LiteralPath "$PSScriptRoot/downloads.lock.json" -Destination (Join-Path $stage 'starter-downloads.lock.json')
     $receipt=[ordered]@{starterVersion=$lock.version;installed=(Get-Date -Format o);engineVersion=$lock.engineVersion;
-        defaults='Balanced / Quick WASD';packages=$lock.packages;registeredData=$imported;
+        defaults='Balanced / Quick WASD';profileSHA256=$profileHashes;packages=$lock.packages;registeredData=$imported;
         attribution='nQuake and upstream contributors; installer by OpenAI Codex under user direction'}
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'starter-install.json') -Encoding utf8
     # Same-volume rename publishes the complete installation; existing target still fails closed.

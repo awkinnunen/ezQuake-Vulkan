@@ -1,0 +1,31 @@
+{
+  "id": "INPUT-005",
+  "date": "2026-09-16",
+  "author": "OpenAI Codex",
+  "engineChanged": false,
+  "fixtures": [
+    {
+      "label": "crosshairs-keyboard-release",
+      "result": "PASS",
+      "coverage": "Native Quick WASD/ESDF/nQuake transitions, five-image PNG selection, default scale/size/alpha, all 170 graphics values, sensitivity/audio and unrelated aliases preserved."
+    },
+    {
+      "label": "original-crosshairs",
+      "result": "PASS",
+      "coverage": "Public Quick ESDF config only, seven real weapon switches and five PNGs, LG firing hides/restores, shotgun-return toggle, movement-dependent jumps and pitch restore; exit 0, no missing images or Vulkan validation errors."
+    },
+    {
+      "label": "crosshairs starter installed",
+      "result": "PASS",
+      "coverage": "Packaged Starter installed to a fresh path with spaces; real Windows PowerShell 5.1 launcher, first-run PNG/size 2.5, 170 Balanced values and Quick WASD, second-run size 3.1 preserved, config/autoexec precedence, diagnostics and exit 0."
+    }
+  ],
+  "imagesByteIdenticalToPrivateOriginals": true,
+  "visualInspection": "800x600 Vulkan rocket crosshair screenshot inspected; original PNG transparency and shape retained.",
+  "limitations": [
+    "Windows AMD Vulkan raster only.",
+    "Keyboard verifier accepts the PNG for the current spawn weapon; the separate weapon-trigger fixture verifies the exact seven-weapon mapping.",
+    "Starter beta.1 engine bootstrap still initializes its original defaults before the new one-time crosshair overlay; downloaded engine archive is unchanged.",
+    "Runtime Starter tests were launched through Windows PowerShell 5.1; a direct PS7 Start-Process child inherited incompatible module paths and failed before engine startup."
+  ]
+}

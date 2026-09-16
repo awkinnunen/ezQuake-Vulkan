@@ -17,6 +17,10 @@ for name in ['nquake-first','nquake-after','nquake-final']:
     assert binds(cfg(name))==nquake,(name,binds(cfg(name)).items()^nquake.items())
 for name,expected in [('quick-wasd',dict(w='+legacy_fw',s='+legacy_bw',a='+moveleft',d='+moveright',capslock='legacy_sj')),
                       ('quick-esdf',dict(e='+legacy_fw',d='+legacy_bw',s='+moveleft',f='+moveright',a='legacy_sj'))]:
+    values=fields(cfg(name))
+    assert values['crosshairimage'] in {'legacy_sg','legacy_ng','legacy_gl','legacy_rl','legacy_lg'}, (name,values['crosshairimage'])
+    for key,value in {'crosshair':0,'crosshairsize':2.5,'crosshairalpha':.6,'crosshairscale':0,'crosshairscalemethod':0,'r_smoothcrosshair':1}.items():
+        assert abs(float(values[key])-value)<1e-6,(name,key,values[key])
     got=binds(cfg(name))
     expected.update(mouse1='+legacy_rl',mouse2='+legacy_shaft',mouse3='+legacy_gl')
     assert all(got.get(k)==v for k,v in expected.items()),(name,got)

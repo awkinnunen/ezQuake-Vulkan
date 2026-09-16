@@ -14,7 +14,11 @@ The engine comes from our existing 0.1.0-beta.1 release, commit `7bb8a686`.
 `dist/windows/starter/downloads.lock.json` pins origins, sizes and SHA-256 values.
 Mutable upstream snapshot URLs are never trusted without matching these hashes.
 A replaced snapshot requires a reviewed lock update and new Starter version.
-The installer ZIP contains source scripts, documentation and licenses only.
+Starter 0.1.1 includes source scripts, documentation, Quick profiles and the five
+user-authorized legacy crosshair PNGs. See `crosshairs.json` for attribution/hashes.
+The engine archive remains byte-identical to beta.1; the installer adds the current
+Quick profiles to the fresh game directory and loads the crosshair module after
+nQuake first-run defaults. `starter-install.json` records the profile hashes.
 Downloaded resource packs are not mirrored or relicensed by this project.
 
 ## Installation and configuration
@@ -69,7 +73,7 @@ The pinned nQuake default CFG refers to the unsupported `r_fx_geometry` cvar;
 its startup warning is inherited and does not invalidate the verified defaults.
 These checks are not an all-GPU qualification or a full campaign playthrough.
 
-Build the source-only installer archive:
+Build the installer and the separate crosshair update archive:
 
 ```text
 python tools/Package-Starter.py --output output
@@ -87,6 +91,6 @@ Each attachment must be below 2 GiB. GitHub's general acceptable-use rules still
 apply, including intellectual property and excessive-bandwidth provisions.
 Source: https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases
 and https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies
-(checked 2026-09-16). Starter publishes only our installer; third-party downloads
+(checked 2026-09-16). Starter publishes our installer and the approved crosshair/profile payload; third-party downloads
 retain their own licenses. This does not grant blanket redistribution rights to
 the fully installed directory. Original upstream notices are preserved.

@@ -12,7 +12,7 @@ if($Arena){
     @('cl_confirmquit 0','developer 1','cl_maxfps 60','tp_triggers 1','alias f_spawn "exec starter-qa-arena.cfg"','menu_local','dev_local_menu map dm6','dev_local_menu bots 1','dev_local_menu start')|Set-Content "$Installation/qw/starter-qa.cfg" -Encoding ascii
     @('alias f_spawn ""')+$frames+@('echo STARTER_ARENA_STATE','dev_local_menu inspect','screenshot','echo STARTER_ARENA_COMPLETE','quit')|Set-Content "$Installation/qw/starter-qa-arena.cfg" -Encoding ascii
 }elseif($SecondRun){
-    Add-Content -LiteralPath "$Installation/ezquake/configs/config.cfg" -Encoding ascii -Value @('r_cv_edgewidth 1.7','bind w +back')
+    Add-Content -LiteralPath "$Installation/ezquake/configs/config.cfg" -Encoding ascii -Value @('r_cv_edgewidth 1.7','bind w +back','crosshairsize 3.1')
     $extra="`r`nr_cv_edgewidth 2.8`r`n"
     @('cl_confirmquit 0','cfg_save_unchanged 1','cfg_save starter-second','echo STARTER_SECOND_COMPLETE','quit')|Set-Content "$Installation/qw/starter-qa.cfg" -Encoding ascii
 }else{
@@ -31,6 +31,12 @@ try {
     $log=Get-Content "$Installation/qw/qconsole.log" -Raw
     if($log -notmatch "STARTER_$($phase.ToUpper())_COMPLETE" -or $log -match 'VUID-|Validation Error|VK_ERROR_DEVICE_LOST|couldn.t load progs.dat|Host_Error'){throw 'Starter runtime failed.'}
     if($Arena -and $log -notmatch '(?s)STARTER_ARENA_STATE\r?\nLOCAL_MENU[^\r\n]*connected=1 bots=1'){throw 'Bundled KTX bot did not join the arena.'}
+    if (!$Arena -and (Test-Path "$Installation/qw/ezv-crosshairs.cfg")) {
+        $saved=Get-Content "$Installation/ezquake/configs/starter-$phase.cfg" -Raw
+        if ($saved -notmatch '(?m)^crosshairimage\s+"legacy_sg"' -or $log -match 'Couldn.t load image legacy_') { throw 'Original Starter crosshair failed to load.' }
+        $expectedSize=if($SecondRun){'3\.1'}else{'2\.5'}
+        if ($saved -notmatch ('(?m)^crosshairsize\s+"'+$expectedSize+'"')) { throw 'Crosshair default/override precedence failed.' }
+    }
     if(!(Test-Path "$Installation/ezquake/ezv-distribution.json")){throw 'First-run completion marker not written.'}
     if(!(Test-Path "$Installation/engine/logs")){throw 'Diagnostics were not collected.'}
     Write-Output "PASS: Starter $phase launch, real launcher, exit 0 and diagnostics."

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engineVersion": "0.1.0-beta.1",
   "engineFolder": "ezQuake-Vulkan-0.1.0-beta.1-windows-x64",
   "engineSourceCommit": "7bb8a6862d023dcd5774bf79d2079b8bb4ac4827",

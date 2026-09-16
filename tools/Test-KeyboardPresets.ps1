@@ -16,5 +16,7 @@ $steps=@('developer 1','con_notifytime 0','cfg_save_unchanged 1','cfg_save_alias
  param($p)
  New-Item -ItemType Directory -Force "$p/ezquake/presets/graphics"|Out-Null
  Copy-Item -Recurse "$root/profiles/ezquake/presets/graphics/builtin" "$p/ezquake/presets/graphics"
+ Copy-Item -Recurse "$root/profiles/ezquake/crosshairs" "$p/ezquake"
+ Copy-Item "$root/profiles/qw/ezv-crosshairs.cfg" "$p/qw"
  Copy-Item "$root/profiles/qw/ezv-wasd.cfg","$root/profiles/qw/ezv-sdfe.cfg","$root/profiles/qw/ezv-nquake.cfg" "$p/qw"
 }

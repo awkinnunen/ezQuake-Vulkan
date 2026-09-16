@@ -31,7 +31,10 @@ bootstrap+=(repo/'profiles/ezquake/presets/graphics/builtin/Balanced.cfg').read_
 bootstrap+=(repo/'profiles/qw/ezv-wasd.cfg').read_text(encoding='utf-8')+'\n'
 (folder/'ezv-dist-first-run.cfg').write_text(bootstrap,encoding='utf-8')
 files={p.relative_to(folder).as_posix():sha(p) for p in sorted(folder.rglob('*')) if p.is_file()}
-assert not any(Path(n).suffix.lower() in {'.pak','.pk3','.png','.pcx','.wav','.mvd','.qwd','.dem','.pdb','.dll'} for n in files)
+assert not any(Path(n).suffix.lower() in {'.pak','.pk3','.pcx','.wav','.mvd','.qwd','.dem','.pdb','.dll'} for n in files)
+approved=json.loads((repo/'provenance/crosshairs.json').read_text())['files']
+assert {n for n in files if Path(n).suffix.lower()=='.png'} == {'profiles/'+n for n in approved}
+assert all(files['profiles/'+n]==v['sha256'] for n,v in approved.items())
 assert not any(Path(n).name.lower() in {'config.cfg','autoexec.cfg'} for n in files)
 manifest=dict(schema=1,version=a.version,platform='Windows x64',renderer='Vulkan raster',rayTracing=False,
  sourceCommit=commit,sourceURL='https://github.com/awkinnunen/ezQuake-Vulkan/tree/'+commit,

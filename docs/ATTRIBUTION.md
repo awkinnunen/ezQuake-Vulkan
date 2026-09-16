@@ -151,3 +151,16 @@ preserved. GUI-process exit waiting fixes the beta.1 launcher's premature exit
 report. Engine binary and source remain the pinned 7bb8a686 release. No commercial
 assets, private configs or local demo files enter the source or Starter archive.
 See docs/STARTER.md and provenance/starter-validation.json in the public tree.
+
+
+## INPUT-005 - original Quick crosshairs (2026-09-16)
+
+The user explicitly requested inclusion of the five PNGs from their legacy Quake
+installation. The images retain their original bytes; their original authors are
+not established. Neither the user nor OpenAI Codex is credited as image creator,
+and no new license or GPL relicensing is asserted for the images.
+OpenAI Codex integrated the shared crosshair CFG, Quick profiles, Starter 0.1.1
+payload, separate update ZIP, tests and documentation. Engine code/binary unchanged.
+Crosshair size 2.5 and the original weapon aliases replace public built-in substitutes.
+User config/autoexec files are excluded; installation does not rewrite them.
+See provenance/crosshairs.json and docs/CONTROLS.md in the public tree.

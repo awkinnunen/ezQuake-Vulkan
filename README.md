@@ -38,7 +38,7 @@ change and the distinction between inherited work, user direction and Codex impl
 
 ## Build and run on Windows
 
-For a **new installation**, use the **[Windows Starter](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.0)**.
+For a **new installation**, use the **[Windows Starter](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.1)**.
 Extract it, run `Install.cmd`, and choose a new directory. It downloads verified
 nQuake resources and our Vulkan engine, installs Balanced / Quick WASD defaults,
 and optionally imports full-game PAKs from your own classic Quake installation.
@@ -97,8 +97,9 @@ See [unified menus and presets](docs/history/UNIFIED-MENUS.md).
 
 Options > Controls offers **Quick WASD (default)**, **nQuake**, and **Quick ESDF** (E forward, D back, S left,
 F right). `keyboard_preset sdfe` selects the alternative. Graphics selection never
-changes bindings. Portable controls use built-in weapon crosshairs; game resources,
-custom crosshair images and personal full configs are not bundled.
+changes bindings. Quick controls include the five original weapon crosshair PNGs at legacy size 2.5.
+Base game resources and personal full configs are not bundled. See
+[Controls](docs/CONTROLS.md) for the small update package for existing installations.
 
 Copying profiles does not overwrite an existing user's full configuration or force
 a preset every launch. Run `exec ezv-wasd-defaults.cfg` once after startup to adopt

@@ -175,3 +175,5 @@ the history archive and [DEVELOPMENT.md](DEVELOPMENT.md). Current performance:
 - [x] DIST-001: Windows x64 test package, config-preserving first-run defaults, diagnostics, dependency notices and exact source identity.
 
 - [x] DIST-002: source-only Windows Starter with nQuake downloads, hash checking, isolated install, optional full-game PAK import and first-run presets.
+
+- [x] INPUT-005: include the original five legacy crosshairs in Quick profiles and Starter; provide a small update ZIP for existing installs.

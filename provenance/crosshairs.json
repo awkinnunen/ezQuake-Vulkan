@@ -1,0 +1,41 @@
+{
+  "id": "INPUT-005",
+  "date": "2026-09-16",
+  "source": "Five PNGs from the user legacy Quake installation, previously used privately as legacy_*.",
+  "inclusionAuthorization": "User explicitly requested inclusion in the distribution on 2026-09-16.",
+  "originalAuthors": "Not established; no claim of authorship by the user or OpenAI Codex.",
+  "license": "No new license or GPL relicensing assertion for the images.",
+  "integrationAuthor": "OpenAI Codex",
+  "files": {
+    "ezquake/crosshairs/legacy_sg.png": {
+      "sha256": "51aeb3867cd12cca9452db5b08f86d0525852f3b75e6a63ea237286634e21173",
+      "bytes": 1109,
+      "width": 125,
+      "height": 125
+    },
+    "ezquake/crosshairs/legacy_ng.png": {
+      "sha256": "6d6c835259f0f58fb817c979f2882cdbbd073b595f41dbf7a9c8aa6fe959d2ce",
+      "bytes": 3086,
+      "width": 125,
+      "height": 125
+    },
+    "ezquake/crosshairs/legacy_gl.png": {
+      "sha256": "0190958311e4bec77bacfb69594b12a71e6e0f27b68242a8f7a6a74d2c6366e5",
+      "bytes": 1122,
+      "width": 125,
+      "height": 125
+    },
+    "ezquake/crosshairs/legacy_rl.png": {
+      "sha256": "88a7633de7e5e7306ea4692e4d22f1263902f9bfc78a662e64bb69be28b73c59",
+      "bytes": 3142,
+      "width": 125,
+      "height": 125
+    },
+    "ezquake/crosshairs/legacy_lg.png": {
+      "sha256": "4a35087a85fa54865e5a1476d43317585c803ba1ce077b7f22a375d88e7c3c01",
+      "bytes": 3043,
+      "width": 125,
+      "height": 125
+    }
+  }
+}

@@ -44,9 +44,11 @@ and Z; number keys, modifiers, Tab, function keys, keypad and wheel retain the
 installed nQuake bindings except the two explicitly listed keypad assignments.
 Communication is only sent when the player presses its binding.
 
-The public module uses built-in weapon-specific crosshairs, size 2.5. The local
-development installation retains the user's custom PNG variants; their origin
-and redistribution terms were not established, so those images are not included.
+Quick profiles now include the five original legacy PNG crosshairs at the user's
+explicit request (INPUT-005, 2026-09-16). Size is 2.5, alpha 0.6, colour 15,
+scale/method 0 and smoothing enabled, matching the private legacy setup.
+Original image authors are not established; inclusion does not assert a new
+image license or authorship. See `provenance/crosshairs.json` for provenance/hashes.
 Lightning crosshair hiding while firing and the weapon-change trigger remain.
 `w_switch 8` and `b_switch 8` select the strongest weapon on pickup automatically.
 
@@ -85,3 +87,23 @@ Debug/Release fixtures verify native nQuake/Quick ESDF menu activation, Quick WA
 legacy command compatibility, exact nQuake binding restoration across repeated
 switches, timer aliases, graphics/input isolation and unrelated alias preservation.
 The native Controls screen was inspected at 640x480. See the provenance record.
+
+
+## Original crosshair update (INPUT-005)
+
+Starter 0.1.1 includes these images and profiles. For an existing beta/Starter
+installation, download `ezQuake-Vulkan-Crosshairs-0.1.1.zip` from the
+[Starter release](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.1).
+Close the game, back up same-named files, and copy the archive's `qw` and `ezquake`
+directories beside `id1`. Retain `crosshairs.json` alongside them.
+Run `exec ezv-crosshairs.cfg` in the console and `cfg_save` to retain the settings.
+This changes only crosshairs and their weapon-change hook; it does not rebind keys.
+Reloading Quick WASD/ESDF loads the same module but also applies that keyboard layout.
+
+`crosshairsize` controls PNG size; `crosshairscale` controls built-in texture size,
+so copying a size value between PNG and built-in crosshairs does not imply an
+identical appearance. These PNGs retain the exact original bytes and transparency.
+Shotgun/super shotgun share `legacy_sg`; nailguns share `legacy_ng`; grenade,
+rocket and lightning use `legacy_gl`, `legacy_rl` and `legacy_lg`. Axe is hidden.
+The Quick lightning-fire alias hides the LG crosshair until release.
+User `config.cfg` and `autoexec.cfg` are not included or edited by the update.

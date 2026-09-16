@@ -121,3 +121,16 @@ preserved. GUI-process exit waiting fixes the beta.1 launcher's premature exit
 report. Engine binary and source remain the pinned 7bb8a686 release. No commercial
 assets, private configs or local demo files enter the source or Starter archive.
 See docs/STARTER.md and provenance/starter-validation.json in the public tree.
+
+
+## INPUT-005 crosshairs (2026-09-16)
+
+PASS: original five PNGs preserve exact bytes; native Quick WASD/ESDF/nQuake
+transitions retain 170 graphics settings and unrelated input/audio values. A
+separate Vulkan test using only public Quick ESDF profiles exercised seven real
+weapon switches, LG hide/release and shotgun return without missing-image or
+validation errors. The 800x600 rocket crosshair screenshot was visually inspected.
+Packaged Starter 0.1.1 first launch used the original PNG at size 2.5, all Balanced
+values and Quick WASD; a subsequent launch retained user size 3.1. Windows
+PowerShell 5.1 launcher, diagnostics and normal exits passed. Engine unchanged.
+See provenance/crosshairs-validation.json for scope and limitations.
