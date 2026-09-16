@@ -58,7 +58,7 @@ std::string socketPath(const char* base){
 bool address(const std::string& path,sockaddr_un& addr){if(path.empty()||path.size()>=sizeof(addr.sun_path))return false;addr={};addr.sun_family=AF_UNIX;memcpy(addr.sun_path,path.c_str(),path.size()+1);return true;}
 #ifndef __APPLE__
 std::string desktopPath(){const char* x=getenv("XDG_DATA_HOME");return (x&&*x?std::string(x):home()+"/.local/share")+"/applications/ezquake-vulkan.desktop";}
-std::string quoted(const std::string& s){std::string q="\"";for(char c:s){if(c=='%' )q+='%';if(c=='"'||c=='\\'||c=='`'||c=='$')q+='\\';if(c=='\n'||c=='\r')return "";q+=c;}return q+'"';}
+std::string desktopQuote(const std::string& s){std::string q="\"";for(char c:s){if(c=='%' )q+='%';if(c=='"'||c=='\\'||c=='`'||c=='$')q+='\\';if(c=='\n'||c=='\r')return "";q+=c;}return q+'"';}
 int run(const std::vector<std::string>& args,std::string* output=nullptr){
     int pipes[2];if(pipe(pipes))return -1;
     std::vector<char*> argv;for(auto& arg:args)argv.push_back(const_cast<char*>(arg.c_str()));argv.push_back(nullptr);
@@ -105,7 +105,7 @@ int FriendsPlatform_Register(const char* base,int enable){try{
     if(enable){
         std::filesystem::create_directories(std::filesystem::path(desktop).parent_path());
         auto launch=getenv("APPIMAGE")?canonical(getenv("APPIMAGE")):exe;
-        std::ofstream f(desktop);f<<"[Desktop Entry]\nType=Application\nName=ezQuake Vulkan\nExec="<<quoted(launch)<<" -nohome -basedir "<<quoted(dir)<<" +set vid_renderer 2 -friends-invite %u\nTerminal=false\nNoDisplay=true\nMimeType=x-scheme-handler/ezquake-vulkan;\n";f.close();if(!f)return 0;
+        std::ofstream f(desktop);f<<"[Desktop Entry]\nType=Application\nName=ezQuake Vulkan\nExec="<<desktopQuote(launch)<<" -nohome -basedir "<<desktopQuote(dir)<<" +set vid_renderer 2 -friends-invite %u\nTerminal=false\nNoDisplay=true\nMimeType=x-scheme-handler/ezquake-vulkan;\n";f.close();if(!f)return 0;
         if(run({"xdg-mime","default","ezquake-vulkan.desktop","x-scheme-handler/ezquake-vulkan"}))return 0;
     }else unlink(desktop.c_str());
 #endif

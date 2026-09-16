@@ -178,7 +178,7 @@ char *parse_mod_string(char *str)
 				break;
 			default: ret = NULL;
 			}
-			pcre2_substring_list_free((const PCRE2_UCHAR8**)buf);
+			pcre2_substring_list_free((void*)buf);
 			break;
 		}
 	}

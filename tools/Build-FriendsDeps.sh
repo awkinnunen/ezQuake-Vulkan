@@ -12,7 +12,7 @@ build_dependency() {
     echo "$checksum  $work/$name.tar.gz" | sha512sum --check -
     mkdir -p "$work/$name"
     tar -xzf "$work/$name.tar.gz" --strip-components=1 -C "$work/$name"
-    cmake -S "$work/$name" -B "$work/$name-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF "$@"
+    cmake -S "$work/$name" -B "$work/$name-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DBUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH="$prefix" "$@"
     cmake --build "$work/$name-build" --parallel 4
     cmake --install "$work/$name-build"
     mkdir -p "$prefix/share/ezv-sources/$name"

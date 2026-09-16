@@ -326,7 +326,7 @@ int main(int argc, char **argv)
         extern const char* FriendsPlatform_DefaultBase(void);
         extern int Friends_ReceiveInvitation(const char*);
         extern int NF_ValidateInvite(const char*);
-        static char *arguments[MAX_NUM_ARGVS+4];
+        static char *arguments[260];
         const char *base=FriendsPlatform_DefaultBase();int hasbase=0,j;
         for(j=1;j+1<argc;++j)if(!strcmp(argv[j],"-basedir")){base=argv[j+1];hasbase=1;}
         for(j=1;j<argc;++j){
@@ -338,7 +338,7 @@ int main(int argc, char **argv)
                 argv[j]=argv[j+1]="";break;
             }
         }
-        if(!hasbase&&access(base,F_OK)==0&&argc<MAX_NUM_ARGVS){
+        if(!hasbase&&access(base,F_OK)==0&&argc<256){
             for(j=0;j<argc;++j)arguments[j]=argv[j];
             arguments[argc++]="-basedir";arguments[argc++]=(char*)base;arguments[argc++]="-nohome";arguments[argc]=NULL;argv=arguments;
         }
