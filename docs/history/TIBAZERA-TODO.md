@@ -249,3 +249,7 @@ Requested by AWK; implementation and automated validation by OpenAI Codex.
 
 See [Unix port instructions and evidence](../UNIX-PORT.md). Successful builds or
 local/container tests do not close the external hardware/network gates.
+
+- [x] DIST-UNIX-003: publish v0.3.0-beta.1 with Linux x86_64, Mac arm64/x64,
+  native installers, matching sources and hashes. All three public runtime
+  downloads independently verified; retain PORT-UNIX-HW and UNIX-GAMEPLAY-001.

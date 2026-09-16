@@ -1276,3 +1276,12 @@ headers also needed small compatibility fixes. Windows/Linux binary transport
 checks pass in both host directions. Linux unit and installer tests pass; real
 Mac graphics, GUI links, physical input/audio and cross-city gameplay remain
 external gates. Current validation and installation details: docs/UNIX-PORT.md.
+
+Publication verification: v0.3.0-beta.1 is public, built from f3ad8481. All four
+platform build jobs pass; all three Unix native unit/installer/package jobs pass.
+The release workflow verified 443 package file hashes, matching source archives
+and 16 uploaded assets. All three public runtime downloads were independently
+downloaded and SHA-256 checked. The final Linux package also installed and started
+in a clean Ubuntu container without development dependencies. Mac hardware and
+cross-city engine gameplay gates remain open; the software-rendered Linux
+three-instance sequence is explicitly partial evidence (UNIX-GAMEPLAY-001).

@@ -43,7 +43,8 @@
     "packageSourceCommit": "df8ba96ccc42e35c949b07a83c98ca32de0f8986",
     "environment": "Fresh Ubuntu 24.04 container, CA certificates and normal GL/Vulkan driver libraries; no compiler, custom dependency prefix or Python",
     "realDownloadsAndFreshInstall": true,
-    "relocatedEngineStartup": true
+    "relocatedEngineStartup": true,
+    "alsoVerifiedFinalPackageCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3"
   },
   "linuxSoftwareEngine": {
     "completeGameplayPass": false,
@@ -80,7 +81,58 @@
     "Cross-city engine gameplay with roles reversed",
     "Microphone-to-microphone voice"
   ],
-  "publication": "pending artifact audit and upload",
+  "publication": "published and public downloads verified",
   "privateInvitationsIncluded": false,
-  "commercialGameDataBundled": false
+  "commercialGameDataBundled": false,
+  "releaseVerification": {
+    "pass": true,
+    "release": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.3.0-beta.1",
+    "sourceCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3",
+    "publishedAssetsVerified": 16,
+    "publicBinaryDownloads": [
+      {
+        "name": "ezQuake-Vulkan-0.3.0-beta.1-linux-x86_64.tar.gz",
+        "bytes": 16628505,
+        "sha256": "52992cc53b6e4a8291db8b5d0842dcf8df9e83c06238ade4d8124a938d6b6ce8",
+        "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.3.0-beta.1/ezQuake-Vulkan-0.3.0-beta.1-linux-x86_64.tar.gz"
+      },
+      {
+        "name": "ezQuake-Vulkan-0.3.0-beta.1-macos-arm64.zip",
+        "bytes": 12034647,
+        "sha256": "fde86d6f3391142fc152a340a6242896344bb3e73c858286691cce4122015cf3",
+        "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.3.0-beta.1/ezQuake-Vulkan-0.3.0-beta.1-macos-arm64.zip"
+      },
+      {
+        "name": "ezQuake-Vulkan-0.3.0-beta.1-macos-x64.zip",
+        "bytes": 12412534,
+        "sha256": "b4942f5ff54df1d015a77aa017c36e34b8e3bc841f702911bae923b1b84104d2",
+        "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.3.0-beta.1/ezQuake-Vulkan-0.3.0-beta.1-macos-x64.zip"
+      }
+    ],
+    "platforms": [
+      {
+        "platform": "linux-x86_64",
+        "manifestFileHashesVerified": 201,
+        "sourceCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3",
+        "matchingDependencySources": true,
+        "commercialDataBundled": false
+      },
+      {
+        "platform": "macos-arm64",
+        "manifestFileHashesVerified": 124,
+        "sourceCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3",
+        "matchingDependencySources": true,
+        "commercialDataBundled": false
+      },
+      {
+        "platform": "macos-x64",
+        "manifestFileHashesVerified": 118,
+        "sourceCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3",
+        "matchingDependencySources": true,
+        "commercialDataBundled": false
+      }
+    ]
+  },
+  "releaseWorkflow": "https://github.com/awkinnunen/ezQuake-Vulkan/actions/runs/35155362814",
+  "allFourBuildJobsPassed": true
 }
