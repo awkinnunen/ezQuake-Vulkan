@@ -54,6 +54,7 @@ jobs:
     steps:
     - name: Prepare Linux environment
       run: |
+        sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
         apt-get -qq update && apt-get -qq install --no-install-recommends ${{ join(matrix.packages, ' ') }}
         git config --global --add safe.directory $PWD
       if: matrix.os == 'ubuntu-latest'
@@ -178,6 +179,18 @@ jobs:
             --dependency-sources /opt/ezv-deps/share/ezv-sources \
             --version 0.3.0-beta.1 --output packages
         fi
+      if: matrix.os != 'windows-2025-vs2026'
+
+    - name: Test packaged native installer
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          arch="${{ matrix.configurePreset }}"
+          platform="macos-${arch#macos-}"
+        else
+          platform="linux-x86_64"
+        fi
+        python3 tools/Test-UnixStarter.py "packages/ezQuake-Vulkan-0.3.0-beta.1-$platform" "$RUNNER_TEMP/starter-tests"
       if: matrix.os != 'windows-2025-vs2026'
 
     - name: Archive Unix packages and matching sources

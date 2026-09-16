@@ -37,7 +37,7 @@ static void extract(const fs::path& archive,const fs::path& stage,const std::str
         for(;code==UNZ_OK;code=unzGoToNextFile(z)){
             unz_file_info64 info{};char name[4096];need(unzGetCurrentFileInfo64(z,&info,name,sizeof(name),nullptr,0,nullptr,0)==UNZ_OK&&info.size_filename<sizeof(name),"Invalid ZIP entry");
             std::string n(name,info.size_filename);safe(stage,n);need(seen.insert(n).second,"Duplicate ZIP path");
-            total+=info.uncompressed_size;need(total<=4ull*1024*1024*1024,"Archive too large");
+            need(info.uncompressed_size<=4ull*1024*1024*1024-total,"Archive too large");total+=info.uncompressed_size;
             auto type=(info.external_fa>>16)&S_IFMT;need(type==0||type==S_IFREG||type==S_IFDIR,"ZIP links/special files are not allowed");
         }
         need(code==UNZ_END_OF_LIST_OF_FILE,"Invalid ZIP directory");
@@ -94,8 +94,8 @@ static void copyTree(const fs::path& source,const fs::path& target){fs::copy(sou
 static int run(const fs::path& exe,const std::vector<std::string>& args){std::string executable=exe.string();std::vector<char*> argv{executable.data()};for(auto& x:args)argv.push_back(const_cast<char*>(x.c_str()));argv.push_back(nullptr);pid_t pid;int error=posix_spawn(&pid,exe.c_str(),nullptr,nullptr,argv.data(),environ);if(error)return error;int status;while(waitpid(pid,&status,0)<0)if(errno!=EINTR)return -1;return WIFEXITED(status)?WEXITSTATUS(status):-1;}
 int main(int argc,char** argv){try{
     umask(077);need(curl_global_init(CURL_GLOBAL_DEFAULT)==CURLE_OK,"TLS initialization failed");
-    fs::path package,destination,cache,quake;bool yes=false,links=true;
-    for(int i=1;i<argc;++i){std::string arg=argv[i];if(arg=="--yes")yes=true;else if(arg=="--no-links")links=false;else{need(i+1<argc,"Missing argument value");std::string value=argv[++i];if(arg=="--package")package=value;else if(arg=="--destination")destination=value;else if(arg=="--cache")cache=value;else if(arg=="--quake")quake=value;else throw std::runtime_error("Unknown setup option");}}
+    fs::path package,destination,cache,quake;bool yes=false,links=true,shortcut=true;
+    for(int i=1;i<argc;++i){std::string arg=argv[i];if(arg=="--yes")yes=true;else if(arg=="--no-links")links=false;else if(arg=="--no-shortcut")shortcut=false;else{need(i+1<argc,"Missing argument value");std::string value=argv[++i];if(arg=="--package")package=value;else if(arg=="--destination")destination=value;else if(arg=="--cache")cache=value;else if(arg=="--quake")quake=value;else throw std::runtime_error("Unknown setup option");}}
     need(!package.empty(),"--package is required");package=fs::canonical(package);const char* h=getenv("HOME");need(h&&*h,"HOME is missing");fs::path home=h;
 #ifdef __APPLE__
     if(destination.empty())destination=home/"Library/Application Support/ezQuake-Vulkan";
@@ -130,9 +130,15 @@ int main(int argc,char** argv){try{
     need(!fs::exists(fs::symlink_status(destination)),"Destination appeared during installation");fs::rename(stage,destination);
 #ifdef __APPLE__
     auto exe=destination/"engine/ezQuake.app/Contents/MacOS/ezQuake";
-    fs::create_directories(home/"Applications");auto shortcut=home/"Applications/ezQuake Vulkan.app";if(!fs::exists(fs::symlink_status(shortcut)))fs::create_directory_symlink(destination/"engine/ezQuake.app",shortcut);
+    if(shortcut){fs::create_directories(home/"Applications");auto link=home/"Applications/ezQuake Vulkan.app";if(!fs::exists(fs::symlink_status(link)))fs::create_directory_symlink(destination/"engine/ezQuake.app",link);}
 #else
     auto exe=destination/"engine/ezquake";
+    if(shortcut){
+        auto quote=[](const std::string& text){std::string result="\"";for(char c:text){need(c!='\n'&&c!='\r',"Newlines in desktop path");if(c=='%')result+='%';if(c=='\\'||c=='\"'||c=='`'||c=='$')result+='\\';result+=c;}return result+'\"';};
+        auto applications=(getenv("XDG_DATA_HOME")?fs::path(getenv("XDG_DATA_HOME")):home/".local/share")/"applications";
+        fs::create_directories(applications);auto entry=applications/"ezquake-vulkan-game.desktop";
+        if(!fs::exists(entry)){std::ofstream desktop(entry);desktop<<"[Desktop Entry]\nType=Application\nName=ezQuake Vulkan\nCategories=Game;\nTerminal=false\nExec="<<quote((destination/"Start.command").string())<<"\n";}
+    }
 #endif
     if(links&&run(exe,{"-friends-register",destination.string()})!=0)std::cout<<"Installed, but URL registration needs attention: use Friends > Invitation links.\n";
     std::cout<<"Installed: "<<destination<<"\nRun Start.command. Your Friends link stays valid until you rotate it.\n";return 0;

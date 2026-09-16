@@ -1,6 +1,9 @@
 #import <AppKit/Appkit.h>
 #import <Foundation/Foundation.h>
-#import <SDL.h>
+#import <SDL3/SDL.h>
+#ifdef WITH_FRIENDS
+#import "friends/platform.h"
+#endif
 #import "common.h"
 
 @interface URL : NSObject
@@ -10,7 +13,19 @@
 @implementation URL
 - (void)getURL:(NSAppleEventDescriptor*)event withReplyEvent:(NSAppleEventDescriptor*)reply
 {
-	Cbuf_AddText(va("qwurl \"%s\"\n", [[[event paramDescriptorForKeyword:keyDirectObject] stringValue] cStringUsingEncoding:NSASCIIStringEncoding]));
+    NSString *value = [[event paramDescriptorForKeyword:keyDirectObject] stringValue];
+    const char *link = [value UTF8String];
+    if (!link) return;
+#ifdef WITH_FRIENDS
+    /* The legacy Apple-event handler overrides SDL's URL delivery on some
+     * launches. Stage Friends URLs as validated data, never console commands. */
+    if ([value hasPrefix:@"ezquake-vulkan:"]) {
+        Friends_ReceiveInvitation(link);
+        return;
+    }
+#endif
+    if ([value hasPrefix:@"qw://"] && !strpbrk(link, "\"\r\n"))
+        Cbuf_AddText(va("qwurl \"%s\"\n", link));
 }
 @end
 

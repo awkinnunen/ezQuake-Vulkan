@@ -24,6 +24,10 @@ fetch SDL-3.4.0 https://github.com/libsdl-org/SDL/archive/release-3.4.0.tar.gz "
 cmake -S "$work/SDL-3.4.0" -B "$work/SDL-3.4.0-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON -DSDL_X11_XTEST=OFF
 cmake --build "$work/SDL-3.4.0-build" --parallel 4
 cmake --install "$work/SDL-3.4.0-build"
+hash=$(awk '/SHA512/{gsub(/\r/, "", $2); print $2}' "$root/vcpkg/ports/vulkan-headers/portfile.cmake")
+fetch Vulkan-Headers-1.4.328.0 https://github.com/KhronosGroup/Vulkan-Headers/archive/vulkan-sdk-1.4.328.0.tar.gz "$hash"
+cmake -S "$work/Vulkan-Headers-1.4.328.0" -B "$work/Vulkan-Headers-build" -G Ninja -DCMAKE_INSTALL_PREFIX="$prefix" -DVULKAN_HEADERS_ENABLE_TESTS=OFF -DVULKAN_HEADERS_ENABLE_MODULE=OFF
+cmake --install "$work/Vulkan-Headers-build"
 export CMAKE_PREFIX_PATH="$prefix"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 bash "$root/tools/Build-FriendsDeps.sh" "$prefix"

@@ -79,12 +79,21 @@ else:
    soname,src=match.groups()
    if system.match(soname) or soname in copied:continue
    copied.add(soname);target=libs/soname;shutil.copyfile(src,target);pending.append(target)
-   owner=subprocess.run(['dpkg-query','-S',src],capture_output=True,text=True)
+   owner=subprocess.run(['dpkg-query','-S',str(Path(src).resolve())],capture_output=True,text=True)
+   if owner.returncode:owner=subprocess.run(['dpkg-query','-S',src],capture_output=True,text=True)
    if owner.returncode==0:
     package=owner.stdout.split(': ',1)[0].split(':')[0];packages.add(package)
     notice=Path('/usr/share/doc')/package/'copyright'
     if notice.exists():shutil.copyfile(notice,notices/(package+'-copyright.txt'))
   run('patchelf','--set-rpath','$ORIGIN' if f.parent==libs else '$ORIGIN/lib',f)
+ # Keep corresponding Ubuntu source archives alongside bundled shared libraries.
+ source_dir=a.output/(name+'-dependency-sources');source_dir.mkdir()
+ source_packages={}
+ for n in sorted(packages):
+  package,version=run('dpkg-query','-W','-f=${source:Package} ${source:Version}',n).split()
+  source_packages[package]=version
+ for package,version in source_packages.items():
+  subprocess.run(['apt-get','source','--download-only',package+'='+version],cwd=source_dir,check=True,stdout=subprocess.DEVNULL)
  (notices/'linux-packages.json').write_text(json.dumps({n:run('dpkg-query','-W','-f=${Version}',n) for n in sorted(packages)},indent=2)+'\n')
 # No private game files, identities or commercial resources enter the archive.
 assert not any(f.suffix.lower() in {'.pak','.pk3','.mvd','.qwd','.dem'} or f.name=='friends.identity' for f in folder.rglob('*'))
@@ -113,6 +122,9 @@ with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as out:
  if a.dependency_sources:
   for f in a.dependency_sources.rglob('*'):
    if f.is_file():out.write(f,'dependency-sources/'+f.relative_to(a.dependency_sources).as_posix())
+ if a.platform=='linux':
+  for f in source_dir.iterdir():
+   if f.is_file():out.write(f,'ubuntu-dependency-sources/'+f.name)
  # vcpkg retains hash-verified upstream source archives; include these for static Mac dependencies.
  if a.platform=='macos':
   for f in (repo/'vcpkg/downloads').glob('*'):

@@ -27,12 +27,16 @@ def profile(name,host=False,invite=None):
  if host and a.arena:
   run=common+'alias f_spawn "exec poll.cfg"\nmenu_local\ndev_local_menu map dm6\ndev_local_menu bots 1\ndev_local_menu friends 1\ndev_local_menu start\n'
  if not host and a.links:run=common+'alias f_spawn "exec poll.cfg"\nexec poll.cfg\n'
- text(d/'qw/run.cfg',run)
+ deferred=run[len(common):] if host else ''
+ text(d/'qw/run.cfg',common+'dev_friends poll\n' if host else run)
  err=(d/'stderr.log').open('w');handles.append(err)
  args=[str(exe),'-allowmultiple','-condebug','-nohome','-basedir',str(d),'-window','-width','640','-height','480','+set','vid_renderer','2','+exec','run.cfg']
  if not host and a.links and name=='guest1':args+=['-friends-invite',invite.read_text()]
  child=subprocess.Popen(args,cwd=d,stdout=err,stderr=err,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
  children.append(child)
+ if host:
+  wait(lambda:'ezQuake Initialized' in log(d),180)
+  command(d,deferred,ack=False)
  if not host and a.links:
   if name=='guest2':
    wait(lambda:'ezQuake Initialized' in log(d))

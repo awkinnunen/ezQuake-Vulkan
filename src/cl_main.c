@@ -2401,11 +2401,14 @@ static double CL_MinFrameTime (void)
 	if (cls.timedemo || Movie_IsCapturing())
 		return 0;
 
-	if ((cls.state == ca_disconnected) || (Minimized && !cls.download))
+	if ((cls.state == ca_disconnected) || (Minimized && !cls.download)) {
 		if (cl_maxfps_menu.value >= 30)
 			return 1 / cl_maxfps_menu.value;
-		else
-			return 1 / (r_displayRefresh.autoString ? atoi(r_displayRefresh.autoString) : 30.0);
+		/* Virtual displays and some drivers report an unknown (zero) refresh.
+		 * Dividing by it freezes menu/input/server startup at an infinite frame interval. */
+		fps = r_displayRefresh.autoString ? atof(r_displayRefresh.autoString) : 0;
+		return 1 / max(30.0, fps);
+	}
 
 	if (cls.demoplayback)
 	{
