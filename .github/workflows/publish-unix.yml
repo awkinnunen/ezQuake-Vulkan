@@ -1,0 +1,58 @@
+name: Publish verified Unix beta
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful native build run ID
+        required: true
+      source_commit:
+        description: Exact 40-character source commit used by that build
+        required: true
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source build and native test jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          python3 - <<'PY'
+          import os,re,json,urllib.request
+          run=os.environ['BUILD_RUN'];sha=os.environ['SOURCE_COMMIT']
+          assert re.fullmatch(r'[0-9]+',run) and re.fullmatch(r'[0-9a-f]{40}',sha)
+          def get(path):
+              req=urllib.request.Request('https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN']})
+              return json.load(urllib.request.urlopen(req))
+          build=get('/actions/runs/'+run)
+          assert build['head_sha']==sha and build['head_branch']=='main' and build['path']=='.github/workflows/main.yml'
+          jobs={j['name']:j['conclusion'] for j in get('/actions/runs/'+run+'/jobs?per_page=100')['jobs']}
+          assert all(jobs.get(n)=='success' for n in ['ezQuake-linux-x86_64','ezQuake-macOS-arm64','ezQuake-macOS-x64'])
+          print('Verified source commit and all three native build/test/package jobs:',sha)
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run }}
+          pattern: ezQuake-*
+          path: artifacts
+      - name: Verify manifests, dependency sources and hashes
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: python3 tools/Verify-UnixRelease.py artifacts "$SOURCE_COMMIT"
+      - name: Upload draft assets and publish after hash verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/Publish-UnixRelease.py artifacts draft
+          python3 tools/Publish-UnixRelease.py artifacts publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unix-release-audit
+          path: artifacts/verified-assets.json

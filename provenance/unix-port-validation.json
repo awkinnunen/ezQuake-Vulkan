@@ -1,0 +1,86 @@
+{
+  "date": "2026-09-17",
+  "requestedBy": "AWK",
+  "implementationAndTests": "OpenAI Codex",
+  "releaseSourceCommit": "f3ad8481356cdf94b5e5ced3c939c1a4174dfdb3",
+  "ciRun": "https://github.com/awkinnunen/ezQuake-Vulkan/actions/runs/35154070300",
+  "nativeJobs": {
+    "linux-x86_64": 104989185800,
+    "macos-arm64": 104989185768,
+    "macos-x64": 104989185585
+  },
+  "allThreeNativeJobsPassed": true,
+  "nativeJobScope": [
+    "Full engine and installer compilation",
+    "Friends fragmentation/identity/permission/rotation unit tests",
+    "Relocated engine startup without graphics",
+    "Fresh native installation with real nQuake downloads",
+    "Paths with spaces and existing-directory preservation",
+    "nQuake autoexec preservation and five Quick crosshairs",
+    "ZIP traversal/symlink/duplicate and corrupt-cache rejection",
+    "Runtime relocation and package/source archive creation"
+  ],
+  "crossPlatformTransport": {
+    "pass": true,
+    "windowsHostLinuxGuest": true,
+    "linuxHostWindowsGuest": true,
+    "binaryEchoPacketsPerDirection": 100,
+    "bytesPerPacket": 1450,
+    "networkScope": "Windows host and Docker Linux, same computer; real Frag-Net signalling"
+  },
+  "linuxTransport": {
+    "pass": true,
+    "simultaneousGuests": 2,
+    "packetsPerGuest": 100,
+    "bytesPerPacket": 1450,
+    "sequentialRejoin": true,
+    "processRestartSameInvitation": true,
+    "broker": "existing Frag-Net",
+    "networkScope": "one computer, multiple native processes"
+  },
+  "cleanUbuntuRuntime": {
+    "pass": true,
+    "packageSourceCommit": "df8ba96ccc42e35c949b07a83c98ca32de0f8986",
+    "environment": "Fresh Ubuntu 24.04 container, CA certificates and normal GL/Vulkan driver libraries; no compiler, custom dependency prefix or Python",
+    "realDownloadsAndFreshInstall": true,
+    "relocatedEngineStartup": true
+  },
+  "linuxSoftwareEngine": {
+    "completeGameplayPass": false,
+    "observed": [
+      "Local Arena startup with packaged KTX QVM",
+      "Host and bot in DM6",
+      "Private invitation UDP gate",
+      "URI cold start and confirmation",
+      "Warm native IPC with cancel/reconfirm",
+      "First remote guest spawning"
+    ],
+    "failures": [
+      "Timed-out three-instance gameplay fixtures",
+      "Broker/peer failures during heavily loaded CPU rendering"
+    ],
+    "attribution": "Not isolated; neither proof of a general Linux networking defect nor a completed gameplay pass",
+    "issue": "UNIX-GAMEPLAY-001"
+  },
+  "macOS": {
+    "minimumBinaryOSInspected": "11.0",
+    "separateArchitectures": [
+      "arm64",
+      "x64"
+    ],
+    "moltenVK": "1.4.1 from Vulkan SDK 1.4.350.1",
+    "signature": "ad-hoc",
+    "developerID": false,
+    "notarized": false,
+    "graphicsTested": false
+  },
+  "externalGates": [
+    "Physical Linux/Mac GPU rendering and long-session coverage",
+    "Mac mouse/audio and GUI invitation dispatch",
+    "Cross-city engine gameplay with roles reversed",
+    "Microphone-to-microphone voice"
+  ],
+  "publication": "pending artifact audit and upload",
+  "privateInvitationsIncluded": false,
+  "commercialGameDataBundled": false
+}

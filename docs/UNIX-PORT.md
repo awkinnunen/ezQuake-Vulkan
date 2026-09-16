@@ -96,6 +96,18 @@ CI repeats native unit and packaged-installer checks on each Unix architecture.
 The relocated engine is also launched with an intentionally invalid invitation
 to verify runtime loading without changing the user's URL association.
 
+A separate clean Ubuntu container with normal driver libraries and CA certificates
+also installed the downloaded CI package and launched its relocated engine; it
+had no compiler, custom dependency prefix or Python installation. The package's
+own native installer fetched the real nQuake archives successfully.
+
+Software-Vulkan engine fixtures reached Local Arena, a bot, invitation
+confirmation and the first remote player spawning. The complete three-instance
+gameplay sequence did not pass: heavy CPU rendering coincided with timeouts and
+broker/peer failures. The exact failure cause is not isolated. This is partial
+engine evidence, not a completed Linux multiplayer acceptance test. See
+UNIX-GAMEPLAY-001 in [the issue list](history/BUGS.md).
+
 Actual Mac graphics, mouse, audio, GUI invitation dispatch, long sessions and
 cross-city gameplay remain external tester gates. CI success does not establish
 those results. The friend should test Balanced first, then the other presets,

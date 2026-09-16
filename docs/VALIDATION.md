@@ -7,6 +7,14 @@
 
 # Validation status
 
+## 2026-09-17: native Unix test release
+
+Current Linux/macOS scope is in [UNIX-PORT.md](UNIX-PORT.md) and
+[the sanitized validation record](../provenance/unix-port-validation.json).
+Target-OS builds, Friends unit checks and native installer tests are distinct
+from real GPU/input/audio and internet gameplay acceptance. Do not extend the
+historical Windows rendering results below to untested Mac hardware.
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.

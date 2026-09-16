@@ -306,3 +306,14 @@ release downloads were removed after verification; source tags and historical
 engine beta remain. The development URI registration was restored after fixtures.
 The general Linux CI failure also exists at the prior baseline and is recorded
 as BUILD-LINUX-001; it does not describe the separately tested Windows binaries.
+
+## 2026-09-16/17 — Unix port authorship
+
+AWK requested complete Linux/macOS ports and packages, with a friend to perform
+hardware testing. OpenAI Codex implemented the Unix Friends adapter, private-file
+identity storage, native invitation registration/IPC, CMake and SDL3 compatibility
+fixes, MoltenVK configuration, native installer, package/source automation and
+tests. The Git commits retain the individual changes and authorship. No upstream
+engine, FTE, libjuice, IXWebSocket, SDL, OpenSSL, Vulkan or nQuake authorship is
+claimed by this project. See docs/UNIX-PORT.md and provenance/unix-port-validation.json
+for tested scope and remaining external gates.

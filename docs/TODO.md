@@ -7,6 +7,10 @@
 
 # Next work
 
+Current Linux/macOS implementation and remaining hardware/network tester gates
+are tracked under **Native Unix distribution** in
+[the active TODO](history/TIBAZERA-TODO.md) and [the port guide](UNIX-PORT.md).
+
 ## MAINT-005 correction: conditional particle settings (2026-09-13)
 
 OpenAI Codex incorrectly classified 55 settings as unsupported during MAINT-001.
