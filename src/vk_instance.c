@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "vk_local.h"
 
 // VK_EXT_debug_report extension to get debug messages 
-#define EZ_MAX_ADDITIONAL_EXTENSIONS 1
+#define EZ_MAX_ADDITIONAL_EXTENSIONS 2
 
 static const char* validationLayers[] = { "VK_LAYER_KHRONOS_validation" };
 
@@ -111,6 +111,16 @@ qbool VK_CreateInstance(SDL_Window* window, VkInstance* instance)
 
 	extensionStrings = Q_malloc(sizeof(extensionStrings[0]) * (extensionCount + EZ_MAX_ADDITIONAL_EXTENSIONS));
 	memcpy(extensionStrings, sdlExtensionStrings, sizeof(extensionStrings[0]) * extensionCount);
+
+#ifdef __APPLE__
+    /* MoltenVK devices are hidden by the loader unless portability is requested. */
+    {
+        uint32_t i; qbool present=false;
+        for(i=0;i<extensionCount;++i)if(!strcmp(extensionStrings[i],VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))present=true;
+        if(!present)extensionStrings[extensionCount++]=VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+        createInfo.flags|=VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    }
+#endif
 
 	if (VK_AddValidationLayers(&createInfo)) {
 		// Add VK_EXT_DEBUG_REPORT_EXTENSION_NAME

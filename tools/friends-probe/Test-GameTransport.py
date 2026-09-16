@@ -5,7 +5,7 @@ exe=str(a.executable.resolve());out=a.output.resolve();out.mkdir(parents=True,ex
 processes=[];logs=[]
 def launch(name,*args):
  f=(out/(name+'.log')).open('w');logs.append(f)
- child=subprocess.Popen([exe,*map(str,args)],stdout=f,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+ child=subprocess.Popen([exe,*map(str,args)],stdout=f,stderr=subprocess.STDOUT,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
  processes.append(child);return child
 def wait_for(fn,seconds=30):
  end=time.monotonic()+seconds

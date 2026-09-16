@@ -318,6 +318,33 @@ int main(int argc, char **argv)
 	double time, oldtime, newtime;
 	int i;
 
+#ifdef WITH_FRIENDS
+    /* URI is validated data, never console text. Scrub before COM_InitArgv. */
+    {
+        extern int FriendsPlatform_Register(const char*,int);
+        extern int FriendsPlatform_Forward(const char*,const char*);
+        extern const char* FriendsPlatform_DefaultBase(void);
+        extern int Friends_ReceiveInvitation(const char*);
+        extern int NF_ValidateInvite(const char*);
+        static char *arguments[MAX_NUM_ARGVS+4];
+        const char *base=FriendsPlatform_DefaultBase();int hasbase=0,j;
+        for(j=1;j+1<argc;++j)if(!strcmp(argv[j],"-basedir")){base=argv[j+1];hasbase=1;}
+        for(j=1;j<argc;++j){
+            if(!strcmp(argv[j],"-friends-register"))return j==1&&argc==3&&FriendsPlatform_Register(argv[2],1)?0:2;
+            if(!strcmp(argv[j],"-friends-invite")){
+                if(j+2!=argc||!NF_ValidateInvite(argv[j+1]))return 2;
+                if(FriendsPlatform_Forward(base,argv[j+1]))return 0;
+                if(!Friends_ReceiveInvitation(argv[j+1]))return 2;
+                argv[j]=argv[j+1]="";break;
+            }
+        }
+        if(!hasbase&&access(base,F_OK)==0&&argc<MAX_NUM_ARGVS){
+            for(j=0;j<argc;++j)arguments[j]=argv[j];
+            arguments[argc++]="-basedir";arguments[argc++]=(char*)base;arguments[argc++]="-nohome";arguments[argc]=NULL;argv=arguments;
+        }
+    }
+#endif
+
 #ifdef __linux__
 	extern void InitSig(void);
 	InitSig();

@@ -31,10 +31,15 @@ void tests(const std::string& dir){
   bool locked=false;try{StoredIdentity other;other.open(path);}catch(...){locked=true;}require(locked,"Identity has no exclusive lock");}
  {StoredIdentity id;id.open(path);require(gameInvite(id.invitation)==first,"Invitation changed on restart");id.rotate();second=gameInvite(id.invitation);require(second!=first,"Rotation unchanged");require(parseGameInvite(second).room==parseGameInvite(first).room,"Rotation changed room");}
  {StoredIdentity id;id.open(path);require(gameInvite(id.invitation)==second,"Rotation not persisted");}
+#ifdef _WIN32
  std::ifstream f(path,std::ios::binary);std::string raw((std::istreambuf_iterator<char>(f)),{});require(raw.find(parseGameInvite(second).key)==std::string::npos,"Plaintext secret on disk");f.close();
+#else
+ struct stat st{};require(!stat(path.c_str(),&st)&&(st.st_mode&077)==0,"Private identity permissions wrong");
+ chmod(path.c_str(),0644);rejected=false;try{StoredIdentity id;id.open(path);}catch(...){rejected=true;}require(rejected,"Public identity permissions accepted");chmod(path.c_str(),0600);
+#endif
  {std::ofstream f(path,std::ios::binary|std::ios::trunc);f<<"corrupt";}
  rejected=false;try{StoredIdentity id;id.open(path);}catch(...){rejected=true;}require(rejected,"Corrupt identity silently replaced");
- std::cout<<"PASS: binary fragmentation, malformed bounds, persistence, locking, rotation, DPAPI, corruption\n";
+ std::cout<<"PASS: binary fragmentation, malformed bounds, persistence, locking, rotation, private storage, corruption\n";
 }
 int main(int argc,char** argv){
  try{

@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 #ifdef WITH_FRIENDS
-#include "friends/windows.h"
+#include "friends/platform.h"
 #include "friends/transport.h"
 static qbool friends_link_start;
 #endif
@@ -1278,13 +1278,13 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
     for(i=1;i<argc;++i){
         if(!strcmp(argv[i],"-friends-register")){
             if(i!=1||argc!=3)return 2;
-            return FriendsWindows_Register(argv[2],1)?0:2;
+            return FriendsPlatform_Register(argv[2],1)?0:2;
         }
         if(!strcmp(argv[i],"-friends-invite")){
             int j;const char *base=".";
             if(i+2!=argc||!NF_ValidateInvite(argv[i+1]))return 2;
             for(j=1;j+1<i;++j)if(!strcmp(argv[j],"-basedir"))base=argv[j+1];
-            if(FriendsWindows_Forward(base,argv[i+1]))return 0;
+            if(FriendsPlatform_Forward(base,argv[i+1]))return 0;
             if(!Friends_ReceiveInvitation(argv[i+1]))return 2;
             /* Do not expose secrets via cl_cmdline, f_cmdline or saved configs. */
             argv[i]=argv[i+1]="";friends_link_start=true;break;

@@ -29,6 +29,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>qw</string>
+                <string>ezquake-vulkan</string>
 			</array>
 		</dict>
 	</array>

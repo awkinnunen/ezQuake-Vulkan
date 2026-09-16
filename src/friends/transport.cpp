@@ -2,6 +2,7 @@
 #include "transport.h"
 #include "identity.h"
 #include "packet.h"
+#include "event.h"
 #include "../../tools/friends-probe/broker.h"
 #include <juice/juice.h>
 #include <thread>
@@ -22,14 +23,14 @@ struct Peer {
     std::unique_ptr<Dtls> dtls;Assembly assembly;
     Queue<std::string> candidates,encrypted;
     std::atomic<int> state{JUICE_STATE_DISCONNECTED};std::atomic<bool> bad{false};
-    HANDLE wake;bool description=false,offered=false,admitted=false,signalLost=false;
+    WakeEvent* wake;bool description=false,offered=false,admitted=false,signalLost=false;
     uint32_t sequence=1;
     Clock::time_point started=Clock::now(),last=started,nextSend=started;
-    Peer(uint16_t id,uint64_t number,HANDLE event):brokerId(id),token(number),wake(event){
+    Peer(uint16_t id,uint64_t number,WakeEvent* event):brokerId(id),token(number),wake(event){
         juice_config_t c{};c.stun_server_host="master.frag-net.com";c.stun_server_port=27950;c.user_ptr=this;
-        c.cb_state_changed=[](juice_agent_t*,juice_state_t s,void* p){auto x=static_cast<Peer*>(p);x->state=s;SetEvent(x->wake);};
-        c.cb_candidate=[](juice_agent_t*,const char* s,void* p){auto x=static_cast<Peer*>(p);try{if(strlen(s)>1024||!x->candidates.push(s))x->bad=true;}catch(...){x->bad=true;}SetEvent(x->wake);};
-        c.cb_recv=[](juice_agent_t*,const char* s,size_t n,void* p){auto x=static_cast<Peer*>(p);try{if(!n||n>MaxDatagram||!x->encrypted.push(std::string(s,n)))x->bad=true;}catch(...){x->bad=true;}SetEvent(x->wake);};
+        c.cb_state_changed=[](juice_agent_t*,juice_state_t s,void* p){auto x=static_cast<Peer*>(p);x->state=s;x->wake->signal();};
+        c.cb_candidate=[](juice_agent_t*,const char* s,void* p){auto x=static_cast<Peer*>(p);try{if(strlen(s)>1024||!x->candidates.push(s))x->bad=true;}catch(...){x->bad=true;}x->wake->signal();};
+        c.cb_recv=[](juice_agent_t*,const char* s,size_t n,void* p){auto x=static_cast<Peer*>(p);try{if(!n||n>MaxDatagram||!x->encrypted.push(std::string(s,n)))x->bad=true;}catch(...){x->bad=true;}x->wake->signal();};
         ice=juice_create(&c);require(ice!=nullptr,"ICE initialization failed");
     }
     ~Peer(){if(ice)juice_destroy(ice);}
@@ -47,7 +48,7 @@ class Service {
     std::set<uint64_t> live;
     int nextRequest=1,activeRequest=0;
     std::string invitation;
-    HANDLE wake=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+    WakeEvent wake;
     std::atomic<bool> exiting{false};
     std::thread worker;
     std::unique_ptr<Broker> broker;
@@ -98,7 +99,7 @@ class Service {
             for(auto& item:peers)if(!item.second->signalLost&&item.second->brokerId==m.peer)return;
             require(m.body.find('\0')!=std::string::npos,"Malformed peer notification");
             require(nextToken!=0,"Peer identifier exhausted; restart game");
-            auto p=std::make_unique<Peer>(m.peer,nextToken++,wake);
+            auto p=std::make_unique<Peer>(m.peer,nextToken++,&wake);
             if(!host)sendOffer(*p);auto token=p->token;peers.emplace(token,std::move(p));
         }
         auto it=std::find_if(peers.begin(),peers.end(),[&](auto& item){return !item.second->signalLost&&item.second->brokerId==m.peer;});if(it==peers.end())return;
@@ -180,18 +181,18 @@ class Service {
                     publish();
                 }
             }catch(const std::exception& e){reset();note(e.what());}
-            WaitForSingleObject(wake,active?5:INFINITE);
+            wake.wait(active);
         }
         reset();
     }
 public:
-    Service(){require(wake!=nullptr,"Friends worker event failed");worker=std::thread(&Service::loop,this);}
-    ~Service(){exiting=true;SetEvent(wake);if(worker.joinable())worker.join();CloseHandle(wake);}
-    int command(Command c){std::lock_guard<std::mutex> l(mutex);if(commands.size()>=16||nextRequest==INT_MAX)return 0;int result=1;if(c.kind==1||c.kind==2){result=nextRequest++;c.value=result;}commands.push_back(std::move(c));SetEvent(wake);return result;}
+    Service(){worker=std::thread(&Service::loop,this);}
+    ~Service(){exiting=true;wake.signal();if(worker.joinable())worker.join();}
+    int command(Command c){std::lock_guard<std::mutex> l(mutex);if(commands.size()>=16||nextRequest==INT_MAX)return 0;int result=1;if(c.kind==1||c.kind==2){result=nextRequest++;c.value=result;}commands.push_back(std::move(c));wake.signal();return result;}
     int alive(uint64_t peer){std::lock_guard<std::mutex> l(mutex);return live.count(peer)!=0;}
     void get(nf_status* out){std::lock_guard<std::mutex> l(mutex);*out=status;}
     int invite(char* out,int size){std::lock_guard<std::mutex> l(mutex);if(!status.ready||invitation.empty()||size<=int(invitation.size()))return 0;memcpy(out,invitation.c_str(),invitation.size()+1);return 1;}
-    void send(bool server,uint64_t peer,const void* data,int size){if(!peer||size<=0||size>int(GamePacketMax))return;std::lock_guard<std::mutex> l(mutex);if(outgoing.size()<512)outgoing.push_back({server,peer,std::string(static_cast<const char*>(data),size)});SetEvent(wake);}
+    void send(bool server,uint64_t peer,const void* data,int size){if(!peer||size<=0||size>int(GamePacketMax))return;std::lock_guard<std::mutex> l(mutex);if(outgoing.size()<512)outgoing.push_back({server,peer,std::string(static_cast<const char*>(data),size)});wake.signal();}
     int receive(bool server,uint64_t* peer,void* data,int size){
         std::lock_guard<std::mutex> l(mutex);
         for(auto it=incoming.begin();it!=incoming.end();){

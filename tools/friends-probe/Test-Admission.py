@@ -3,7 +3,7 @@ import argparse,pathlib,subprocess,time,json,re
 p=argparse.ArgumentParser();p.add_argument('executable',type=pathlib.Path);p.add_argument('output',type=pathlib.Path);a=p.parse_args()
 exe=str(a.executable.resolve());out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);children=[];files=[]
 def launch(name,*args):
- f=(out/(name+'.log')).open('w');files.append(f);c=subprocess.Popen([exe,*map(str,args)],stdout=f,stderr=f,creationflags=subprocess.CREATE_NO_WINDOW);children.append(c);return c
+ f=(out/(name+'.log')).open('w');files.append(f);c=subprocess.Popen([exe,*map(str,args)],stdout=f,stderr=f,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));children.append(c);return c
 def log(name):return (out/(name+'.log')).read_text(errors='replace')
 def wait(fn,seconds=30):
  end=time.monotonic()+seconds

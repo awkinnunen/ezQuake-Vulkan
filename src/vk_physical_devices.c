@@ -30,7 +30,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "vk_local.h"
 #include "r_texture.h"
 
-static const char* requiredDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+static const char* requiredDeviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME
+#ifdef __APPLE__
+    , "VK_KHR_portability_subset"
+#endif
+};
 
 static int VK_PhysicalDeviceTypeScore(VkPhysicalDeviceType type)
 {

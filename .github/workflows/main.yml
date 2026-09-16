@@ -13,6 +13,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-2025-vs2026
@@ -41,7 +42,7 @@ jobs:
             name: ezQuake-linux-x86_64
             artifact: "ezQuake-x86_64.AppImage"
             cflags: "-march=nehalem"
-            packages: ["build-essential", "ca-certificates", "cmake", "curl", "file", "git", "glslang-tools", "libcurl4-openssl-dev", "libexpat1-dev", "libfreetype-dev", "libfuse3-dev", "libjansson-dev", "libjpeg-dev", "libminizip-dev", "libpcre2-dev", "libpng-dev", "libsdl3-0", "libsdl3-dev", "libsndfile1-dev", "libspeex-dev", "libspeexdsp-dev", "libvulkan-dev", "ninja-build", "unzip"]
+            packages: ["build-essential", "ca-certificates", "cmake", "curl", "file", "git", "glslang-tools", "libcurl4-openssl-dev", "libexpat1-dev", "libfreetype-dev", "libfuse3-dev", "libjansson-dev", "libjpeg-dev", "libminizip-dev", "libpcre2-dev", "libpng-dev", "libsdl3-0", "libsdl3-dev", "libsndfile1-dev", "libspeex-dev", "libspeexdsp-dev", "libvulkan-dev", "libssl-dev", "ninja-build", "unzip"]
             container:
               image: debian:testing
               options: --privileged
@@ -140,11 +141,15 @@ jobs:
       uses: lukka/run-vcpkg@v11
       if: matrix.os != 'ubuntu-latest'
 
+    - name: Build portable Friends dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: bash tools/Build-FriendsDeps.sh /opt/ezv-deps
+
     - name: Run CMake
       uses: lukka/run-cmake@v10
       with:
         configurePreset: ${{ matrix.configurePreset }}
-        configurePresetAdditionalArgs: "['-DRENDERER_VULKAN=ON']"
+        configurePresetAdditionalArgs: "['-DRENDERER_VULKAN=ON', '-DENABLE_SANDBOX=OFF', '-DCMAKE_PREFIX_PATH=/opt/ezv-deps']"
         buildPreset: ${{ matrix.buildPreset }}
       env:
         CFLAGS: ${{ matrix.cflags }}

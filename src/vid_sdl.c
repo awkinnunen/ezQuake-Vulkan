@@ -990,6 +990,13 @@ static void HandleEvents(void)
 			}
 			break;
 		case SDL_EVENT_DROP_FILE:
+#ifdef WITH_FRIENDS
+            if (!strncmp(event.drop.data,"ezquake-vulkan:",15)) {
+                extern int Friends_ReceiveInvitation(const char*);
+                Friends_ReceiveInvitation(event.drop.data);
+                break;
+            }
+#endif
 			/* TODO: Add handling for different file types */
 			if (strncmp(event.drop.data, "qw://", 5) == 0) {
 				Cbuf_AddText("qwurl ");

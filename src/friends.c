@@ -13,7 +13,7 @@
 #include "friends.h"
 #ifdef WITH_FRIENDS
 #include "friends/transport.h"
-#include "friends/windows.h"
+#include "friends/platform.h"
 
 static qbool private_game, joining, connected;
 static char notice[192], last_message[192], pending_invitation[512];
@@ -66,10 +66,15 @@ int Friends_ReceiveInvitation(const char *link){
  if(!NF_ValidateInvite(link))return 0;
  strlcpy(pending_invitation,link,sizeof(pending_invitation));staged_invitation=true;return 1;
 }
-static const char *LinkRegistration(void){return FriendsWindows_Registered(com_basedir)?"Enabled":"Disabled";}
+static const char *LinkRegistration(void){return FriendsPlatform_Registered(com_basedir)?"Enabled":"Disabled";}
 static void RegisterLinks(qbool back){
- int enable;if(!LocalCommand())return;enable=!FriendsWindows_Registered(com_basedir);
- if(FriendsWindows_Register(com_basedir,enable))Notice(enable?"Invitation links now open this installation.":"Invitation link registration removed.");
+ int enable;if(!LocalCommand())return;
+#ifdef __APPLE__
+ enable=1; /* Launch Services handles association removal; this action repairs it. */
+#else
+ enable=!FriendsPlatform_Registered(com_basedir);
+#endif
+ if(FriendsPlatform_Register(com_basedir,enable))Notice(enable?"Invitation links now open this installation.":"Invitation link registration removed.");
  else Notice("Could not change invitation link registration.");
 }
 static client_t *Guest(void){
@@ -92,7 +97,7 @@ static setting entries[]={
  ADDSET_ACTION("Remove selected guest",RemoveGuest,"Disconnect this guest. To stop them rejoining, also change the invitation."),
  ADDSET_SEPARATOR("Friends / join a game"),
  ADDSET_ACTION("Paste invitation and join",Paste,"Read a game invitation from the clipboard. Shows a confirmation before leaving your current game. No additional program is needed."),
- ADDSET_CUSTOM("Windows links",LinkRegistration,RegisterLinks,"Register ezquake-vulkan:// links for this Windows user and game folder. Clicking a link opens a confirmation here, or starts this installation. Does not change qw://. Toggle again to remove this installation's registration."),
+ ADDSET_CUSTOM("Invitation links",LinkRegistration,RegisterLinks,"Register ezquake-vulkan:// links for this user and game folder. Clicking a link opens a confirmation here, or starts this installation. Does not change qw://. On Windows/Linux, toggle again to remove registration; on macOS this repairs the association."),
  ADDSET_ACTION("Back",Back,"Return to the previous menu without stopping the game."),
 };
 static setting confirm_entries[]={
@@ -120,7 +125,7 @@ qbool Friends_Mouse(const mouse_state_t *ms){mouse_state_t m=*ms;if(ms->button_u
 void Friends_Frame(void){
  int i;
  if(developer_poll&&developer.value&&host_everything_loaded&&curtime>=developer_poll_time){developer_poll_time=curtime+0.25;Cbuf_AddText("exec control.cfg\n");}
- FriendsWindows_Poll();
+ FriendsPlatform_Poll();
  if(staged_invitation&&host_everything_loaded&&!Rulesets_RestrictIPC()){
   staged_invitation=false;M_EnterMenu(m_friends);confirmation=2;Settings_OnShow(&confirm_page);Notice("Invitation received. Confirm to join, or cancel to keep playing.");Con_Printf("Friends: Invitation received; waiting for your confirmation.\n");
  }
@@ -154,10 +159,10 @@ static void Developer(void){
  else if(!strcmp(Cmd_Argv(1),"key"))Friends_Key(Key_StringToKeynum(Cmd_Argv(2)));
  for(i=0;i<MAX_CLIENTS;++i)if(svs.clients[i].state==cs_spawned&&!svs.clients[i].isBot)++players;
  Refresh();Con_Printf("FRIENDS_STATE mode=%d ready=%d accepting=%d peers=%d private=%d client=%d players=%d map=%s\n",status.mode,status.ready,status.accepting,status.peers,private_game,cls.state,players,Cvar_String("mapname"));
- Con_Printf("FRIENDS_UI menu=%d confirm=%d registered=%d staged=%d loaded=%d restricted=%d\n",m_state==m_friends,confirmation,FriendsWindows_Registered(com_basedir),staged_invitation,host_everything_loaded,Rulesets_RestrictIPC());
+ Con_Printf("FRIENDS_UI menu=%d confirm=%d registered=%d staged=%d loaded=%d restricted=%d\n",m_state==m_friends,confirmation,FriendsPlatform_Registered(com_basedir),staged_invitation,host_everything_loaded,Rulesets_RestrictIPC());
 }
-void Friends_Init(void){Settings_Page_Init(page,entries);Settings_Page_Init(confirm_page,confirm_entries);Settings_AddPolicy(Policy);FriendsWindows_Init(com_basedir);Cmd_AddCommand("menu_friends",Friends_Open);Cmd_AddCommand("friends_host",Friends_Host);Cmd_AddCommand("friends_close",Close);Cmd_AddCommand("friends_copy",Copy);Cmd_AddCommand("dev_friends",Developer);}
-void Friends_Shutdown(void){FriendsWindows_Close();NF_Shutdown();Settings_Shutdown(&page);Settings_Shutdown(&confirm_page);}
+void Friends_Init(void){Settings_Page_Init(page,entries);Settings_Page_Init(confirm_page,confirm_entries);Settings_AddPolicy(Policy);FriendsPlatform_Init(com_basedir);Cmd_AddCommand("menu_friends",Friends_Open);Cmd_AddCommand("friends_host",Friends_Host);Cmd_AddCommand("friends_close",Close);Cmd_AddCommand("friends_copy",Copy);Cmd_AddCommand("dev_friends",Developer);}
+void Friends_Shutdown(void){FriendsPlatform_Close();NF_Shutdown();Settings_Shutdown(&page);Settings_Shutdown(&confirm_page);}
 #else
 void Friends_Init(void){}
 void Friends_Shutdown(void){}

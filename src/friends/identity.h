@@ -1,11 +1,16 @@
 // OpenAI Codex, GPL-2.0-or-later. Private Windows-user-bound, atomically replaced identity.
 #pragma once
 #include "../../tools/friends-probe/dtls.h"
+#ifdef _WIN32
 #include <windows.h>
 #include <wincrypt.h>
+#endif
 #include <openssl/pem.h>
 #include <filesystem>
 #include <fstream>
+#ifndef _WIN32
+#include "private_posix.h"
+#endif
 namespace friends {
 inline std::string gameInvite(const Invite& i){auto s=encode(i);s.replace(s.find("/probe?"),7,"/join?");return s;}
 inline Invite parseGameInvite(const std::string& input){
@@ -23,13 +28,23 @@ inline std::string takeField(const std::string& s,size_t& p){
     require(n<16384&&n<=s.size()-p,"Invalid identity length");auto v=s.substr(p,n);p+=n;return v;
 }
 class StoredIdentity {
+#ifdef _WIN32
     HANDLE lock=INVALID_HANDLE_VALUE;
+#else
+    int lock=-1;
+#endif
     std::string path;
     static std::string pem(BIO* b){char* p=nullptr;long n=BIO_get_mem_data(b,&p);require(n>0,"Identity encoding failed");return std::string(p,n);}
 public:
     Identity identity;
     Invite invitation;
-    ~StoredIdentity(){if(lock!=INVALID_HANDLE_VALUE)CloseHandle(lock);}
+    ~StoredIdentity(){
+#ifdef _WIN32
+        if(lock!=INVALID_HANDLE_VALUE)CloseHandle(lock);
+#else
+        if(lock>=0)::close(lock);
+#endif
+    }
     void save() {
         BIO* raw=BIO_new(BIO_s_mem());require(raw!=nullptr,"Identity buffer failed");
         std::unique_ptr<BIO,decltype(&BIO_free)> b(raw,BIO_free);
@@ -37,6 +52,7 @@ public:
         auto key=pem(b.get());BIO_reset(b.get());
         require(PEM_write_bio_X509(b.get(),identity.cert.get())==1,"Identity certificate encoding failed");
         std::string plain="EZVF1";appendField(plain,invitation.room);appendField(plain,invitation.key);appendField(plain,key);appendField(plain,pem(b.get()));
+#ifdef _WIN32
         DATA_BLOB input{DWORD(plain.size()),reinterpret_cast<BYTE*>(plain.data())},output{};
         require(CryptProtectData(&input,L"ezQuake Friends identity",nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&output)!=0,"Cannot protect Friends identity");
         OPENSSL_cleanse(plain.data(),plain.size());OPENSSL_cleanse(key.data(),key.size());
@@ -47,9 +63,14 @@ public:
         CloseHandle(file);LocalFree(output.pbData);
         require(ok,"Friends identity write failed");
         require(MoveFileExA(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0,"Friends identity replace failed");
+#else
+        privateSave(path,plain);
+        OPENSSL_cleanse(plain.data(),plain.size());OPENSSL_cleanse(key.data(),key.size());
+#endif
     }
     void open(const std::string& file) {
         path=file;std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+#ifdef _WIN32
         lock=CreateFileA((path+".lock").c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
         require(lock!=INVALID_HANDLE_VALUE,"Another host is using this Friends identity");
         if(GetFileAttributesA(path.c_str())==INVALID_FILE_ATTRIBUTES){
@@ -61,6 +82,16 @@ public:
         DATA_BLOB input{DWORD(encrypted.size()),reinterpret_cast<BYTE*>(encrypted.data())},out{};
         require(CryptUnprotectData(&input,nullptr,nullptr,nullptr,nullptr,CRYPTPROTECT_UI_FORBIDDEN,&out)!=0,"Cannot unlock identity for this Windows user; preserve the file");
         std::string plain(reinterpret_cast<char*>(out.pbData),out.cbData);SecureZeroMemory(out.pbData,out.cbData);LocalFree(out.pbData);
+#else
+        lock=privateOpen(path+".lock",O_RDWR|O_CREAT);
+        require(!flock(lock,LOCK_EX|LOCK_NB),"Another host is using this Friends identity");
+        struct stat st{};
+        if(lstat(path.c_str(),&st)){
+            require(errno==ENOENT,"Cannot access Friends identity");
+            invitation={"EZV-"+randomHex(8),randomHex(32),identity.fingerprint};save();return;
+        }
+        std::string plain=privateRead(path);
+#endif
         require(plain.substr(0,5)=="EZVF1","Unknown Friends identity format");size_t p=5;
         invitation.room=takeField(plain,p);invitation.key=takeField(plain,p);auto key=takeField(plain,p),cert=takeField(plain,p);
         require(p==plain.size(),"Trailing Friends identity data");

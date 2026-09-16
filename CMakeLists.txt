@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(ezquake C)
-option(ENABLE_FRIENDS "Windows native encrypted Friends invitations" ${WIN32})
+option(ENABLE_FRIENDS "Native encrypted Friends invitations" ON)
 if(ENABLE_FRIENDS)
- if(NOT WIN32)
-  message(FATAL_ERROR "Friends transport currently uses Windows WinHTTP and DPAPI")
- endif()
  enable_language(CXX)
  set(CMAKE_CXX_STANDARD 17)
  set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,7 +82,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     endif()
 else()
     add_compile_options(
-            $<$<COMPILE_LANGUAGE:C>:-std=gnu89>
+            $<$<COMPILE_LANGUAGE:C>:-std=gnu99>
 
             -Wall
             -Wno-pointer-to-int-cast
@@ -980,18 +977,40 @@ if(ENABLE_FRIENDS)
  set(OPENSSL_USE_STATIC_LIBS TRUE)
  find_package(OpenSSL 3.2 REQUIRED)
  find_package(LibJuice CONFIG REQUIRED)
- add_library(ezv_friends STATIC src/friends/transport.cpp tools/friends-probe/broker.cpp tools/friends-probe/protocol.cpp)
+ if(WIN32)
+  set(FRIENDS_BROKER tools/friends-probe/broker.cpp)
+ else()
+  find_package(ixwebsocket CONFIG REQUIRED)
+  set(FRIENDS_BROKER tools/friends-probe/broker_posix.cpp)
+ endif()
+ add_library(ezv_friends STATIC src/friends/transport.cpp ${FRIENDS_BROKER} tools/friends-probe/protocol.cpp)
  target_compile_definitions(ezv_friends PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0602)
- target_compile_options(ezv_friends PRIVATE /EHsc /utf-8)
- target_link_libraries(ezv_friends PUBLIC LibJuice::LibJuice OpenSSL::SSL OpenSSL::Crypto winhttp ws2_32 crypt32)
+ if(MSVC)
+  target_compile_options(ezv_friends PRIVATE /EHsc /utf-8)
+ endif()
+ target_link_libraries(ezv_friends PUBLIC LibJuice::LibJuice OpenSSL::SSL OpenSSL::Crypto Threads::Threads)
+ if(WIN32)
+  target_link_libraries(ezv_friends PUBLIC winhttp ws2_32 crypt32)
+ else()
+  target_link_libraries(ezv_friends PUBLIC ixwebsocket::ixwebsocket)
+ endif()
  # The inherited SHA1 implementation has OpenSSL-compatible symbol names but
  # a different context layout. Keep engine hashes separate from TLS crypto.
  target_compile_definitions(ezquake PRIVATE WITH_FRIENDS SHA1=EZV_SHA1 SHA1_Init=EZV_SHA1_Init SHA1_Update=EZV_SHA1_Update SHA1_Final=EZV_SHA1_Final)
  target_link_libraries(ezquake PRIVATE ezv_friends)
- target_sources(ezquake PRIVATE src/friends/windows.c)
+ if(WIN32)
+  target_sources(ezquake PRIVATE src/friends/windows.c)
+ else()
+  target_sources(ezquake PRIVATE src/friends/posix.cpp)
+  if(APPLE)
+   target_sources(ezquake PRIVATE src/friends/macos.m)
+  endif()
+ endif()
  add_executable(ezquake-friends-tests EXCLUDE_FROM_ALL src/friends/tests.cpp)
  target_compile_definitions(ezquake-friends-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0602)
- target_compile_options(ezquake-friends-tests PRIVATE /EHsc /utf-8)
+ if(MSVC)
+  target_compile_options(ezquake-friends-tests PRIVATE /EHsc /utf-8)
+ endif()
  target_link_libraries(ezquake-friends-tests PRIVATE ezv_friends)
 endif()
 
@@ -1115,7 +1134,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 
     set_target_properties(ezquake PROPERTIES
             XCODE_ATTRIBUTE_PRODUCT_NAME                            "ezQuake"
-            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER               "com.ezquake.ezQuake"
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER               "org.ezquake.vulkan"
             XCODE_ATTRIBUTE_MARKETING_VERSION                       "${version}"
             XCODE_ATTRIBUTE_CURRENT_PROJECT_VERSION                 "${version}"
             XCODE_ATTRIBUTE_LLVM_LTO                                $<IF:$<OR:$<CONFIG:Debug>,$<NOT:$<BOOL:${ENABLE_LTO}>>>,NO,Monolithic>
