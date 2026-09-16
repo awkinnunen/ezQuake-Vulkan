@@ -173,3 +173,5 @@ the history archive and [DEVELOPMENT.md](DEVELOPMENT.md). Current performance:
 - [x] INPUT-004: nQuake keyboard preset plus Quick WASD/Quick ESDF names; native menu and switch-isolation tests pass in Debug/Release.
 
 - [x] DIST-001: Windows x64 test package, config-preserving first-run defaults, diagnostics, dependency notices and exact source identity.
+
+- [x] DIST-002: source-only Windows Starter with nQuake downloads, hash checking, isolated install, optional full-game PAK import and first-run presets.

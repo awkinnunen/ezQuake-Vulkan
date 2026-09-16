@@ -31,13 +31,16 @@ if($firstRun) {
 Write-Output "Profiles installed: $copied; existing files preserved: $preserved."
 if($PrepareOnly) { [pscustomobject]@{GameDirectory=$GameDirectory;FirstRun=$firstRun};return }
 [IO.File]::WriteAllText($remember,$GameDirectory)
-$gameArgs=@('-nohome','-basedir',$GameDirectory,'+set','vid_renderer','2')
+$gameArgs=@('-nohome','-basedir','.','+set','vid_renderer','2')
 if($firstRun){$gameArgs+='-ezv-first-run'}
 if($Windowed){$gameArgs+=@('-window','-width','1280','-height','720')}else{$gameArgs+='-fullscreen'}
 if($Diagnostics){$gameArgs+='-condebug'}
 $exe=Join-Path $packageRoot 'ezquake.exe'
-Push-Location -LiteralPath $GameDirectory
-try { & $exe @gameArgs; $gameExit=$LASTEXITCODE } finally { Pop-Location }
+# Windows PowerShell may return immediately from a GUI executable invoked with &.
+# Wait on the owned process before reading exit status or writing the marker.
+$gameProcess=Start-Process -FilePath $exe -WorkingDirectory $GameDirectory -ArgumentList $gameArgs -PassThru
+$null=$gameProcess.Handle
+try { $gameProcess.WaitForExit(); $gameExit=$gameProcess.ExitCode } finally { $gameProcess.Dispose() }
 if($Diagnostics) {
  $logDir=Join-Path $packageRoot ('logs/'+(Get-Date -Format 'yyyyMMdd-HHmmss'))
  New-Item -ItemType Directory -Force $logDir|Out-Null

@@ -1,0 +1,56 @@
+{
+  "id": "DIST-002",
+  "date": "2026-09-16",
+  "requirements": "User",
+  "implementation": "OpenAI Codex",
+  "engineCommit": "7bb8a6862d023dcd5774bf79d2079b8bb4ac4827",
+  "engineChanged": false,
+  "windowsPowerShell": "5.1",
+  "gpu": "AMD Radeon integrated (Ryzen 5 5600U)",
+  "balancedFieldsVerified": 170,
+  "quickWasdVerified": true,
+  "userConfigAndAutoexecOverrideVerified": true,
+  "originalNquakeAutoexecPreserved": true,
+  "singlePlayer": [
+    "start",
+    "e1m1",
+    "monster and player save"
+  ],
+  "installerChecks": [
+    "reject path ../escape",
+    "reject path /absolute",
+    "reject path C:/absolute",
+    "reject path qw/a:stream",
+    "reject path qw/../outside",
+    "reject path qw/NUL.txt",
+    "reject path qw/a.",
+    "reject complete malicious ZIP before any extraction",
+    "reject corrupt cached archive",
+    "refuse existing installation",
+    "reject source without registered PAK data",
+    "reject repeated import without overwriting PAKs",
+    "registered import preserves names, hashes and substitute-map backup",
+    "live GitHub HTTPS engine download and pinned SHA-256 validation"
+  ],
+  "runtimeEvidence": [
+    "starter package verified",
+    "starter-registered-final"
+  ],
+  "limits": [
+    "One Windows GPU; no full campaign playthrough",
+    "nQuake default r_fx_geometry warning retained",
+    "Source-only Starter downloads separately licensed resources; full-game assets remain private"
+  ],
+  "packaging": "ZIP contains complete installer source; engine binary is downloaded from pinned existing release",
+  "launcherFix": "Explicitly wait for GUI process instead of relying on PowerShell LASTEXITCODE",
+  "localArena": {
+    "map": "dm6",
+    "bots": 1,
+    "module": "nQuake bundled KTX 1.46-dev qwprogs.qvm",
+    "testedWith": [
+      "shareware and GPL maps",
+      "imported registered maps"
+    ],
+    "normalExit": true
+  }
+}

@@ -38,6 +38,12 @@ change and the distinction between inherited work, user direction and Codex impl
 
 ## Build and run on Windows
 
+For a **new installation**, use the **[Windows Starter](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.0)**.
+Extract it, run `Install.cmd`, and choose a new directory. It downloads verified
+nQuake resources and our Vulkan engine, installs Balanced / Quick WASD defaults,
+and optionally imports full-game PAKs from your own classic Quake installation.
+An existing nQuake installation is not required. See [Starter details](docs/STARTER.md).
+
 For testing without compiling, download the **[Windows x64 beta package](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1)**.
 Extract it separately, run `Start.cmd`, and select your existing nQuake directory.
 Game data is not bundled. First-run defaults precede your normal configs;

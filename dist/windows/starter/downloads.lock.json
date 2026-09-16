@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "version": "0.1.0",
+  "engineVersion": "0.1.0-beta.1",
+  "engineFolder": "ezQuake-Vulkan-0.1.0-beta.1-windows-x64",
+  "engineSourceCommit": "7bb8a6862d023dcd5774bf79d2079b8bb4ac4827",
+  "nquakeReleaseId": 361076334,
+  "packages": [
+    {
+      "name": "qsw106.zip",
+      "kind": "shareware",
+      "url": "https://github.com/nQuake/distfiles/releases/download/snapshot/qsw106.zip",
+      "bytes": 9027992,
+      "sha256": "8b1e5cdf75c4acb7f8997fcd4eceef9828cbbab5b2253f8dea728912796c3fb8"
+    },
+    {
+      "name": "gpl.zip",
+      "kind": "gpl",
+      "url": "https://github.com/nQuake/distfiles/releases/download/snapshot/gpl.zip",
+      "bytes": 22298516,
+      "sha256": "3616d774ac03a71fe9296a1c384292609468ee8a87a275a3043473e1523c10b5"
+    },
+    {
+      "name": "non-gpl.zip",
+      "kind": "nongpl",
+      "url": "https://github.com/nQuake/distfiles/releases/download/snapshot/non-gpl.zip",
+      "bytes": 64223534,
+      "sha256": "daaa0f0b329eb8ed5ca6e64563dd6fec53cc2f40d4b171d7a10554fb9b77ae86"
+    },
+    {
+      "name": "textures.zip",
+      "kind": "data",
+      "url": "https://github.com/nQuake/distfiles/releases/download/snapshot/textures.zip",
+      "bytes": 21140475,
+      "sha256": "0096417888bcbcdad3b9032f5595da21e9a6e3e0d38812b6d62b3c6160d8b403"
+    },
+    {
+      "name": "ezQuake-Vulkan-0.1.0-beta.1-windows-x64.zip",
+      "kind": "engine",
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.1.0-beta.1/ezQuake-Vulkan-0.1.0-beta.1-windows-x64.zip",
+      "bytes": 5003066,
+      "sha256": "6235ca7d4f8eab25c952d04a085d6076a126e862497827567b2030ac333584db"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+name: Starter package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - dist/windows/starter/downloads.lock.json
+      - .github/workflows/starter-release.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: starter-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build source-only installer
+        run: python3 tools/Package-Starter.py --output starter-output
+      - name: Publish versioned prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("dist/windows/starter/downloads.lock.json"))["version"])')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          tag="starter-v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release exists; assets will not be overwritten. Bump the Starter version to publish changes."
+            exit 0
+          fi
+          gh release create "$tag" starter-output/*.zip starter-output/*.sha256 \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "ezQuake Vulkan Starter $version - Windows x64" \
+            --notes-file docs/STARTER-RELEASE.md

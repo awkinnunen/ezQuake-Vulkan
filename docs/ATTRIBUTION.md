@@ -139,3 +139,15 @@ existing-config/autoexec, and normal starts, all 170 graphics values and repeate
 setup preservation. Debug/Release compilation and source patch replay pass. See
 provenance/distribution-validation.json. Earlier records describe earlier binaries.
 The public test is version 0.1.0-beta.1; no RTX functionality is claimed.
+
+
+## DIST-002 - downloadable Windows Starter (2026-09-16)
+
+At the user's request, OpenAI Codex implemented an unofficial nQuake-based
+installer with verified upstream downloads, fresh-directory staging, optional
+owned classic PAK import, Balanced / Quick WASD first-run presets and relative
+launchers. Original nQuake autoexec and subsequent user config precedence are
+preserved. GUI-process exit waiting fixes the beta.1 launcher's premature exit
+report. Engine binary and source remain the pinned 7bb8a686 release. No commercial
+assets, private configs or local demo files enter the source or Starter archive.
+See docs/STARTER.md and provenance/starter-validation.json in the public tree.
