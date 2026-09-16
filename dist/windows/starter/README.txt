@@ -1,8 +1,8 @@
-ezQuake Vulkan Starter 0.1.1
+ezQuake Vulkan Starter 0.2.0
 Unofficial nQuake-based installation for Windows x64.
 
 Extract the Starter ZIP, run Install.cmd, and choose a NEW installation folder.
-Setup downloads the pinned nQuake packages and ezQuake Vulkan 0.1.0-beta.1.
+Setup downloads the pinned nQuake packages and ezQuake Vulkan 0.2.0-beta.1.
 An existing nQuake installation is not needed. Internet access is required for
 downloads; verified cached downloads are reused. No administrator account,
 compiler, Python or Vulkan SDK is required. Install a current graphics driver.
@@ -37,7 +37,7 @@ the requested destination. Verified downloads remain in
 
 Sources and licenses:
 https://github.com/awkinnunen/ezQuake-Vulkan
-https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1
+https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.2.0-beta.1
 https://github.com/nQuake/distfiles/releases/tag/snapshot
 https://github.com/nQuake/client-win32
 
@@ -54,3 +54,13 @@ installed directory. This is not an official nQuake, id Software or Bethesda rel
 
 Installer implementation and tests: OpenAI Codex, 2026-09-16, under user direction.
 Engine and resources: their respective upstream authors; original notices retained.
+
+Friends test beta:
+Host: Local Arena > Who can join > Friends, start, then Esc > Friends > Copy invitation.
+Guest: click the complete invitation or paste it under Friends, then confirm.
+Setup can register clickable links for your Windows user without administrator rights.
+Enable/disable or repair registration after moving the folder under Friends > Windows links.
+Keep ezquake/friends.identity to retain your invitation; Change invitation replaces it.
+Use the same engine version and map resources on both computers. Test shareware DM maps
+or nQuake maps if a friend does not own full Quake. No separate VPN/server app is needed.
+Some NAT/firewall combinations still cannot connect; there is no TURN fallback yet.

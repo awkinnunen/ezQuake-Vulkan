@@ -5,6 +5,7 @@
 #include "menu.h"
 #include "common_draw.h"
 #include "menu_local.h"
+#include "friends.h"
 #include "settings.h"
 #include "settings_page.h"
 #ifndef CLIENTONLY
@@ -20,6 +21,11 @@ extern int menuwidth;
 static char maps[LOCAL_MAPS][64];
 static int map_count, map_index, cursor, bot_skill = 5, mode;
 static qbool choosing_map, pending_start;
+static qbool allow_friends, pending_friends;
+#ifdef WITH_FRIENDS
+static const char *ReadAccess(void){return allow_friends?"Friends (invitation)":"Only this computer";}
+static void ToggleAccess(qbool back){allow_friends=!allow_friends;}
+#endif
 static int dm_mode = 3, pending_mode, pending_dm;
 static char pending_map[64];
 static const int mode_dm_defaults[] = {3, 3, 1, 5};
@@ -111,6 +117,7 @@ static void Start(void)
     if (!*Cvar_String("team")) Cvar_SetByName("team", "red");
     Cvar_SetByName("samelevel", "0");
     pending_start = true;
+    pending_friends = allow_friends;
     pending_mode = mode;
     pending_dm = dm_mode;
     pending_bots = initial_bots; pending_skill = bot_skill;
@@ -129,6 +136,7 @@ void MLocal_Connected(void)
       snprintf(commands,sizeof(commands),"cmd %s\ncmd dmm%d\n",mode_commands[pending_mode],pending_dm);
       for(i=0;i<pending_bots;++i)strlcat(commands,va("cmd botcmd addbot %d\n",pending_skill),sizeof(commands));
       Cbuf_InsertText(commands); }
+    if(pending_friends)Friends_HostFromArena();
     strlcpy(notice, "Selected rules sent. Add bots when ready.", sizeof(notice));
 }
 
@@ -144,6 +152,11 @@ static setting arena_entries[] = {
  ADDSET_INTNUMBER("Deathmatch rules",dm_mode,1,5,1),
  ADDSET_INTNUMBER("Starting bots",initial_bots,0,15,1),
  ADDSET_INTNUMBER("Bot skill",bot_skill,1,20,1),
+
+#ifdef WITH_FRIENDS
+ ADDSET_CUSTOM("Who can join",ReadAccess,ToggleAccess,"Friends opens your saved invitation when the game starts. Only this computer uses the normal local game behavior."),
+ ADDSET_ACTION("Friends / invitations",Friends_Open,"Copy a persistent link, join a friend, or manage invitations for the current game."),
+#endif
  ADDSET_ACTION("Start new local game",Start,"Disconnect from the current game and start the selected map with KTX. Bots require navigation support for the map."),
  ADDSET_ACTION("Back to main menu",Back,"Return without changing the current game. Esc during play offers match and bot controls."),
 };
@@ -187,6 +200,7 @@ static void DeveloperCommand(void)
         for (i = 0; i < map_count; ++i) if (!strcmp(maps[i], Cmd_Argv(2))) map_index = i;
     if (!strcmp(Cmd_Argv(1), "start")) Start();
     if (!strcmp(Cmd_Argv(1), "bots")) initial_bots=bound(0,atoi(Cmd_Argv(2)),15);
+    if (!strcmp(Cmd_Argv(1), "friends") && cbuf_current != &cbuf_svc) allow_friends=atoi(Cmd_Argv(2))!=0;
     if (LocalServer()) for (i = 0; i < MAX_CLIENTS; ++i)
         if (svs.clients[i].state != cs_free && svs.clients[i].isBot) ++bots;
     Con_Printf("LOCAL_MENU maps=%d selected=%s row=%d connected=%d bots=%d skill=%d server=%d notice=%s\n",

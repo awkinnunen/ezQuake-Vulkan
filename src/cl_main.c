@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_main.c  -- client main loop
 
 #include "quakedef.h"
+#include "friends.h"
 #include "cdaudio.h"
 #include "cl_slist.h"
 #include "movie.h"
@@ -1443,6 +1444,7 @@ void CL_ClearState (void)
 void CL_Disconnect (void) 
 {
 	byte final[10];
+	Friends_Disconnected();
 
 	connect_time = 0;
 	con_addtimestamp = true;
@@ -1562,6 +1564,14 @@ void CL_Reconnect_f (void)
 
 	if (cls.mvdplayback) {
 		return; // Change map during qtv playback.
+	}
+
+	/* A Friends address names an existing authenticated transport. Preserve it
+	 * across map changes and request the new sign-on over the same netchan. */
+	if (cls.netchan.remote_address.type == NA_FRIENDS && cls.state >= ca_connected) {
+		cls.state = ca_connected;
+		cl.intermission = 0;
+		Cvar_ForceSet(&host_mapname, "");
 	}
 
 	if (cls.state == ca_connected) 

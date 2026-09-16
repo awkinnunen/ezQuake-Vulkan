@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 #include <SDL3/SDL.h>
 #include "quakedef.h"
+#include "friends.h"
 #include "EX_browser.h"
 #include "fs.h"
 #include "gl_model.h"
@@ -548,6 +549,7 @@ void Host_Frame (double time)
 
 	curtime += time;
 
+	Friends_Frame();
 	CL_Frame (time);	// will also call SV_Frame
 
 	Central_ProcessResponses();

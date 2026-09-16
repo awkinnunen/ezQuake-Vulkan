@@ -1,0 +1,163 @@
+{
+  "id": "FRIENDS-002C",
+  "version": "0.1.1",
+  "utc": "2026-09-16T17:23:24.602399+00:00",
+  "requirements": "User",
+  "implementation": "OpenAI Codex",
+  "engineChanged": false,
+  "hostDefaultSeconds": 0,
+  "keepaliveSeconds": 30,
+  "roomRefreshSeconds": 30,
+  "activePeerLimitSeconds": 180,
+  "delayedJoinTest": {
+    "case": "success",
+    "idleSeconds": 330,
+    "pass": true,
+    "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+    "results": {
+      "host": {
+        "format": 1,
+        "probe": "FRIENDS-002",
+        "role": "host",
+        "brokerConnected": true,
+        "iceConnected": true,
+        "dtlsPinned": true,
+        "admitted": true,
+        "pass": true,
+        "sent": 100,
+        "received": 100,
+        "meanRttMs": 0,
+        "maxRttMs": 0,
+        "relayOffers": 0,
+        "route": "direct",
+        "failureStage": "none"
+      },
+      "join": {
+        "format": 1,
+        "probe": "FRIENDS-002",
+        "role": "join",
+        "brokerConnected": true,
+        "iceConnected": true,
+        "dtlsPinned": true,
+        "admitted": true,
+        "pass": true,
+        "sent": 100,
+        "received": 100,
+        "meanRttMs": 31.685,
+        "maxRttMs": 36.6535,
+        "relayOffers": 0,
+        "route": "direct",
+        "failureStage": "none"
+      }
+    }
+  },
+  "delayedJoinTestExecutableSha256": "4ad84436e3d0a12f91cab9560341109b9d7d5d58a3c4983c1770b8dc87dfb3cb",
+  "delayedJoinTestBuildNote": "Delay test executable preceded addition of the certificate-age self-test; networking and wait implementation are identical. Final packaged executable also passed the immediate live pair and full self-tests.",
+  "packagedLiveTest": {
+    "case": "success",
+    "idleSeconds": 0,
+    "pass": true,
+    "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+    "results": {
+      "host": {
+        "format": 1,
+        "probe": "FRIENDS-002",
+        "role": "host",
+        "brokerConnected": true,
+        "iceConnected": true,
+        "dtlsPinned": true,
+        "admitted": true,
+        "pass": true,
+        "sent": 100,
+        "received": 100,
+        "meanRttMs": 0,
+        "maxRttMs": 0,
+        "relayOffers": 0,
+        "route": "direct",
+        "failureStage": "none"
+      },
+      "join": {
+        "format": 1,
+        "probe": "FRIENDS-002",
+        "role": "join",
+        "brokerConnected": true,
+        "iceConnected": true,
+        "dtlsPinned": true,
+        "admitted": true,
+        "pass": true,
+        "sent": 100,
+        "received": 100,
+        "meanRttMs": 31.6884,
+        "maxRttMs": 36.6381,
+        "relayOffers": 0,
+        "route": "direct",
+        "failureStage": "none"
+      }
+    }
+  },
+  "checks": {
+    "explicitZeroCancellationPassed": true,
+    "finiteDeadlinePassed": true,
+    "expiredPinnedCertificateSelfTestPassed": true
+  },
+  "debugSelfTestsPassed": true,
+  "releaseSelfTestsPassed": true,
+  "packageSourceHashesVerified": true,
+  "sourceManifest": {
+    "id": "FRIENDS-002",
+    "version": "0.1.1",
+    "kind": "Standalone transport probe, not gameplay",
+    "vcpkgBaseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+    "exeSha256": "cb4b09d5b42215fb13a4dea1505f875d70c3bd846a5ee30f4a5b5f85a523da12",
+    "sources": {
+      "CMakeLists.txt": "5908368ee89a83fc5a80b371280c86dd318edc3a79ead011ff0daa5be17a717c",
+      "vcpkg.json": "0bc082da00f72a2f13d2bb8ef76fc258efa69b1acb722d580933f4337c6cee9c",
+      "Build.ps1": "d4db585610f22eea4d3c63ff2a605c9f77645a6c6bcfdb579a411792e7e06552",
+      "Package.py": "4a5eb39bbe876ecef9282b3887292d69faa1d935a53db0626245570a4408be2b",
+      "Test-LivePair.py": "2bbf5d6353c6ce2d665f12acb8cdda23e9edbd2ad8e025bb5ab96def82a9f00a",
+      "Host.cmd": "7a7b96dccbe154c7e0cb8cab67da51a6259d76cad6a5e448991e8f3b64d05491",
+      "Join.cmd": "4db4e75edf181288fff7eeaf8e3729a0235e2afef9c0f5e26704cc7727567180",
+      "Join.ps1": "19b9b5da7317b75569808544273887dce8fedf8fdc049acf9f10d0f6c815758e",
+      "README.md": "78296a3429a513f1ef659d1901a8e4ea56d4cd1b01345a39241ba2d1b644e5bc",
+      "main.cpp": "44009a58af118cc7c97a54f1f133d49aa0db982ee4b4fa42b577213049e81d65",
+      "dtls.h": "dd517765f53d52556022036d1f9d8f04c2d537cb3f31b011ccec72d33633df00",
+      "broker.cpp": "aa8321ac7049601335c4e1f59158c3d4493ce57a03a130ffe849ce0553b68d8c",
+      "broker.h": "2db7b5a3d9df60bcfae36f401445bda80b2b5ae92829af303cac99ac12d0ce90",
+      "protocol.cpp": "d0b52739c7bfcea1690099ea84f9a3346350163ccd391e73cdea5976de831c6a",
+      "protocol.h": "0f17a0f9fbbfe1b19bde19998a40064bfa90ba28226b2d6428b647ec32857bd9",
+      ".gitignore": "0f1cc46d844c05b122cf085fe1a779d86d7c6597d3f6d5cf4268139dfc55bb16"
+    },
+    "dependencies": [
+      {
+        "name": "libjuice",
+        "version": "1.7.0",
+        "url": "https://github.com/paullouisageneau/libjuice/archive/v1.7.0.tar.gz",
+        "sha512": "20800c54231188982f75bf823e1a450c6e501247fdb7348f4dc1dfaee6c6bf1394b681cd7e576156ddf2a1936668ebda10a1e74b9778f5bdd2a46c26173b68ac",
+        "sha256": "a510c7df90d82731d1d5e32e32205d3370ec2e62d6230ffe7b19b0f3c1acabf2"
+      },
+      {
+        "name": "openssl",
+        "version": "3.6.0",
+        "url": "https://github.com/openssl/openssl/archive/openssl-3.6.0.tar.gz",
+        "sha512": "3e1796708155454c118550ba0964b42c0c1055b651fec00cfb55038e8a8abbf5f85df02449e62b50b99d2a4a2f7b47862067f8a965e9c8a72f71dee0153672d9",
+        "sha256": "1535d184cbd04ea6b20485b98719fa8d609e45c3657f7c65b8299ae606f78159"
+      }
+    ]
+  },
+  "artifacts": {
+    "ezQuake-Vulkan-friends-probe-source.zip": {
+      "sha256": "27ffcbc75c8e7f931bdd22317819d5f37493820ed96bb04a80323ad1c1b6cc81",
+      "bytes": 55316415
+    },
+    "ezQuake-Vulkan-friends-probe-windows-x64.zip": {
+      "sha256": "55799f068f25c3adf106ad2912c7b110b7cbd4d4a90271d09f7ef130658713fa",
+      "bytes": 2293832
+    }
+  },
+  "limits": [
+    "No 24-hour wall-clock test; real-broker delayed join tested after 330 seconds.",
+    "Tests use two processes on one machine, not separate internet connections.",
+    "Automatic recovery from sleep/network/broker loss is not implemented.",
+    "Probe invitations are still per-process, not persistent across restarts."
+  ]
+}

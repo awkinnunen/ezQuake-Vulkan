@@ -141,7 +141,7 @@ typedef int socket_t;
 
 #define PORT_ANY ((unsigned short int)0xFFFF)
 
-typedef enum {NA_INVALID, NA_LOOPBACK, NA_IP} netadrtype_t;
+typedef enum {NA_INVALID, NA_LOOPBACK, NA_IP, NA_FRIENDS} netadrtype_t;
 
 typedef enum {NS_CLIENT, NS_SERVER} netsrc_t;
 
@@ -151,6 +151,7 @@ typedef struct {
 	byte            ip[4];
 
 	unsigned short  port;
+	uint64_t friends_peer; /* process-local opaque authenticated connection */
 } netadr_t;
 
 extern	netadr_t	net_local_sv_ipadr;

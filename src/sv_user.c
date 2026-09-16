@@ -229,7 +229,7 @@ static void Cmd_New_f (void)
 	}
 
 	// do not proceed if realip is unknown
-    if (sv_client->state == cs_preconnected && !sv_client->realip.ip[0] && (int)sv_getrealip.value)
+    if (sv_client->netchan.remote_address.type != NA_FRIENDS && sv_client->state == cs_preconnected && !sv_client->realip.ip[0] && (int)sv_getrealip.value)
 	{
 		char *server_ip = sv_serverip.string[0] ? sv_serverip.string : NET_AdrToString(net_local_sv_ipadr);
 

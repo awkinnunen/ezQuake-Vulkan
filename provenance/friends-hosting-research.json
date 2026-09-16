@@ -1,0 +1,302 @@
+{
+  "id": "FRIENDS-001",
+  "date": "2026-09-16",
+  "requirements": "User",
+  "researchAndPlan": "OpenAI Codex",
+  "status": "Research and plan only; not implemented",
+  "hostCommit": "81a9c150710800adb7e0c447beb70fef1c08f864",
+  "engineChanged": false,
+  "configurationChanged": false,
+  "newExternalServiceDeployed": false,
+  "upstreamCodePorted": false,
+  "sources": {
+    "fte": {
+      "repository": "fte-team/fteqw",
+      "commit": "f937b9d88f71fc4429db5fe56c6a98d922711b2e",
+      "files": [
+        {
+          "path": "engine/client/cl_main.c",
+          "sha256": "949163519e0fb80170d609031e9c1c2f368d59c2a8171d06e5d835b6ca8e2bf2",
+          "bytes": 239970
+        },
+        {
+          "path": "engine/client/cl_master.h",
+          "sha256": "76063cc45e9b23ed8e62d2e76605c54b633afa4cce844a99fc2a1a26291b80b5",
+          "bytes": 6315
+        },
+        {
+          "path": "engine/client/m_master.c",
+          "sha256": "bd0e5b8e431480829f006a1c84befa2773ecf5d8dda07b2ffdee51d286d52cd4",
+          "bytes": 44268
+        },
+        {
+          "path": "engine/client/m_multi.c",
+          "sha256": "2003f01a8b66186235c105045c0c60f3977b11d689105b338824c6e5ea88f1de",
+          "bytes": 41226
+        },
+        {
+          "path": "engine/client/net_master.c",
+          "sha256": "afb7eeff4961449d5af4cb03d5123f81d11dc3455bff14e1584715407d02352b",
+          "bytes": 118878
+        },
+        {
+          "path": "engine/common/config_fteqw.h",
+          "sha256": "7054374fc61e8e29c0dc999390d1a050413dbee34df39ea188858e4627ada2a5",
+          "bytes": 14481
+        },
+        {
+          "path": "engine/common/net.h",
+          "sha256": "3e2692c7642bbceb9956108db8c609fab71a81b0e9a09ed4cdd1f49dbc24ea06",
+          "bytes": 16636
+        },
+        {
+          "path": "engine/common/net_ice.c",
+          "sha256": "adf43ecd168744c895cc881aec993390632754895e1d4c47ff58d1eb57008881",
+          "bytes": 185792
+        },
+        {
+          "path": "engine/common/net_wins.c",
+          "sha256": "311a8bbb8701bf82c3ce9959ab94f45ed63c6670e7e95796ea40578baaea1d05",
+          "bytes": 346495
+        },
+        {
+          "path": "engine/common/netinc.h",
+          "sha256": "b74dbae8b9bcd8f855105c4f49701c671f7428190c64513f52f168369a9e922c",
+          "bytes": 15821
+        },
+        {
+          "path": "engine/server/sv_main.c",
+          "sha256": "af1334af1f8798d46b219a2e0d6a232b9e8a9db3035c903f344d0cfa75c5f3e0",
+          "bytes": 202795
+        },
+        {
+          "path": "engine/server/sv_master.c",
+          "sha256": "3964eecd262610489b663ad62f10a481be884e89f7fe4de32447381092f799f8",
+          "bytes": 68638
+        },
+        {
+          "path": "plugins/serverb/cl_master.h",
+          "sha256": "27d265df2f7392ef83d0d06711b4a37f160ccd0d4638b2032ca314e0ae6f9ba1",
+          "bytes": 3763
+        },
+        {
+          "path": "plugins/serverb/m_master.c",
+          "sha256": "35d40a49e887987f228667dc65399ee3ae54d563a56d23de19c4e6db05fd6313",
+          "bytes": 19876
+        },
+        {
+          "path": "plugins/serverb/net_master.c",
+          "sha256": "a576d6749fa943e77c9dfc5030bbb9dfa589f04bda85d1e7fce8c9898644a7f4",
+          "bytes": 24783
+        },
+        {
+          "path": "specs/hosting.txt",
+          "sha256": "6548351fdd5f119e1f59c360d426399fd53787625a8abe5062f526fefcb7a36a",
+          "bytes": 12588
+        }
+      ]
+    },
+    "qwfwd": {
+      "repository": "QW-Group/qwfwd",
+      "commit": "576214fcc1e7efec6234a4fa360e621c0dde7c44",
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "778dd268fb39405ead28b322b33260daa3ab50ee64906967367a2bc0abe2ca9c",
+          "bytes": 2390
+        },
+        {
+          "path": "resources/example-configs/qwfwd.cfg",
+          "sha256": "428ba62b9d1903fd05ce72d9083017ecf8c89b3c2ab8776ab95398141c535a01",
+          "bytes": 1054
+        },
+        {
+          "path": "src/ban.c",
+          "sha256": "da8d7c1192cda342011c0284e9bb44531af3f69d5878ce2d30cafe38f97257a1",
+          "bytes": 11138
+        },
+        {
+          "path": "src/clc.c",
+          "sha256": "9549d2854b2126af188357d04f78b51bf4e613fe3e07fb1c98922e130af9748d",
+          "bytes": 5260
+        },
+        {
+          "path": "src/cmd.c",
+          "sha256": "c59d8beb24734320e380dd17d998192511f501a88f2d58acfe66f6bad43a6a37",
+          "bytes": 19999
+        },
+        {
+          "path": "src/cmd.h",
+          "sha256": "e79036b25e59880f87ac7a442be626072fb79197fab035bdaba3d9b6e2258378",
+          "bytes": 4625
+        },
+        {
+          "path": "src/cvar.c",
+          "sha256": "f1874c8a8511f0a97f135e8c72d1d174a1b0e0aaeffe72d7314de075e397f0e1",
+          "bytes": 9662
+        },
+        {
+          "path": "src/cvar.h",
+          "sha256": "874adf4fdc2261e3b44265f73031ebf8b98497ce349a1294ced95d1e56946322",
+          "bytes": 3702
+        },
+        {
+          "path": "src/fs.c",
+          "sha256": "0906111c8fa09e9d655b6ec4835731ef80d0dca81ac53c4c3597ea7ccad74e43",
+          "bytes": 3188
+        },
+        {
+          "path": "src/huff.c",
+          "sha256": "c068455e73913765b584be6809ed47430ef449570e81a95c7fc96aac8dce2ee2",
+          "bytes": 16306
+        },
+        {
+          "path": "src/info.c",
+          "sha256": "8ce03bfc5bf3ae1050ad6d1857c5288b3a86bbc706a6959869ac9e77919c8ad1",
+          "bytes": 4144
+        },
+        {
+          "path": "src/main.c",
+          "sha256": "6a23beb838975819e6307b04a55a4e0dd9705e20e4842f2ec53f2593cb81e913",
+          "bytes": 5203
+        },
+        {
+          "path": "src/msg.c",
+          "sha256": "ce5276cbf297386dcc2df2850d470068158ac043b37ed2d559027a5b2b99250f",
+          "bytes": 5230
+        },
+        {
+          "path": "src/net.c",
+          "sha256": "54dde8acccbd690c069975459217e8b8ddd6e53a76f5a1182f155c358ae2f9d7",
+          "bytes": 7551
+        },
+        {
+          "path": "src/peer.c",
+          "sha256": "17cb14876f9e69dc7a4c089a1adb7ddd1782147c6b42d929a06561225a39b124",
+          "bytes": 9191
+        },
+        {
+          "path": "src/query.c",
+          "sha256": "196d66eab6ee4cc8736798acec98f28473bf6a0ede3ccb59d83aad460c8b7f5e",
+          "bytes": 17972
+        },
+        {
+          "path": "src/qwfwd.h",
+          "sha256": "650b6112abc528d5b6b9a267fa620399fbe0059d94858fae5e7d351b45c35e43",
+          "bytes": 12781
+        },
+        {
+          "path": "src/svc.c",
+          "sha256": "5498cbf14dc9dc662ed9a724841c18edefec471ed82c916d9d7fa83a431adebf",
+          "bytes": 11289
+        },
+        {
+          "path": "src/sys.c",
+          "sha256": "171f9bbb6bc6d08332e2685c825522a4a1bd607b67a7ec98c4f50213ae2e971a",
+          "bytes": 7097
+        },
+        {
+          "path": "src/token.c",
+          "sha256": "bff1f1537f5d70a29641996b9f67eea375afc995fcbad8902d7bce910d1a02f5",
+          "bytes": 2382
+        },
+        {
+          "path": "src/whitelist.c",
+          "sha256": "5cbe93b61522c26318f5a5d8cbcc899284603db31944eb2817d0ff28bbe1c452",
+          "bytes": 2591
+        }
+      ]
+    },
+    "mvdsv": {
+      "repository": "QW-Group/mvdsv",
+      "commit": "c982fce8c813b9150396b6ff5b05cd735677490e",
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "669ab33ba3676563c25248bd91d0dd48fb30cfb247b8956f84d1b110c4cd28b3",
+          "bytes": 3878
+        },
+        {
+          "path": "src/net.c",
+          "sha256": "f9b665fc7c44617263264f0a58954f9bcba703fb14fd26fa5123e948df98bfa6",
+          "bytes": 33302
+        },
+        {
+          "path": "src/sv_main.c",
+          "sha256": "8a5897a225581bac1afcf30c14fece15a69bc1043f7be043bbf9a9d31484f04c",
+          "bytes": 98985
+        },
+        {
+          "path": "src/sv_master.c",
+          "sha256": "c8c08e53f6b4777ccda58e04b79d7545185530c459bf840ce0f8b48bc327fda3",
+          "bytes": 3199
+        }
+      ]
+    }
+  },
+  "liveChecks": {
+    "utc": "2026-09-16T15:55:10.780403+00:00",
+    "scope": "Read-only HTTP and one STUN request. No rooms, allocations, connections to players, game traffic, or service changes.",
+    "results": [
+      {
+        "kind": "HTTPS",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "path": "/",
+        "status": "HTTP/1.1 200 Ok",
+        "bytes": 2106
+      },
+      {
+        "kind": "HTTPS",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "path": "/raw/QuakeWorld.txt",
+        "status": "HTTP/1.1 200 Ok",
+        "bytes": 146
+      },
+      {
+        "kind": "HTTPS",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "path": "/game/QuakeWorld",
+        "status": "HTTP/1.1 200 Ok",
+        "bytes": 1020
+      },
+      {
+        "kind": "STUN binding",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "responseType": "0x101",
+        "bytes": 44,
+        "validTransaction": true
+      },
+      {
+        "kind": "HTTPS",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "path": "/game/FTE-Quake",
+        "status": "HTTP/1.1 200 Ok",
+        "bytes": 7130
+      },
+      {
+        "kind": "HTTPS",
+        "host": "master.frag-net.com",
+        "port": 27950,
+        "path": "/raw/FTE-Quake.txt",
+        "status": "HTTP/1.1 200 Ok",
+        "bytes": 2560
+      }
+    ],
+    "followupUtc": "2026-09-16T15:58:39.657058+00:00"
+  },
+  "limits": [
+    "No room registered or joined; no WebSocket room negotiation tested.",
+    "No actual cross-network Quake gameplay tested.",
+    "No TURN allocation or relayed gameplay tested.",
+    "Public raw lists do not prove presence or absence of usable TURN services.",
+    "No service operator contacted or availability commitment obtained.",
+    "No claim of invisible rooms or universal NAT traversal."
+  ],
+  "plan": "docs/history/FRIENDS-HOSTING-PLAN.md",
+  "planSha256AtResearchTime": "02f6851753230b422d5cc4c0b940e027e394fb581c13fd49bf606f40d1bc4120"
+}

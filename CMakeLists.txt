@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(ezquake C)
+option(ENABLE_FRIENDS "Windows native encrypted Friends invitations" ${WIN32})
+if(ENABLE_FRIENDS)
+ if(NOT WIN32)
+  message(FATAL_ERROR "Friends transport currently uses Windows WinHTTP and DPAPI")
+ endif()
+ enable_language(CXX)
+ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     enable_language(OBJC)
@@ -966,6 +975,25 @@ set(ezquake_sources
 )
 
 add_executable(ezquake ${TARGET_TYPE} ${ezquake_sources})
+target_sources(ezquake PRIVATE src/friends.c)
+if(ENABLE_FRIENDS)
+ set(OPENSSL_USE_STATIC_LIBS TRUE)
+ find_package(OpenSSL 3.2 REQUIRED)
+ find_package(LibJuice CONFIG REQUIRED)
+ add_library(ezv_friends STATIC src/friends/transport.cpp tools/friends-probe/broker.cpp tools/friends-probe/protocol.cpp)
+ target_compile_definitions(ezv_friends PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0602)
+ target_compile_options(ezv_friends PRIVATE /EHsc /utf-8)
+ target_link_libraries(ezv_friends PUBLIC LibJuice::LibJuice OpenSSL::SSL OpenSSL::Crypto winhttp ws2_32 crypt32)
+ # The inherited SHA1 implementation has OpenSSL-compatible symbol names but
+ # a different context layout. Keep engine hashes separate from TLS crypto.
+ target_compile_definitions(ezquake PRIVATE WITH_FRIENDS SHA1=EZV_SHA1 SHA1_Init=EZV_SHA1_Init SHA1_Update=EZV_SHA1_Update SHA1_Final=EZV_SHA1_Final)
+ target_link_libraries(ezquake PRIVATE ezv_friends)
+ target_sources(ezquake PRIVATE src/friends/windows.c)
+ add_executable(ezquake-friends-tests EXCLUDE_FROM_ALL src/friends/tests.cpp)
+ target_compile_definitions(ezquake-friends-tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0602)
+ target_compile_options(ezquake-friends-tests PRIVATE /EHsc /utf-8)
+ target_link_libraries(ezquake-friends-tests PRIVATE ezv_friends)
+endif()
 
 target_include_directories(ezquake PRIVATE
         ${SOURCE_DIR}/qwprot/src

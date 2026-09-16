@@ -174,3 +174,119 @@ guides to direct players to Starter. Original crosshairs remain bundled. The old
 engine archive and matching source remain available because Starter pins that
 download; download hashes, engine code and installed configuration behavior are
 unchanged. Historical implementation/test records are retained as provenance.
+
+
+## FRIENDS-001 - existing FTE infrastructure research (2026-09-16)
+
+The user requested easy friend-hosted games without a newly operated external
+relay and preferably without additional player-installed software. OpenAI Codex
+inspected pinned FTE, QWFWD and MVDSV sources and this fork's networking/menu code,
+then wrote docs/history/FRIENDS-HOSTING-PLAN.md. The proposal uses existing FTE room signaling,
+native ICE, authenticated invitations and the embedded KTX server. Short room
+codes require host approval because broker rooms may be publicly listed.
+
+Read-only verified TLS/HTTP and one STUN probe against the existing Frag-Net master
+succeeded. No room was registered, no TURN allocation was requested, and no game
+was joined. Direct gameplay across separate networks and usable existing TURN
+coverage are unverified acceptance gates. Ordinary QWFWD/Qizmo client forwarding
+was not established as a reverse-hosting solution. No new service was deployed.
+
+This change adds planning, TODO and provenance documentation only. Engine source,
+binaries, installed configuration, launchers and published releases are unchanged.
+FTE networking work remains credited to its upstream authors; no donor code was
+ported. See provenance/friends-hosting-research.json for inspected source revisions,
+hashes, sanitized checks and limitations. Implementation tasks FRIENDS-002 through
+FRIENDS-007 remain open.
+
+
+## FRIENDS-002 - native connection prototype and test package (2026-09-16)
+
+OpenAI Codex implemented a standalone Windows x64 FTE-broker adapter, native
+libjuice ICE, OpenSSL DTLS, host certificate pinning and secret invitation admission.
+No FTE implementation files were copied. The user stated that a second computer
+on another network is unavailable now, so the planned two-network gate remains
+open and engine/menu integration is deferred pending that evidence.
+
+Debug/Release self-tests, real-broker local pair tests, wrong-key/wrong-fingerprint
+rejection, host timeout, expired invitation and extracted-package tests pass.
+Host.cmd and Join.cmd require no separately installed runtime. The local ZIP has
+matching source/dependency archives, notices and hashes. No new external relay or
+other server was deployed; no TURN allocation was attempted. No GitHub release was
+published, and no current game binary, launcher or user configuration was changed.
+See FRIENDS-HOSTING-STATUS.md and provenance/friends-probe-validation.json.
+
+
+## FRIENDS-002C - wait for a guest without a deadline (2026-09-16)
+
+The user requested leaving the probe open for a guest joining on a later day.
+OpenAI Codex made --host default to unlimited waiting and Host.cmd select
+--seconds 0 explicitly. Room metadata and WebSocket keepalives refresh every
+30 seconds. Idle polling uses 100 ms; active test polling remains 5 ms. Explicit
+finite test durations, console cancellation and the bounded active attempt remain.
+A certificate-date regression check verifies the existing invitation-pinning policy
+continues working after the ephemeral certificate's date window. No host identity
+or invitation is rotated just because time passes. Sleep/network-loss reconnection
+is still outside the prototype. The updated standalone package is 0.1.1; engine,
+user configuration and published Starter are unchanged. See the wait validation
+record in provenance/friends-probe-wait-validation.json.
+
+
+## FRIENDS-003/004/005A - native gameplay and reusable invitations (2026-09-16)
+
+Requirements/product choices: AWK. Implementation, tests and documentation:
+OpenAI Codex. The user supplied join-result.json and confirmed host/guest were in
+different cities: direct ICE, pinned DTLS, admission and 100/100 echo packets pass.
+That evidence opened the engine-integration gate for this network pair.
+
+New code in src/friends.c and src/friends/* implements asynchronous native
+multi-guest transport, opaque NA_FRIENDS addressing, protected persistent identity,
+secret rotation, admission gates and existing-widget menus. Local Arena can open
+the saved room after starting KTX; online guests cannot administer another host.
+OpenSSL symbols are kept separate from the inherited unrelated SHA1 functions.
+Broker slot reuse, stale join generations, graceful departure and map sign-on were
+covered during integration. No existing graphics/key presets or autoexec changed.
+
+Release gameplay validation uses a host, two guests and one arena bot through
+the real Frag-Net service. Rejoining in the same client, chat and DM6 -> DM2 work.
+Separate tests cover normal UDP before hosting, rejection of plaintext bypass,
+binary fragmentation, persistent identities, wrong keys/pins, close/reopen and
+rotation. See provenance/friends-engine-validation.json for exact source/binary
+hashes and the scope of each result. Wider network coverage and distribution
+integration remain TODO items; no new external service or GitHub release was made.
+
+New adapter code is GPL-2.0-or-later. libjuice remains MPL-2.0; OpenSSL remains
+Apache-2.0. Distribute the combined Friends-enabled binary under GPL-3.0-or-later
+with matching sources and dependency notices. FTE broker/protocol authors and
+ezQuake/QW/KTX authors retain their existing credit; no FTE implementation files
+were copied. See docs/FRIENDS.md for current player instructions and limitations.
+
+## 2026-09-16 — Native Windows invitation registration (FRIENDS-005B)
+
+Requested explicitly by AWK; implementation, test automation and notes by OpenAI
+Codex. Friends -> Windows links registers the current executable and data folder
+for ezquake-vulkan:// in HKCU. A matching running instance receives validated data
+through a bounded local mailslot; otherwise the engine starts and asks the player
+to confirm. Existing qw:// registration and personal configuration are preserved.
+
+Actual Windows shell dispatch revealed the OS inserts a slash before the query.
+The parser now accepts that equivalent spelling while preserving old invitations
+and strict validation elsewhere. Cold start, warm handoff, cancel/confirm, secret
+redaction and rejection of appended console arguments pass in the native engine.
+The test config polling was moved out of startup's Cbuf_Flush loop so tests now
+exercise completed initialization. Two guests, a bot, same-process rejoin, chat
+and DM6 -> DM2 were then revalidated through the real broker.
+
+The development installation is registered at AWK's request. Distribution/Starter
+updates and cross-city engine gameplay remain separate pending work. See
+provenance/friends-engine-validation.json for sanitized evidence.
+
+## 2026-09-16 — Friends beta distribution
+
+AWK requested a new test package, GitHub push/release, refreshed installer and
+retirement of the unused old Starter. OpenAI Codex prepared version 0.2.0-beta.1
+and Starter 0.2.0, with an exact source commit, pinned engine download, upstream
+notices and matching Friends dependency sources. The installer offers registration
+only after the final directory exists; interactive choice or -RegisterLinks is
+required. Package tests use nQuake's distributed KTX QVM as well as the development
+DLL. Personal configs and commercial assets are excluded from release archives.
+Final release verification is recorded separately under provenance.

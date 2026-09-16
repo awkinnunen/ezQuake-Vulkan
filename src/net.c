@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "qwsvdef.h"
 #else
 #include "quakedef.h"
+#include "friends.h"
 #include "server.h"
 #include "utils.h"
 #define MAX_STRINGS 16 // well, this used not only for va, anyway, static buffers is evil...
@@ -305,6 +306,7 @@ void NetadrToSockadr (const netadr_t *a, struct sockaddr_storage *s)
 
 void SockadrToNetadr (const struct sockaddr_storage *s, netadr_t *a)
 {
+	a->friends_peer = 0;
 	a->type = NA_IP;
 	*(int *)&a->ip = ((struct sockaddr_in *)s)->sin_addr.s_addr;
 	a->port = ((struct sockaddr_in *)s)->sin_port;
@@ -323,7 +325,8 @@ qbool NET_CompareBaseAdr (const netadr_t a, const netadr_t b)
 		return true;
 #endif
 
-	// FIXME: Should we check a.type == b.type here ???
+	if (a.type != b.type) return false;
+	if (a.type == NA_FRIENDS) return a.friends_peer == b.friends_peer;
 
 	if (a.ip[0] == b.ip[0] && a.ip[1] == b.ip[1] && a.ip[2] == b.ip[2] && a.ip[3] == b.ip[3])
 		return true;
@@ -337,7 +340,8 @@ qbool NET_CompareAdr (const netadr_t a, const netadr_t b)
 		return true;
 #endif
 
-	// FIXME: Should we check a.type == b.type here ???
+	if (a.type != b.type) return false;
+	if (a.type == NA_FRIENDS) return a.friends_peer == b.friends_peer;
 
 	if (a.ip[0] == b.ip[0] && a.ip[1] == b.ip[1] && a.ip[2] == b.ip[2] && a.ip[3] == b.ip[3] && a.port == b.port)
 		return true;
@@ -355,6 +359,7 @@ char *NET_AdrToString (const netadr_t a)
 	static int idx = 0;
 
 	idx %= MAX_STRINGS;
+	if(a.type==NA_FRIENDS){snprintf(s[idx],sizeof(s[0]),"friend:%llu",(unsigned long long)a.friends_peer);return s[idx++];}
 
 #ifndef SERVERONLY
 	if (a.type == NA_LOOPBACK) {
@@ -372,6 +377,7 @@ char *NET_BaseAdrToString (const netadr_t a)
 	static int idx = 0;
 
 	idx %= MAX_STRINGS;
+	if(a.type==NA_FRIENDS){snprintf(s[idx],sizeof(s[0]),"friend:%llu",(unsigned long long)a.friends_peer);return s[idx++];}
 
 #ifndef SERVERONLY
 	if (a.type == NA_LOOPBACK) {
@@ -434,6 +440,7 @@ static qbool NET_StringToSockaddr (const char *s, struct sockaddr_storage *sadr)
 qbool NET_StringToAdr (const char *s, netadr_t *a)
 {
 	struct sockaddr_storage sadr;
+	if (!strcmp(s,"friends")) return Friends_Address(a);
 
 #ifndef SERVERONLY
 	if (!strcmp(s, "local")) {
@@ -842,6 +849,7 @@ qbool NET_GetPacketEx (netsrc_t netsrc, qbool delay)
 		return true;
 #endif
 
+	if (Friends_GetPacket(netsrc)) return true;
 	if (NET_GetUDPPacket(netsrc, &net_from, &net_message))
 		return true;
 
@@ -990,6 +998,7 @@ void NET_SendPacketEx (netsrc_t netsrc, int length, void *data, netadr_t to, qbo
 #endif
 
 #ifndef SERVERONLY
+	if (to.type == NA_FRIENDS) { Friends_SendPacket(netsrc,length,data,to); return; }
 	if (to.type == NA_LOOPBACK)
 	{
 		NET_SendLoopPacket (netsrc, length, data, to);
@@ -1650,6 +1659,7 @@ void NET_InitServer (void)
 
 void NET_CloseServer (void)
 {
+	Friends_ServerClosed();
 	if (svs.socketip != INVALID_SOCKET) {
 		closesocket(svs.socketip);
 		svs.socketip = INVALID_SOCKET;

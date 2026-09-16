@@ -30,7 +30,7 @@ files['LICENSE'] = (repo / 'LICENSE').read_bytes()
 files['SOURCE.txt'] = (
     'This archive contains the complete PowerShell installer source.\n'
     'Repository: https://github.com/awkinnunen/ezQuake-Vulkan\n'
-    'Engine binary and matching source: https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1\n'
+    f'Engine binary and matching source: https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v{lock["engineVersion"]}\n'
     'Includes five user-authorized legacy crosshair PNGs and Quick keyboard profiles.\n'
     'Image attribution and hashes: crosshairs.json. No new image license is asserted.\n'
     'Engine binaries and base game data are downloaded separately.\n'

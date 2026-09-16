@@ -1,0 +1,344 @@
+{
+  "id": "FRIENDS-002",
+  "utc": "2026-09-16T16:27:11.642005+00:00",
+  "requirements": "User",
+  "implementation": "OpenAI Codex",
+  "status": "Prototype and test package implemented; cross-network gate open",
+  "engineChanged": false,
+  "configurationChanged": false,
+  "newExternalServiceDeployed": false,
+  "secondNetworkAvailable": false,
+  "crossNetworkVerified": false,
+  "turnAllocationTested": false,
+  "fteGameplayClientVerified": false,
+  "liveCases": [
+    {
+      "case": "success",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 30.9466,
+          "maxRttMs": 36.8824,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        }
+      },
+      "buildScope": "friends-probe-tests"
+    },
+    {
+      "case": "wrong-fingerprint",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": false,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "dtls"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": false,
+          "dtlsPinned": false,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "unknown",
+          "failureStage": "ice"
+        }
+      },
+      "buildScope": "friends-probe-tests"
+    },
+    {
+      "case": "wrong-key",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "admission"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "admission"
+        }
+      },
+      "buildScope": "friends-probe-tests"
+    },
+    {
+      "case": "success",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 30.9349,
+          "maxRttMs": 37.6455,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        }
+      },
+      "buildScope": "friends-probe-tests-debug"
+    },
+    {
+      "case": "success",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": true,
+          "admitted": true,
+          "pass": true,
+          "sent": 100,
+          "received": 100,
+          "meanRttMs": 32.1934,
+          "maxRttMs": 38.2873,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "none"
+        }
+      },
+      "buildScope": "friends-probe-packaged-tests"
+    },
+    {
+      "case": "wrong-fingerprint",
+      "pass": true,
+      "scope": "Two processes on one Windows machine; real Frag-Net broker. Not cross-network evidence.",
+      "results": {
+        "host": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "host",
+          "brokerConnected": true,
+          "iceConnected": true,
+          "dtlsPinned": false,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "direct",
+          "failureStage": "dtls"
+        },
+        "join": {
+          "format": 1,
+          "probe": "FRIENDS-002",
+          "role": "join",
+          "brokerConnected": true,
+          "iceConnected": false,
+          "dtlsPinned": false,
+          "admitted": false,
+          "pass": false,
+          "sent": 0,
+          "received": 0,
+          "meanRttMs": 0,
+          "maxRttMs": 0,
+          "relayOffers": 0,
+          "route": "unknown",
+          "failureStage": "identity"
+        }
+      },
+      "buildScope": "friends-probe-final-tests"
+    }
+  ],
+  "packageChecks": {
+    "binaryHashVerified": true,
+    "matchingSourceHashesVerified": true,
+    "selfTestPassed": true,
+    "powershell51InputValidationPassed": true,
+    "hostDeadlinePassed": true,
+    "expiredInvitationRejected": true,
+    "runtimeDependencies": "Windows system DLLs only"
+  },
+  "debugSelfTestPassed": true,
+  "releaseSelfTestPassed": true,
+  "sourceManifest": {
+    "id": "FRIENDS-002",
+    "kind": "Standalone transport probe, not gameplay",
+    "vcpkgBaseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+    "exeSha256": "1b0ef97eeaad864e2eda67ff0c5cf4e0096a6e94617073be03b1f4c2765ce090",
+    "sources": {
+      "CMakeLists.txt": "5908368ee89a83fc5a80b371280c86dd318edc3a79ead011ff0daa5be17a717c",
+      "vcpkg.json": "614674186088f2527e1dd8439b11a125ae96351d3c9b7dec2fd14b7dc747d947",
+      "Build.ps1": "d4db585610f22eea4d3c63ff2a605c9f77645a6c6bcfdb579a411792e7e06552",
+      "Package.py": "74f8fdf0b997ae0d6c6ccff3e45f4f83bfc741b71bf6fdb1d24475b90969382c",
+      "Test-LivePair.py": "c504de64834b454cf3504a789069efea67a118dbf3dfe0c34ae9882389427848",
+      "Host.cmd": "97e448267859d4b16221f1bb22ae4110582e7e1eda190ac43de713b511dfc7f2",
+      "Join.cmd": "4db4e75edf181288fff7eeaf8e3729a0235e2afef9c0f5e26704cc7727567180",
+      "Join.ps1": "19b9b5da7317b75569808544273887dce8fedf8fdc049acf9f10d0f6c815758e",
+      "README.md": "cf3301984a5011f97afccc5f956aaa1aff9fc9a3465c0449f2bc44b7312be54d",
+      "main.cpp": "5ba36fd8bfa80b9ebea8a2ac04caead4688a260c8bf9e2a8ba70340559e06b39",
+      "dtls.h": "dd517765f53d52556022036d1f9d8f04c2d537cb3f31b011ccec72d33633df00",
+      "broker.cpp": "ad411cac8e3ea7c303be890f9d0c0d7363ccc73dbf9d883a09a661b0f8b4c739",
+      "broker.h": "2db7b5a3d9df60bcfae36f401445bda80b2b5ae92829af303cac99ac12d0ce90",
+      "protocol.cpp": "d0b52739c7bfcea1690099ea84f9a3346350163ccd391e73cdea5976de831c6a",
+      "protocol.h": "0f17a0f9fbbfe1b19bde19998a40064bfa90ba28226b2d6428b647ec32857bd9",
+      ".gitignore": "0f1cc46d844c05b122cf085fe1a779d86d7c6597d3f6d5cf4268139dfc55bb16"
+    },
+    "dependencies": [
+      {
+        "name": "libjuice",
+        "version": "1.7.0",
+        "url": "https://github.com/paullouisageneau/libjuice/archive/v1.7.0.tar.gz",
+        "sha512": "20800c54231188982f75bf823e1a450c6e501247fdb7348f4dc1dfaee6c6bf1394b681cd7e576156ddf2a1936668ebda10a1e74b9778f5bdd2a46c26173b68ac",
+        "sha256": "a510c7df90d82731d1d5e32e32205d3370ec2e62d6230ffe7b19b0f3c1acabf2"
+      },
+      {
+        "name": "openssl",
+        "version": "3.6.0",
+        "url": "https://github.com/openssl/openssl/archive/openssl-3.6.0.tar.gz",
+        "sha512": "3e1796708155454c118550ba0964b42c0c1055b651fec00cfb55038e8a8abbf5f85df02449e62b50b99d2a4a2f7b47862067f8a965e9c8a72f71dee0153672d9",
+        "sha256": "1535d184cbd04ea6b20485b98719fa8d609e45c3657f7c65b8299ae606f78159"
+      }
+    ]
+  },
+  "artifacts": {
+    "ezQuake-Vulkan-friends-probe-source.zip": {
+      "sha256": "c6792406820ba22dd321ff27d18292147dbef82d556211d1f79a2bac58a0ea4d",
+      "bytes": 55315133
+    },
+    "ezQuake-Vulkan-friends-probe-windows-x64.zip": {
+      "sha256": "7a07f49225cdbe50398f1d4ab2a627bc4943b6ef3811be508df2e85c7a07efa3",
+      "bytes": 2292540
+    }
+  },
+  "runtimeDlls": [
+    "WINHTTP.dll",
+    "WS2_32.dll",
+    "CRYPT32.dll",
+    "bcrypt.dll",
+    "KERNEL32.dll",
+    "USER32.dll",
+    "ADVAPI32.dll"
+  ],
+  "limits": [
+    "All live tests use two owned processes on one Windows machine.",
+    "Native broker compatibility is verified; full unmodified FTE gameplay is not.",
+    "No TURN relay was offered in the observed tests; allocation fallback not implemented.",
+    "Menus, multiple guests and production admission hardening remain future work."
+  ]
+}

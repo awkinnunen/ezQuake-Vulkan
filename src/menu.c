@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <sys/stat.h>
 #endif
 #include "quakedef.h"
+#include "friends.h"
 #include "gl_model.h"
 #ifndef CLIENTONLY
 #include "server.h"
@@ -394,6 +395,9 @@ bigmenu_items_t mainmenu_items[] = {
 	{"Multiplayer", M_Menu_MultiPlayer_f},
 #ifndef CLIENTONLY
 	{"Local Arena", MLocal_Open},
+#ifdef WITH_FRIENDS
+	{"Friends", Friends_Open},
+#endif
 #endif
 	{"Options", M_Menu_Options_f},
 	{"Demos", M_Menu_Demos_f},
@@ -1299,6 +1303,7 @@ void M_Init (void) {
 	Menu_Ingame_Init();
 	Menu_MultiPlayer_Init(); // menu_multiplayer.h
 	MLocal_Init();
+	Friends_Init();
 	CV_Init();
 
 	Cmd_AddCommand ("togglemenu", M_ToggleMenu_f);
@@ -1326,6 +1331,7 @@ void M_Shutdown(void)
 	Menu_Demo_Shutdown();
 	Menu_Options_Shutdown();
 	Menu_Ingame_Shutdown();
+	Friends_Shutdown();
 	MLocal_Shutdown();
 	Menu_MultiPlayer_Shutdown();
 }
@@ -1377,6 +1383,7 @@ void M_Draw(void)
 		case m_none: break;
 		case m_main:			M_Main_Draw(); break;
 		case m_local:        MLocal_Draw(); break;
+		case m_friends: Friends_Draw(); break;
 		case m_competitive: CV_Draw(); break;
 		case m_singleplayer:	M_SinglePlayer_Draw(); break;
 #ifndef CLIENTONLY
@@ -1438,6 +1445,7 @@ void M_Keydown (int key, wchar unichar) {
 		case m_none: return;
 		case m_main:			M_Main_Key(key); return;
 		case m_local:        MLocal_Key(key); return;
+		case m_friends: Friends_Key(key); return;
 		case m_competitive: CV_Key(key); return;
 		case m_singleplayer:	M_SinglePlayer_Key(key); return;
 #ifndef CLIENTONLY
@@ -1473,6 +1481,7 @@ qbool Menu_Mouse_Event(const mouse_state_t* ms)
     switch (m_state) {
 	case m_main:			return M_Main_Mouse_Event(ms);
 	case m_local:        return MLocal_Mouse(ms);
+	case m_friends: return Friends_Mouse(ms);
 	case m_competitive: return CV_Mouse(ms);
 #ifndef CLIENTONLY
 	case m_singleplayer:	return M_SinglePlayer_Mouse_Event(ms);

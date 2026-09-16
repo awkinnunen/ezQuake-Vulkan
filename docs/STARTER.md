@@ -4,21 +4,23 @@ DIST-002, 2026-09-16. Requested by the user; installer, packaging and validation
 implemented by OpenAI Codex. This is an unofficial nQuake-based distribution.
 
 Download the Starter ZIP, extract it and run `Install.cmd`. Choose a new directory;
-setup downloads about 122 MB, verifies each archive and creates a complete
+setup downloads about 125 MB, verifies each archive and creates a complete
 installation with the pinned Vulkan raster engine. Run the installed `Start.cmd`.
 An existing nQuake installation, compiler, Python or Vulkan SDK is not required.
 Windows x64, Windows PowerShell 5.1 and a Vulkan-capable graphics driver are required.
 
 The four nQuake archives come directly from its official `distfiles` release.
-The engine comes from our existing 0.1.0-beta.1 release, commit `7bb8a686`.
+The engine comes from the 0.2.0-beta.1 Friends test release; the exact commit is pinned in the lock.
 `dist/windows/starter/downloads.lock.json` pins origins, sizes and SHA-256 values.
 Mutable upstream snapshot URLs are never trusted without matching these hashes.
 A replaced snapshot requires a reviewed lock update and new Starter version.
-Starter 0.1.1 includes source scripts, documentation, Quick profiles and the five
+Starter 0.2.0 includes source scripts, documentation, Quick profiles and the five
 user-authorized legacy crosshair PNGs. See `crosshairs.json` for attribution/hashes.
-The engine archive remains byte-identical to beta.1; the installer adds the current
-Quick profiles to the fresh game directory and loads the crosshair module after
-nQuake first-run defaults. `starter-install.json` records the profile hashes.
+The engine includes reusable Friends invitations and native Windows link handling.
+Setup offers per-user link registration after the final installation is in place;
+non-interactive setup can request this with `-RegisterLinks`. Registration is also
+available under Friends -> Windows links. Re-enable it after moving the folder.
+`starter-install.json` records profile hashes and the pinned download versions.
 Downloaded resource packs are not mirrored or relicensed by this project.
 
 ## Installation and configuration
@@ -35,7 +37,7 @@ Downloaded resource packs are not mirrored or relicensed by this project.
 - The installed launchers use relative directories and `-nohome`. They wait for
   the actual game process before creating the first-run marker or collecting logs.
   This fixes the premature-exit behavior found in the beta.1 portable launcher
-  during Windows PowerShell testing. The engine executable is unchanged.
+  during Windows PowerShell testing. The launcher uses the pinned Friends-enabled engine.
 - `Start.cmd -Windowed` is supported. Advanced users can run a CFG from `qw`
   after initialization with `Start.cmd -StartupConfig my-settings.cfg`.
 - `Diagnose.cmd` starts windowed, enables the console log and copies diagnostics

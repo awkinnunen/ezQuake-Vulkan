@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifndef CLIENTONLY
 #include "qwsvdef.h"
+#include "friends.h"
 
 #ifdef SERVERONLY
 
@@ -1898,7 +1899,7 @@ static void SV_ConnectionlessPacket (void)
 		SVC_Status ();
 	else if (!strcmp(c,"log"))
 		SVC_Log ();
-	else if (!strcmp(c, "rcon"))
+	else if (!strcmp(c, "rcon") && net_from.type != NA_FRIENDS)
 		SVC_RemoteCommand (s);
 	else if (!strcmp(c, "ip"))
 		SVC_IP();
@@ -2687,6 +2688,7 @@ int SV_VIPbyIP (netadr_t adr)
 	int		i;
 	unsigned	in;
 
+	if (adr.type == NA_FRIENDS) return 0;
 	in = *(unsigned *)adr.ip;
 
 	for (i=0 ; i<numipvips ; i++)
@@ -2957,7 +2959,9 @@ static void SV_ReadPackets (void)
 	// now deal with new packets
 	while (NET_GetPacket(NS_SERVER))
 	{
-		if (SV_FilterPacket ())
+		if (Friends_Private() && net_from.type != NA_LOOPBACK && net_from.type != NA_FRIENDS) continue;
+		if (net_message.cursize < 4) continue;
+		if (net_from.type != NA_FRIENDS && SV_FilterPacket ())
 		{
 			SV_SendBan ();	// tell them we aren't listening...
 			continue;

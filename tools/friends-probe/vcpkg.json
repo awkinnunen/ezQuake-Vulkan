@@ -1,0 +1,6 @@
+{
+  "name": "ezv-friends-probe",
+  "version-string": "0.1.1",
+  "builtin-baseline": "66c0373dc7fca549e5803087b9487edfe3aca0a1",
+  "dependencies": ["libjuice", "openssl"]
+}

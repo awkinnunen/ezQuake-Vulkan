@@ -64,7 +64,7 @@ qbool M_Mouse_Select(const menu_window_t *window, const mouse_state_t *mouse, in
 
 typedef enum {
     m_none, m_main, m_proxy, m_singleplayer, m_load, m_save,
-	m_multiplayer, m_demos, m_multiplayer_submenu, m_local, m_competitive,
+	m_multiplayer, m_demos, m_multiplayer_submenu, m_local, m_competitive, m_friends,
     m_options,
 	m_help,
 	m_quit, m_ingame, 

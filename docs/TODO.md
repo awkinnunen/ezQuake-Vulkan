@@ -78,3 +78,47 @@ validation and the optional RT backend are still future work.
 - [x] CFG-PRESETS-002: load the focused graphics preset with Enter/click; F3 keeps preview, Escape cancels. Native input and save regression verified in Debug/Release.
 
 - [x] INPUT-004: nQuake keyboard preset plus Quick WASD/Quick ESDF names; native menu and switch-isolation tests pass in Debug/Release.
+
+
+## Friends hosting through existing infrastructure (2026-09-16)
+
+- [x] FRIENDS-001: investigate FTE rooms, ICE, STUN, relay selection, public room
+  visibility and current QW proxy boundaries. Record the UX and technical plan in
+  [FRIENDS-HOSTING-PLAN.md](history/FRIENDS-HOSTING-PLAN.md). Research only; no engine changes.
+- [x] FRIENDS-002A: implement the native FTE-broker / ICE / pinned-DTLS prototype;
+  Debug/Release, real-broker local pair, wrong-key and wrong-fingerprint tests pass.
+- [x] FRIENDS-002B: package a standalone Windows two-computer test with matching
+  source, dependency notices, Host/Join launchers and sanitized results.
+- [x] FRIENDS-002: user supplied a successful direct probe result and confirmed
+  the computers were in different cities (100/100 packets, mean RTT 31.7121 ms).
+  This is one network pair; reversed roles, more NAT types and TURN remain open.
+- [x] FRIENDS-003: logical peer addresses integrated with embedded QW/KTX;
+  two simultaneous guests, rejoin, chat and DM6 -> DM2 sign-on tested.
+- [x] FRIENDS-004: pinned encrypted admission, close/reopen, secret rotation,
+  guest removal and private-server UDP/TCP gate. Latest scope uses full links;
+  code-only host approval is deferred to keep the first workflow simple.
+- [x] FRIENDS-005A: Local Arena access selector, main/in-game Friends menus,
+  clipboard joining with confirmation, help text and unavailable-action policies.
+- [x] FRIENDS-005B: opt-in per-user Windows URI registration, native cold start and
+  profile-specific running-instance handoff, with confirmation and secret redaction.
+- [x] FRIENDS-005C: Starter offers optional per-user link registration after installing
+  the final executable/data directory; in-game registration remains available.
+- [ ] FRIENDS-006: validate outages, lifecycle and eligible existing TURN fallback.
+- [ ] FRIENDS-007: package and document the measured network coverage.
+
+No new external relay is part of this scope. Existing STUN/broker reachability is
+confirmed; cross-city engine gameplay and relay availability remain unverified. Room
+codes may be public and must not act as passwords. See the plan's acceptance gates.
+
+Prototype details and pending gates: [Friends hosting status](history/FRIENDS-HOSTING-STATUS.md).
+
+- [x] FRIENDS-002C: unlimited host waiting in probe 0.1.1, periodic broker keepalive,
+  stable invitation, reduced idle polling and retained explicit test deadlines.
+
+- [x] FRIENDS-004P: generate and privately save one reusable invitation and host
+  identity; preserve it across restarts, matches and upgrades. Change invitation
+  replaces the access secret and invalidates old links. No MAC or rotation counter.
+  Handle broker room conflicts without promising offline name reservation.
+
+Current player instructions: [Friends games](FRIENDS.md).
+- [ ] FRIENDS-VOICE: validate inherited ezQuake VoIP through Friends using two microphones; no new voice implementation is needed before this check.

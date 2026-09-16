@@ -35,6 +35,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "version.h"
 #include "graphics_menu.h"
 #include "menu_ingame.h"
+#include "friends.h"
 
 #define TOPMARGIN (6*LETTERWIDTH)
 
@@ -120,6 +121,10 @@ setting single_menu_entries[] = {
 	ADDSET_ACTION("Save Game", MSP_Save, ""),
 	ADDSET_BLANK(),
 	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Adjust graphics and preview named presets without leaving the current server."),
+
+#ifdef WITH_FRIENDS
+	ADDSET_ACTION("Friends / invitations",Friends_Open,"Invite friends to a local game, close invitations, or join a saved link."),
+#endif
 	ADDSET_ACTION("Options", MIng_Options, "Controls, HUD, audio and other client settings."),
 	ADDSET_ACTION("Main Menu", MIng_MainMenu, ""),
 	ADDSET_BLANK(),
@@ -137,6 +142,10 @@ setting ingame_menu_entries[] = {
 	ADDSET_BLANK(),
 	ADDSET_ACTION("Server Browser", MIng_ServerBrowser, ""),
 	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Adjust graphics and preview named presets without leaving the current server."),
+
+#ifdef WITH_FRIENDS
+	ADDSET_ACTION("Friends / invitations",Friends_Open,"Invite friends to a local game, close invitations, or join a saved link."),
+#endif
 	ADDSET_ACTION("Options", MIng_Options, "Controls, HUD, audio and other client settings."),
 	ADDSET_ACTION("Main Menu", MIng_MainMenu, ""),
 	ADDSET_BLANK(),
@@ -152,6 +161,10 @@ setting democtrl_menu_entries[] = {
 	ADDSET_BLANK(),
 	ADDSET_ACTION("Demo Browser", MDemoCtrl_DemoBrowser, ""),
 	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Adjust graphics and preview named presets without leaving the current server."),
+
+#ifdef WITH_FRIENDS
+	ADDSET_ACTION("Friends / invitations",Friends_Open,"Invite friends to a local game, close invitations, or join a saved link."),
+#endif
 	ADDSET_ACTION("Options", MIng_Options, "Controls, HUD, audio and other client settings."),
 	ADDSET_ACTION("Main Menu", MIng_MainMenu, ""),
 	ADDSET_BLANK(),
@@ -168,6 +181,10 @@ setting qtv_menu_entries[] = {
 	ADDSET_ACTION("Disconnect", MIng_Disconnect, ""),
 	ADDSET_BLANK(),
 	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Adjust graphics and preview named presets without leaving the current server."),
+
+#ifdef WITH_FRIENDS
+	ADDSET_ACTION("Friends / invitations",Friends_Open,"Invite friends to a local game, close invitations, or join a saved link."),
+#endif
 	ADDSET_ACTION("Options", MIng_Options, "Controls, HUD, audio and other client settings."),
 	ADDSET_ACTION("Main Menu", MIng_MainMenu, ""),
 	ADDSET_BLANK(),
@@ -187,6 +204,10 @@ setting botmatch_menu_entries[] = {
 	ADDSET_ACTION("Disconnect", MIng_Disconnect, ""),
 	ADDSET_BLANK(),
 	ADDSET_ACTION("Graphics and presets",Graphics_Open,"Adjust graphics and preview named presets without leaving the current server."),
+
+#ifdef WITH_FRIENDS
+	ADDSET_ACTION("Friends / invitations",Friends_Open,"Invite friends to a local game, close invitations, or join a saved link."),
+#endif
 	ADDSET_ACTION("Options", MIng_Options, "Controls, HUD, audio and other client settings."),
 	ADDSET_ACTION("Main Menu", MIng_MainMenu, ""),
 	ADDSET_BLANK(),

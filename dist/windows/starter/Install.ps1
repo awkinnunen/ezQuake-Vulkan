@@ -1,12 +1,12 @@
 # DIST-002. OpenAI Codex, 2026-09-16. Unofficial nQuake-based Vulkan installation.
 param([string]$Destination,[string]$QuakeDirectory,[string]$CacheDirectory,
-      [switch]$NonInteractive)
+      [switch]$NonInteractive,[switch]$RegisterLinks)
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/Common.ps1"
 if (![Environment]::Is64BitOperatingSystem) { throw 'Windows x64 is required.' }
 $lock=Get-Content -LiteralPath "$PSScriptRoot/downloads.lock.json" -Raw | ConvertFrom-Json
 Write-Host 'ezQuake Vulkan Starter - unofficial nQuake-based distribution'
-Write-Host 'Downloads about 122 MB from nQuake and ezQuake-Vulkan GitHub Releases.'
+Write-Host ('Downloads about {0} MB from nQuake and ezQuake-Vulkan GitHub Releases.' -f [Math]::Ceiling(($lock.packages | Measure-Object bytes -Sum).Sum / 1MB))
 Write-Host 'Third-party license notices are preserved. No game is launched by setup.'
 if (!$Destination) {
     if ($NonInteractive) { throw '-Destination is required in non-interactive mode.' }
@@ -20,6 +20,10 @@ if (!$QuakeDirectory -and !$NonInteractive) {
     $QuakeDirectory=Read-Host 'Optional: path to your OWN classic full Quake installation (Enter to skip)'
 }
 if ($QuakeDirectory) { $QuakeDirectory=$QuakeDirectory.Trim('"') }
+if (!$NonInteractive -and !$RegisterLinks) {
+    $answer=Read-Host 'Enable clickable Friends invitations for this Windows user? [Y/n]'
+    $RegisterLinks=(!$answer -or $answer -match '^(?i:y|yes)$')
+}
 if (!$CacheDirectory) { $CacheDirectory=Join-Path $env:LOCALAPPDATA 'ezQuake-Vulkan/downloads' }
 $CacheDirectory=[IO.Path]::GetFullPath($CacheDirectory)
 $parent=Split-Path $Destination -Parent
@@ -73,6 +77,12 @@ try {
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'starter-install.json') -Encoding utf8
     # Same-volume rename publishes the complete installation; existing target still fails closed.
     [IO.Directory]::Move($stage,$Destination)
+    if ($RegisterLinks) {
+        # Register the final location, never the temporary staging directory.
+        $registration=Start-Process -FilePath (Join-Path $Destination 'engine/ezquake.exe') -ArgumentList @('-friends-register',('"'+$Destination+'"')) -WindowStyle Hidden -PassThru -Wait
+        if ($registration.ExitCode -ne 0) { Write-Warning 'Installed, but link registration failed. Enable Friends > Windows links in the game.' }
+        $registration.Dispose()
+    }
     Write-Host "Installed: $Destination"
     Write-Host 'Run Start.cmd. Diagnose.cmd starts windowed and collects troubleshooting logs.'
     return $Destination

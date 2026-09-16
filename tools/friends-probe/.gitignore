@@ -1,0 +1,7 @@
+invitation.txt
+received-invitation.txt
+*-result.json
+result.json
+*.log
+FriendsProbe.exe
+source-manifest.json

@@ -30,6 +30,9 @@ change and the distinction between inherited work, user direction and Codex impl
 - Native graphics categories with live CFG preview, Enter/click to load, Escape to cancel and safe saving.
   Balanced, Ultra competitive and Athmospheric presets; Quick WASD, Quick ESDF and nQuake controls.
 - Native Local Arena setup and in-game KTX bot controls on local or remote servers.
+- Friends hosting through the existing FTE broker: reusable private invitations,
+  encrypted connections and clickable Windows links. Both players need this build.
+  See [Friends instructions and network limits](docs/FRIENDS.md).
 - Explicit full-config import with a keyboard binding preview.
 - Local Arena controls for an external KTX game module, and original Quake
   single-player startup/save handling when the required game data is installed.
@@ -38,7 +41,7 @@ change and the distinction between inherited work, user direction and Codex impl
 
 ## Build and run on Windows
 
-For a **new installation**, use the **[Windows Starter](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.1)**.
+For a **new installation**, use the **[Windows Starter](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.2.0)**.
 Extract it, run `Install.cmd`, and choose a new directory. It downloads verified
 nQuake resources and our Vulkan engine, installs Balanced / Quick WASD defaults,
 and optionally imports full-game PAKs from your own classic Quake installation.
@@ -110,5 +113,7 @@ The project is experimental; the tests are bounded checks, not a complete campai
 playthrough or a tournament/ruleset certification.
 
 Existing ezQuake GPL terms and component notices remain in force; see
-[LICENSE](LICENSE). Quake game assets must be supplied separately.
+[LICENSE](LICENSE). Friends-enabled binaries use GPL-3.0-or-later because they link
+OpenSSL; see [GPL-3.0](licenses/GPL-3.0.txt) and the dependency notices.
+Quake game assets must be supplied separately.
 The upstream project README is retained in [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).
