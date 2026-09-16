@@ -31,7 +31,8 @@ change and the distinction between inherited work, user direction and Codex impl
   Balanced, Ultra competitive and Athmospheric presets; Quick WASD, Quick ESDF and nQuake controls.
 - Native Local Arena setup and in-game KTX bot controls on local or remote servers.
 - Friends hosting through the existing FTE broker: reusable private invitations,
-  encrypted connections and clickable Windows links. Both players need this build.
+  encrypted connections and native Windows/Linux/macOS invitation links. Both
+  players need a Friends-enabled build of this fork.
   See [Friends instructions and network limits](docs/FRIENDS.md).
 - Explicit full-config import with a keyboard binding preview.
 - Local Arena controls for an external KTX game module, and original Quake
@@ -66,8 +67,21 @@ Start-Vulkan.cmd "C:\Games\nQuake"
 The launcher runs the build directly against your installed game data.
 Use `--config Debug` to build a Debug executable; pass `Debug` as the launcher's
 second argument. This enables developer diagnostics and Vulkan validation.
-See [the inherited build guide](BUILD.md) for other platforms; this project's
-current validation was performed on Windows x64.
+See [the inherited build guide](BUILD.md) for additional build background.
+
+## Linux and macOS test packages
+
+Native packages and installation instructions are in the
+[Unix test release](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.3.0-beta.1).
+Choose Linux x86_64 (Ubuntu 24.04 or compatible) or the matching macOS arm64 / x64
+package. Extract it and run `Install.command` to create a fresh nQuake-based
+installation; no existing nQuake, Python or separately installed Vulkan SDK is
+needed. Linux still needs a working system Vulkan driver. Mac packages include
+MoltenVK and are ad-hoc signed, not notarized.
+
+Build, packaging, native Friends and installer checks are automated. Actual Mac
+graphics/input/audio and cross-city engine gameplay remain tester gates.
+See [the port guide and validation scope](docs/UNIX-PORT.md).
 
 ## WASD and graphics defaults
 

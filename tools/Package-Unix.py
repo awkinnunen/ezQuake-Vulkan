@@ -68,6 +68,9 @@ if a.platform=='macos':
   if f.is_file() and ('license' in f.name.lower() or 'copyright' in f.name.lower()):
    target=notices/'vulkan-sdk'/f.relative_to(a.sdk/'share');target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(f,target)
  (notices/'VULKAN-SDK.txt').write_text('Bundled from LunarG Vulkan SDK '+str(a.sdk.parent.name)+'\nMoltenVK: https://github.com/KhronosGroup/MoltenVK\nLoader: https://github.com/KhronosGroup/Vulkan-Loader\nSDK sources: https://vulkan.lunarg.com/sdk/home\n')
+ for component in ['MoltenVK','Vulkan-Loader']:
+  texts=list((repo/'licenses').glob(component+'-*'));assert len(texts)>=2,'Missing SDK component notices'
+  for f in texts:shutil.copyfile(f,notices/f.name)
 else:
  binaries=[engine/'ezquake',engine/'ezv-install']
  for source,dest in zip([a.binary,a.installer],binaries):shutil.copyfile(source,dest);dest.chmod(0o755)
@@ -129,7 +132,11 @@ with zipfile.ZipFile(source,'w',zipfile.ZIP_DEFLATED) as out:
    if f.is_file():out.write(f,'ubuntu-dependency-sources/'+f.name)
  # vcpkg retains hash-verified upstream source archives; include these for static Mac dependencies.
  if a.platform=='macos':
-  for f in (repo/'vcpkg/downloads').glob('*'):
+  downloads=Path(os.environ.get('VCPKG_DOWNLOADS',repo/'vcpkg/downloads'))
+  archives=[f for f in downloads.glob('*') if f.is_file() and f.name.endswith(('.tar.gz','.tar.xz','.tar.bz2','.tgz','.zip'))]
+  for required in ['openssl','libjuice','IXWebSocket','SDL','libsndfile']:
+   assert any(required.lower() in f.name.lower() for f in archives),'Missing dependency source: '+required+'; retain vcpkg downloads'
+  for f in archives:
    if f.is_file() and f.name.endswith(('.tar.gz','.tar.xz','.tar.bz2','.tgz','.zip')):out.write(f,'vcpkg-downloads/'+f.name)
  out.writestr('BUILD.txt',f'Exact commit: {commit}\nSee source/docs/UNIX-PORT.md and source/.github/workflows/main.yml.\nPinned vcpkg and qwprot sources are included.\n')
 artifacts.append(source)

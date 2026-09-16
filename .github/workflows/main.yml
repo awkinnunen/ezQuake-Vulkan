@@ -150,10 +150,12 @@ jobs:
       uses: lukka/run-cmake@v10
       with:
         configurePreset: ${{ matrix.configurePreset }}
-        configurePresetAdditionalArgs: "['-DRENDERER_VULKAN=ON', '-DENABLE_SANDBOX=OFF', '-DENABLE_LTO=OFF', '-DCMAKE_PREFIX_PATH=/opt/ezv-deps']"
+        configurePresetAdditionalArgs: "['-DRENDERER_VULKAN=ON', '-DENABLE_SANDBOX=OFF', '-DENABLE_LTO=OFF', '-DCMAKE_PREFIX_PATH=/opt/ezv-deps', '-DVCPKG_INSTALL_OPTIONS=--clean-buildtrees-after-build']"
         buildPreset: ${{ matrix.buildPreset }}
       env:
         CFLAGS: ${{ matrix.cflags }}
+        # Release sources must accompany static dependencies, even on a warm runner.
+        VCPKG_BINARY_SOURCES: clear
 
     - name: Build and test native Friends protocol
       shell: bash

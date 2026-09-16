@@ -19,7 +19,7 @@ def profile(name,host=False,invite=None):
  text(d/'qw/control.cfg','')
  text(d/'qw/poll.cfg','alias f_spawn "exec poll.cfg"\ndev_friends poll\n')
  common='cfg_save_onquit 0\ncl_confirmquit 0\ncl_onload console\ncl_maxfps 60\ncl_physfps 60\nvid_vsync 0\ndeveloper 1\ntp_triggers 1\nset friends_test_serial 0\nname '+name+'\n'
- if a.software:common+='gl_externalTextures_world 0\ngl_externalTextures_bmodels 0\n'
+ if a.software:common+='gl_no24bit 1\ngl_externalTextures_world 0\ngl_externalTextures_bmodels 0\ncl_timeout 300\ntimeout 300\n'
  if host:
   text(d/'qw/online.cfg','alias f_spawn "exec poll.cfg"\nexec poll.cfg\n')
   run=common+'sv_progtype 1\nsv_progsname qwprogs\nmaxclients 16\ndeathmatch 3\ncoop 0\nalias f_spawn "exec online.cfg"\nmap dm6\n'
@@ -73,7 +73,7 @@ def command(d,commands,ack=True):
  global serial
  serial+=1;text(d/'qw'/('job%d.cfg'%serial),'set friends_test_serial %d\n'%serial+commands+'\necho FRIENDS_TEST_DONE_%d\n'%serial)
  tmp=d/'qw/control.tmp';text(tmp,'if $friends_test_serial != %d then exec job%d.cfg\n'%(serial,serial));os.replace(tmp,d/'qw/control.cfg')
- if ack:wait(lambda:'FRIENDS_TEST_DONE_%d'%serial in log(d),20)
+ if ack:wait(lambda:'FRIENDS_TEST_DONE_%d'%serial in log(d),120 if a.software else 20)
 try:
  host,hp=profile('host',True);wait(lambda:'host entered the game' in log(host),180)
  if not a.arena:

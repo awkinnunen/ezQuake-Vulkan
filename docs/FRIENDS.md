@@ -1,4 +1,4 @@
-# Friends games (Windows development build)
+# Friends games (Windows, Linux and macOS test builds)
 
 ## Host a game
 
@@ -26,7 +26,15 @@ in the matching running game, or launches that installation if it is closed.
 Confirm to leave your current game and join; Cancel keeps your current game.
 Toggle the setting again to remove this installation's registration. Register
 again after moving the game folder. Other installations can take over the handler;
-the setting reports whether it currently points at this executable and game folder.
+the Windows setting reports whether it currently points at this executable and game folder.
+
+Linux and macOS use **Friends → Invitation links**. Unix Starter registers links
+for the installing user by default (`--no-links` skips this). Linux creates a
+desktop protocol handler; macOS registers the installed app with LaunchServices.
+Private, profile-specific Unix sockets deliver links to an already running game.
+The Mac menu registers/repairs the OS association; it does not pretend to remove
+an association owned by the operating system. Repair registration after moving
+the installation. GUI link opening on a real Mac remains a tester check.
 
 The handler is built into the engine; Starter 0.2.0 offers registration during
 installation. Short-code approval remains deferred. Some chat apps do not make custom schemes
@@ -37,7 +45,9 @@ Discord installation or separate server program is required by this transport.
 
 The host's random room name, secret and pinned certificate are saved together in
 `ezquake/friends.identity` under the game's base directory. The file is encrypted
-with Windows DPAPI for the current Windows account. Keep it when updating the
+with Windows DPAPI for the current Windows account. Linux/macOS instead use
+owner-only (0600) regular files with no symlink following; they are **not encrypted
+at rest**. Keep the identity private and retain it when updating the
 engine. It is not part of `config.cfg`, `autoexec.cfg`, presets or normal logs.
 Only one host can open the same identity file at once. A corrupt/unreadable file
 produces an error; it is never silently replaced by a new invitation.
@@ -108,15 +118,20 @@ peers, signaling and receive queues are bounded. Graceful departure/kick sends a
 authenticated goodbye; lost connections also expire. Protocol version 1 requires
 the full invitation secret and host fingerprint; no public-room-only admission.
 
-Build with CMake `ENABLE_FRIENDS=ON` (Windows default), MSVC C++17, libjuice and
-OpenSSL >= 3.2. The vcpkg submodule/manifest pins the dependency source baseline.
+Build with CMake `ENABLE_FRIENDS=ON` (all platform defaults), a C++17 compiler,
+libjuice and OpenSSL >= 3.2. Unix uses IXWebSocket for broker signalling, with
+OpenSSL TLS on Linux and SecureTransport on macOS. All platforms retain protocol
+version 1, including compatibility with Windows beta 0.2.0. See
+[Unix builds and package tests](UNIX-PORT.md). The vcpkg submodule/manifest pins
+the dependency source baseline.
 `ENABLE_FRIENDS=OFF` omits the worker and Friends menu entries. Existing installations
 whose CMake cache has `VCPKG_MANIFEST_INSTALL=OFF` must install the new dependencies
 or explicitly point CMake to an existing matching dependency prefix.
 
 Test target: `ezquake-friends-tests`. The `--unit <fresh-directory>` mode checks
 binary fragments, malformed bounds, identity persistence, locking, rotation,
-DPAPI and corrupt-file rejection. `tools/friends-probe/Test-GameTransport.py`,
+DPAPI (Windows) or private-file permissions (Unix), and corrupt-file rejection.
+`tools/friends-probe/Test-GameTransport.py`,
 `Test-Admission.py` and `Test-EngineFriends.py` run bounded tests with owned rooms.
 The engine test's `--arena --links` mode covers cold start, actual Windows shell
 dispatch to a running profile, confirmation/cancel, command-injection rejection,

@@ -225,3 +225,27 @@ Prototype details and pending gates: [Friends hosting status](FRIENDS-HOSTING-ST
 
 Current player instructions: [Friends games](../FRIENDS.md).
 - [ ] FRIENDS-VOICE: validate inherited ezQuake VoIP through Friends using two microphones; no new voice implementation is needed before this check.
+
+## Native Unix distribution (2026-09-16/17)
+
+Requested by AWK; implementation and automated validation by OpenAI Codex.
+
+- [x] PORT-UNIX-001: native Linux/macOS Friends broker, wake events, private saved
+  identities and invitation handoff. Preserve the Windows version-1 wire format;
+  Windows/Linux 100-packet exchanges pass in both host directions.
+- [x] PORT-UNIX-002: C99 build repair, portable CMake resources and system-library
+  compatibility. Mac uses Vulkan portability enumeration/MoltenVK argument
+  buffers and SDL3 relative mouse input.
+- [x] DIST-UNIX-001: native config-preserving nQuake installer, pinned downloads,
+  optional owned PAK import, per-user launchers and invitation registration.
+  No Python dependency on the player's machine.
+- [x] DIST-UNIX-002: target-OS CI and packaging recipes for Linux x86_64 and macOS
+  arm64/x64; relocated runtimes, exact sources, notices and SHA-256 sidecars.
+- [ ] PORT-UNIX-HW: friend tests real Mac Vulkan output, presets, mouse/audio,
+  cold/warm GUI invitation dispatch and both directions of cross-city gameplay.
+  Linux GPU/desktop diversity and long sessions also need tester coverage.
+- [ ] DIST-MAC-SIGN: Developer ID signing/notarization for a future wider Mac
+  release; current tester packages are explicitly ad-hoc signed and unnotarized.
+
+See [Unix port instructions and evidence](../UNIX-PORT.md). Successful builds or
+local/container tests do not close the external hardware/network gates.

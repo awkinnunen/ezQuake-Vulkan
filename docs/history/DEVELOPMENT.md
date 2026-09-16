@@ -1245,3 +1245,34 @@ release downloads were removed after verification; source tags and historical
 engine beta remain. The development URI registration was restored after fixtures.
 The general Linux CI failure also exists at the prior baseline and is recorded
 as BUILD-LINUX-001; it does not describe the separately tested Windows binaries.
+
+## 2026-09-16/17 — Native Linux/macOS port and test distributions
+
+AWK requested the complete ports and packages, with a friend available for
+hardware testing. New implementation, test automation and these notes are by
+OpenAI Codex; upstream authorship and licenses remain intact. Linux builds run
+in Ubuntu 24.04 containers, Mac builds on GitHub's macOS runners with separate
+arm64/x64 packages. This uses native target toolchains rather than an unofficial
+Windows-to-Mac cross-SDK.
+
+Friends now uses portable wake events, IXWebSocket broker adapters and owner-only
+Unix identity files, retaining the existing libjuice/pinned-DTLS protocol and
+Frag-Net endpoint. Windows DPAPI remains unchanged; Unix identities are explicitly
+not encrypted at rest. Native desktop/LaunchServices registration and private
+profile-specific Unix sockets handle invitations without console interpolation.
+Mac Apple-event links are validated directly, and SDL3 now owns relative mouse
+input. MoltenVK portability features and bundled runtime configuration are added.
+
+A native C++ installer performs pinned nQuake downloads, strict ZIP validation,
+fresh-directory installation, optional owned PAK import and one-time Balanced /
+Quick WASD defaults without modifying autoexec.cfg. Packages include matching
+sources, dependency notices and hashes. Mac copies are ad-hoc signed; no Developer
+ID or notarization claim is made. Users need no Python or separately installed SDK.
+
+Linux CI exposed the inherited C90/C99 build failure (fixed with GNU C99), and
+Xvfb exposed division by zero when a display reports no refresh rate (fixed by
+bounding the menu frame limit). Portable resource generation and newer PCRE2
+headers also needed small compatibility fixes. Windows/Linux binary transport
+checks pass in both host directions. Linux unit and installer tests pass; real
+Mac graphics, GUI links, physical input/audio and cross-city gameplay remain
+external gates. Current validation and installation details: docs/UNIX-PORT.md.

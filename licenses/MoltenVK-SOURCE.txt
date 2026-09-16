@@ -1,0 +1,1 @@
+Bundled SDK 1.4.350.1 component. Upstream notices copied from https://github.com/KhronosGroup/MoltenVK/tree/v1.4.1
