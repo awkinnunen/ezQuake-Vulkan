@@ -318,6 +318,10 @@ int main(int argc, char **argv)
 	double time, oldtime, newtime;
 	int i;
 
+#ifdef __APPLE__
+    /* Also applies to terminal launches, where LaunchServices LSEnvironment is absent. */
+    setenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "1", 0);
+#endif
 #ifdef WITH_FRIENDS
     /* URI is validated data, never console text. Scrub before COM_InitArgv. */
     {

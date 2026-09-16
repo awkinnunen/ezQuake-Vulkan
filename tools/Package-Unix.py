@@ -43,13 +43,13 @@ if a.platform=='macos':
   for dep in deps(original):
    if dep.startswith(('/usr/lib/','/System/Library/')):continue
    if dep==str(original) or (copy.suffix=='.dylib' and Path(dep).name==copy.name):continue
-   source=resolve(dep,original);target=frameworks/source.name
-   if source.name not in resolved:
-    resolved[source.name]=source
+   source=resolve(dep,original);library_name=Path(dep).name;target=frameworks/library_name
+   if library_name not in resolved:
+    resolved[library_name]=source
     if not target.exists():shutil.copyfile(source,target)
     pending.append((source,target))
-   else:assert sha(resolved[source.name])==sha(source),'Library basename collision'
-   run('install_name_tool','-change',dep,'@rpath/'+source.name,copy)
+   else:assert sha(resolved[library_name])==sha(source),'Library basename collision'
+   run('install_name_tool','-change',dep,'@rpath/'+library_name,copy)
   if copy.suffix=='.dylib':run('install_name_tool','-id','@rpath/'+copy.name,copy)
   commands=run('otool','-l',copy)
   rpath='@loader_path' if copy.suffix=='.dylib' else '@executable_path/../Frameworks'

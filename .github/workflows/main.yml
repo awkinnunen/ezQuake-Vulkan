@@ -42,7 +42,7 @@ jobs:
             name: ezQuake-linux-x86_64
             artifact: "unused"
             cflags: "-march=nehalem"
-            packages: ["build-essential", "ca-certificates", "cmake", "curl", "file", "git", "glslang-tools", "libcurl4-openssl-dev", "libexpat1-dev", "libfreetype-dev", "libjansson-dev", "libjpeg-dev", "libminizip-dev", "libpcre2-dev", "libpng-dev", "libsndfile1-dev", "libspeex-dev", "libspeexdsp-dev", "libvulkan-dev", "ninja-build", "unzip", "zlib1g-dev", "xdg-utils", "libx11-dev", "libxext-dev", "libxrandr-dev", "libxcursor-dev", "libxi-dev", "libxfixes-dev", "libxss-dev", "libwayland-dev", "libxkbcommon-dev", "libegl1-mesa-dev", "libasound2-dev", "libpulse-dev", "libdbus-1-dev", "libudev-dev", "libdecor-0-dev", "python3", "patchelf", "zip"]
+            packages: ["build-essential", "ca-certificates", "cmake", "curl", "file", "git", "glslang-tools", "libcurl4-openssl-dev", "libexpat1-dev", "libfreetype-dev", "libjansson-dev", "libjpeg-dev", "libminizip-dev", "libpcre2-dev", "libpng-dev", "libsndfile1-dev", "libspeex-dev", "libspeexdsp-dev", "libvulkan-dev", "ninja-build", "unzip", "zlib1g-dev", "xdg-utils", "libx11-dev", "libxext-dev", "libxrandr-dev", "libxcursor-dev", "libxi-dev", "libxfixes-dev", "libxss-dev", "libxtst-dev", "libxkbfile-dev", "libwayland-dev", "libxkbcommon-dev", "libegl1-mesa-dev", "libasound2-dev", "libpulse-dev", "libdbus-1-dev", "libudev-dev", "libdecor-0-dev", "python3", "patchelf", "zip"]
             container:
               image: ubuntu:24.04
               options: --privileged

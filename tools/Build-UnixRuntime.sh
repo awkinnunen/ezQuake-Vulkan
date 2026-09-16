@@ -21,7 +21,7 @@ if [ ! -f "$prefix/lib/libssl.so.3" ]; then
 fi
 hash=$(awk '/SHA512/{gsub(/\r/, "", $2); print $2}' "$root/vcpkg/ports/sdl3/portfile.cmake")
 fetch SDL-3.4.0 https://github.com/libsdl-org/SDL/archive/release-3.4.0.tar.gz "$hash"
-cmake -S "$work/SDL-3.4.0" -B "$work/SDL-3.4.0-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON
+cmake -S "$work/SDL-3.4.0" -B "$work/SDL-3.4.0-build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON -DSDL_X11_XTEST=OFF
 cmake --build "$work/SDL-3.4.0-build" --parallel 4
 cmake --install "$work/SDL-3.4.0-build"
 export CMAKE_PREFIX_PATH="$prefix"

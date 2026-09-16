@@ -1,4 +1,4 @@
-"""OpenAI Codex: isolated real-engine Friends gameplay integration (Windows)."""
+"""OpenAI Codex: isolated real-engine Friends gameplay integration (Windows/Linux/macOS)."""
 import argparse, pathlib, subprocess, time, os, json, re, socket, ctypes, zipfile
 p=argparse.ArgumentParser();p.add_argument('executable',type=pathlib.Path);p.add_argument('gamedata',type=pathlib.Path);p.add_argument('output',type=pathlib.Path);p.add_argument('--arena',action='store_true');p.add_argument('--links',action='store_true',help='Test Windows URI registration; leave the supplied engine/gamedata registered afterward');a=p.parse_args()
 exe=a.executable.resolve();assets=a.gamedata.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=False)
@@ -31,14 +31,19 @@ def profile(name,host=False,invite=None):
  err=(d/'stderr.log').open('w');handles.append(err)
  args=[str(exe),'-allowmultiple','-condebug','-nohome','-basedir',str(d),'-window','-width','640','-height','480','+set','vid_renderer','2','+exec','run.cfg']
  if not host and a.links and name=='guest1':args+=['-friends-invite',invite.read_text()]
- child=subprocess.Popen(args,cwd=d,stdout=err,stderr=err,creationflags=subprocess.CREATE_NO_WINDOW)
+ child=subprocess.Popen(args,cwd=d,stdout=err,stderr=err,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
  children.append(child)
  if not host and a.links:
   if name=='guest2':
    wait(lambda:'ezQuake Initialized' in log(d))
-   register=subprocess.run([str(exe),'-friends-register',str(d)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW);assert register.returncode==0
-   shell=ctypes.windll.shell32.ShellExecuteW;shell.argtypes=[ctypes.c_void_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_int];shell.restype=ctypes.c_void_p
-   result=shell(None,'open',invite.read_text(),None,str(d),0);assert result and result>32,'Windows failed to open invitation'
+   register=subprocess.run([str(exe),'-friends-register',str(d)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));assert register.returncode==0
+   if os.name=='nt':
+    shell=ctypes.windll.shell32.ShellExecuteW;shell.argtypes=[ctypes.c_void_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_int];shell.restype=ctypes.c_void_p
+    result=shell(None,'open',invite.read_text(),None,str(d),0);assert result and result>32,'Windows failed to open invitation'
+   else:
+    forwarded=subprocess.run([str(exe),'-basedir',str(d),'-friends-invite',invite.read_text()],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10)
+    assert forwarded.returncode==0,'Native Unix IPC could not forward invitation'
+
   wait(lambda:'waiting for your confirmation' in log(d))
   command(d,'dev_friends status\ncl_cmdline\ncfg_save uri-test')
   assert 'FRIENDS_UI menu=1 confirm=2' in log(d),'Link did not open confirmation'
@@ -47,7 +52,7 @@ def profile(name,host=False,invite=None):
   if name=='guest2':
    assert 'registered=1' in log(d),'Registration points at the wrong installation'
    command(d,'dev_friends key escape\ndev_friends status');assert log(d).rfind('confirm=0')>log(d).rfind('confirm=2'),'Cancel did not preserve the game'
-   forward=subprocess.run([str(exe),'-basedir',str(d),'-friends-invite',invite.read_text()],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10,creationflags=subprocess.CREATE_NO_WINDOW);assert forward.returncode==0
+   forward=subprocess.run([str(exe),'-basedir',str(d),'-friends-invite',invite.read_text()],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));assert forward.returncode==0
    wait(lambda:log(d).count('waiting for your confirmation')>=2)
   command(d,'dev_friends key enter',ack=False)
  return d,child
@@ -65,7 +70,7 @@ def command(d,commands,ack=True):
  tmp=d/'qw/control.tmp';text(tmp,'if $friends_test_serial != %d then exec job%d.cfg\n'%(serial,serial));os.replace(tmp,d/'qw/control.cfg')
  if ack:wait(lambda:'FRIENDS_TEST_DONE_%d'%serial in log(d),20)
 try:
- host,hp=profile('host',True);wait(lambda:'host entered the game' in log(host))
+ host,hp=profile('host',True);wait(lambda:'host entered the game' in log(host),180)
  if not a.arena:
   with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as udp:
    udp.settimeout(2);udp.sendto(b'\xff\xff\xff\xffgetchallenge\n',('127.0.0.1',27500));response=udp.recv(2048);assert response.startswith(b'\xff\xff\xff\xff'),'Normal UDP unavailable'
@@ -80,7 +85,7 @@ try:
  command(host,'dev_friends export "'+str(invite).replace('\\','/')+'"');wait(lambda:invite.exists())
  if a.links:
   for badargs in [[invite.read_text(),'+quit'],['not-an-invitation']]:
-   rejected=subprocess.run([str(exe),'-friends-invite',*badargs],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10,creationflags=subprocess.CREATE_NO_WINDOW);assert rejected.returncode==2,'Unsafe URI startup arguments were accepted'
+   rejected=subprocess.run([str(exe),'-friends-invite',*badargs],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=10,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));assert rejected.returncode==2,'Unsafe URI startup arguments were accepted'
  g1,p1=profile('guest1',invite=invite);wait(lambda:'Connected through an encrypted Friends link.' in log(g1))
  wait(lambda:'guest1 entered the game' in log(host))
  command(g1,'dev_friends status\nstatus')
@@ -114,7 +119,7 @@ try:
   tmp=d/'qw/control.tmp';text(tmp,'if $friends_test_serial != %d then exec job%d.cfg\n'%(serial,serial));os.replace(tmp,d/'qw/control.cfg')
   c.wait(timeout=20);assert c.returncode==0,'Engine did not exit cleanly'
  result={'pass':True,'map':'dm6','mapTransition':'dm2','spawnedPlayers':3,'friendsGuests':2,'sameProcessRejoin':True,'chatReplicated':True,'closeInvitesKeepsGuests':True,'ordinaryUDPWorks':not a.arena,'arenaAutoInvitesAndBot':a.arena,'invitationGateBlocksPlainUDP':True,'cleanExit':True,'scope':'local processes through existing Frag-Net broker, native Vulkan engine'}
- result.update(uriColdStart=a.links,uriWindowsShellAndExistingProcess=a.links,uriConfirmationAndCancel=a.links,uriSecretRedacted=a.links,uriInjectionRejected=a.links)
+ result.update(uriColdStart=a.links,uriWindowsShellAndExistingProcess=a.links and os.name=='nt',uriUnixIPC=a.links and os.name!='nt',uriConfirmationAndCancel=a.links,uriSecretRedacted=a.links,uriInjectionRejected=a.links)
  (out/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 finally:
  for c in children:
@@ -122,5 +127,5 @@ finally:
  for c in children:c.wait(timeout=15)
  for h in handles:h.close()
  if a.links:
-  register=subprocess.run([str(exe),'-friends-register',str(assets)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW)
+  register=subprocess.run([str(exe),'-friends-register',str(assets)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
   assert register.returncode==0,'Could not restore final game installation registration'

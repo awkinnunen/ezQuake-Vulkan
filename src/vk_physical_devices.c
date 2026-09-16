@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #ifdef RENDERER_OPTION_VULKAN
 
+#ifdef __APPLE__
+#define VK_ENABLE_BETA_EXTENSIONS
+#endif
 #include <vulkan/vulkan.h>
 #include "quakedef.h"
 
@@ -541,6 +544,9 @@ qbool VK_CreateLogicalDevice(VkInstance instance)
 	VkPhysicalDeviceFeatures2 features2 = { 0 };
 	VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingQuery = { 0 };
 	VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingEnable = { 0 };
+#ifdef __APPLE__
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR portability = { 0 };
+#endif
 	float priorities[] = { 1.0f };
 	uint32_t queueCount = 0;
 	const char* enabledExtensions[4];
@@ -683,6 +689,26 @@ qbool VK_CreateLogicalDevice(VkInstance instance)
 		deviceInfo.pNext = &antiLagFeatures;
 	}
 
+#ifdef __APPLE__
+    /* World overlays use constant-alpha blending; sprite batches use fans.
+     * Portability implementations require these feature bits explicitly. */
+    {
+        VkPhysicalDeviceFeatures2 query = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+        VkPhysicalDevicePortabilitySubsetFeaturesKHR supported = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR };
+        query.pNext = &supported;
+        vkGetPhysicalDeviceFeatures2(vk_options.physicalDevice, &query);
+        if (!supported.constantAlphaColorBlendFactors || !supported.triangleFans) {
+            Con_Printf("vulkan: this MoltenVK device lacks required blending or sprite topology support.\n");
+            return false;
+        }
+        portability.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR;
+        portability.constantAlphaColorBlendFactors = VK_TRUE;
+        portability.triangleFans = VK_TRUE;
+        portability.mutableComparisonSamplers = supported.mutableComparisonSamplers;
+        portability.pNext = (void*)deviceInfo.pNext;
+        deviceInfo.pNext = &portability;
+    }
+#endif
 	deviceInfo.enabledExtensionCount = enabledExtensionCount;
 	deviceInfo.ppEnabledExtensionNames = enabledExtensions;
 	// Device-level layers are legacy/ignored since Vulkan 1.0 -- only

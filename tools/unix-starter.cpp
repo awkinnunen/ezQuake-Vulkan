@@ -11,6 +11,7 @@
 #include <array>
 #include <stdexcept>
 #include <cstring>
+#include <algorithm>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <spawn.h>
@@ -26,7 +27,7 @@ static std::string sha(const fs::path& p){
 }
 static fs::path safe(const fs::path& root,const std::string& n){
     need(!n.empty()&&n.front()!='/'&&n.find('\\')==n.npos&&n.find(':')==n.npos&&n.find('\0')==n.npos,"Unsafe archive path");
-    fs::path relative(n);for(auto& part:relative)need(part!=".."&&part!=".","Archive path traversal");
+    fs::path relative(n);for(const auto& part:relative)need(part!=".."&&part!=".","Archive path traversal");
     for(unsigned char c:n)need(c>=32&&c!=127,"Control character in archive path");return root/relative;
 }
 static void extract(const fs::path& archive,const fs::path& stage,const std::string& kind){
@@ -44,8 +45,10 @@ static void extract(const fs::path& archive,const fs::path& stage,const std::str
             unz_file_info64 info{};char name[4096];unzGetCurrentFileInfo64(z,&info,name,sizeof(name),nullptr,0,nullptr,0);std::string n(name,info.size_filename);
             if(n.back()=='/')continue;
             if(kind=="shareware"){
-                if(n!="id1/pak0.pak"){
-                    if(fs::path(n).extension()!=".txt")continue;
+                std::string lower=n;std::transform(lower.begin(),lower.end(),lower.begin(),[](unsigned char c){return char(std::tolower(c));});
+                if(lower=="id1/pak0.pak")n="id1/pak0.pak";
+                else{
+                    if(fs::path(lower).extension()!=".txt")continue;
                     n="licenses/quake-shareware/"+fs::path(n).filename().string();
                 }
             }else if(kind=="gpl"&&n=="ezquake.exe")continue;
