@@ -4,7 +4,7 @@ DIST-002, 2026-09-16. Requested by the user; installer, packaging and validation
 implemented by OpenAI Codex. This is an unofficial nQuake-based distribution.
 
 Download the Starter ZIP, extract it and run `Install.cmd`. Choose a new directory;
-setup downloads about 125 MB, verifies each archive and creates a complete
+setup downloads about 124 MB, verifies each archive and creates a complete
 installation with the pinned Vulkan raster engine. Run the installed `Start.cmd`.
 An existing nQuake installation, compiler, Python or Vulkan SDK is not required.
 Windows x64, Windows PowerShell 5.1 and a Vulkan-capable graphics driver are required.
@@ -69,7 +69,9 @@ and a DM6 Local Arena with a bot using the downloaded QVM. Integrity and archive
 tests cover corrupt cache rejection, traversal and Windows path alias rejection,
 preflight before extraction, existing-directory protection, full-data import and
 repeat-import refusal. The pinned engine archive was also downloaded live over HTTPS.
-See `provenance/starter-validation.json` for the final evidence summary.
+Historical checks: `provenance/starter-validation.json`. The current Friends
+package was revalidated on Windows PowerShell 5.1 with nQuake's KTX QVM; see
+`provenance/friends-release-validation.json`.
 
 The pinned nQuake default CFG refers to the unsupported `r_fx_geometry` cvar;
 its startup warning is inherited and does not invalidate the verified defaults.

@@ -104,7 +104,9 @@ validation and the optional RT backend are still future work.
 - [x] FRIENDS-005C: Starter offers optional per-user link registration after installing
   the final executable/data directory; in-game registration remains available.
 - [ ] FRIENDS-006: validate outages, lifecycle and eligible existing TURN fallback.
-- [ ] FRIENDS-007: package and document the measured network coverage.
+- [x] FRIENDS-007: 0.2.0-beta.1 engine/source packages and Starter 0.2.0, with
+  packaged KTX QVM multiplayer, clean installation and invitation-link tests.
+  Cross-city gameplay remains an explicit external test gate.
 
 No new external relay is part of this scope. Existing STUN/broker reachability is
 confirmed; cross-city engine gameplay and relay availability remain unverified. Room

@@ -1229,3 +1229,10 @@ only after the final directory exists; interactive choice or -RegisterLinks is
 required. Package tests use nQuake's distributed KTX QVM as well as the development
 DLL. Personal configs and commercial assets are excluded from release archives.
 Final release verification is recorded separately under provenance.
+
+Release verification: the published engine is built from commit 4e70d587.
+The extracted Starter passed first/second launch, E1M1 save, all 170 Balanced
+values, Quick crosshairs, bot arena and installer integrity checks. The packaged
+KTX QVM also passed host/two-guest Friends gameplay, rejoin, DM6 -> DM2, URI
+cold/warm start, confirmation and redaction. This remains local network-path
+evidence through the real broker, not cross-city engine gameplay evidence.

@@ -10,7 +10,7 @@ Choose a new installation directory. After setup, run **Start.cmd** there.
 - Installs separately and refuses to overwrite existing directories.
 - Diagnose.cmd collects logs; the launcher waits correctly for the game to exit.
 
-About 125 MB is downloaded. No existing nQuake installation, compiler or Vulkan SDK is needed.
+About 124 MB is downloaded. No existing nQuake installation, compiler or Vulkan SDK is needed.
 This is Vulkan raster rendering, **not RTX/path tracing**. Local bots use nQuake's bundled KTX QVM.
 
 Quick WASD/ESDF use the original five weapon crosshair PNGs and legacy

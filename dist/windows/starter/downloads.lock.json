@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "version": "0.1.1",
-  "engineVersion": "0.1.0-beta.1",
-  "engineFolder": "ezQuake-Vulkan-0.1.0-beta.1-windows-x64",
-  "engineSourceCommit": "7bb8a6862d023dcd5774bf79d2079b8bb4ac4827",
+  "version": "0.2.0",
+  "engineVersion": "0.2.0-beta.1",
+  "engineFolder": "ezQuake-Vulkan-0.2.0-beta.1-windows-x64",
+  "engineSourceCommit": "4e70d587f3e8ba678b4fd1502bf1dd533bc3a3bc",
   "nquakeReleaseId": 361076334,
   "packages": [
     {
@@ -35,11 +35,11 @@
       "sha256": "0096417888bcbcdad3b9032f5595da21e9a6e3e0d38812b6d62b3c6160d8b403"
     },
     {
-      "name": "ezQuake-Vulkan-0.1.0-beta.1-windows-x64.zip",
+      "name": "ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip",
       "kind": "engine",
-      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.1.0-beta.1/ezQuake-Vulkan-0.1.0-beta.1-windows-x64.zip",
-      "bytes": 5003066,
-      "sha256": "6235ca7d4f8eab25c952d04a085d6076a126e862497827567b2030ac333584db"
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.2.0-beta.1/ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip",
+      "bytes": 7214567,
+      "sha256": "25221f716c25f95f2df7c5a5c6b5be4db99239dbbc5bbf945c1b376b472cc6dc"
     }
   ]
 }

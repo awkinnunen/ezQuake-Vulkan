@@ -1,0 +1,66 @@
+{
+  "id": "FRIENDS-007",
+  "version": "0.2.0-beta.1",
+  "starterVersion": "0.2.0",
+  "utc": "2026-09-16T19:10:50.569727+00:00",
+  "requirements": "AWK",
+  "implementationAndTests": "OpenAI Codex",
+  "engineCommit": "4e70d587f3e8ba678b4fd1502bf1dd533bc3a3bc",
+  "engineBinarySHA256": "f7842ea235538035d439e125f451357ba61783fc573dcf8cf1ed30bfb294ee6b",
+  "enginePackages": {
+    "ezQuake-Vulkan-0.2.0-beta.1-source.zip": {
+      "bytes": 58672823,
+      "sha256": "d397ebafe5cfa178ce2e6f20d5e6cd343e716bba128dd24e63b49b9ae556d09d"
+    },
+    "ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip": {
+      "bytes": 7214567,
+      "sha256": "25221f716c25f95f2df7c5a5c6b5be4db99239dbbc5bbf945c1b376b472cc6dc"
+    }
+  },
+  "unitTests": true,
+  "freshInstall": true,
+  "windowsPowerShell": "5.1",
+  "pathsWithSpaces": true,
+  "installerRegistrationAtFinalLocation": true,
+  "runtime": [
+    "first launch",
+    "start/e1m1 save",
+    "second launch and user overrides",
+    "DM6 bot arena"
+  ],
+  "balancedFieldsVerified": 170,
+  "crosshairsVerified": true,
+  "integrityTests": [
+    "path boundaries",
+    "archive preflight",
+    "corrupt cache refusal",
+    "existing installation preserved"
+  ],
+  "friendsPackagedQVM": {
+    "pass": true,
+    "map": "dm6",
+    "mapTransition": "dm2",
+    "spawnedPlayers": 3,
+    "friendsGuests": 2,
+    "sameProcessRejoin": true,
+    "chatReplicated": true,
+    "closeInvitesKeepsGuests": true,
+    "ordinaryUDPWorks": false,
+    "arenaAutoInvitesAndBot": true,
+    "invitationGateBlocksPlainUDP": true,
+    "cleanExit": true,
+    "scope": "local processes through existing Frag-Net broker, native Vulkan engine",
+    "uriColdStart": true,
+    "uriWindowsShellAndExistingProcess": true,
+    "uriConfirmationAndCancel": true,
+    "uriSecretRedacted": true,
+    "uriInjectionRejected": true
+  },
+  "sourceArchive": {
+    "protocolSubmoduleIncluded": true,
+    "pinnedLibjuiceOpenSSLSourceIncluded": true,
+    "privateConfigAndAssetsExcluded": true
+  },
+  "networkScope": "Local engine processes through the real existing Frag-Net broker. Cross-city engine gameplay remains unverified; this is the test release for that purpose.",
+  "distribution": "GitHub engine release assets uploaded with matching server-side SHA-256. Starter and public download verification recorded in the follow-up release report."
+}

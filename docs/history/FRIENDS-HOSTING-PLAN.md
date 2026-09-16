@@ -3,7 +3,7 @@
 Status: engine transport, persistent full invitations and clipboard menus implemented.
 The user's later simplicity choice makes the saved full link the first supported
 workflow. Windows URI registration and native click-to-launch are implemented;
-code-only approval and Starter distribution integration are deferred.
+Starter integration is included in 0.2.0; code-only approval is deferred.
 See [current player instructions](../FRIENDS.md); the design below also includes
 future resilience, relay and distribution work, not all implemented features.
 2026-09-16, FRIENDS-001 / FRIENDS-002. See [implementation status](FRIENDS-HOSTING-STATUS.md).

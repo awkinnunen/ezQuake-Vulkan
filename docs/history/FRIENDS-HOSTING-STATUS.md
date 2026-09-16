@@ -12,7 +12,8 @@ See [current evidence](../../provenance/friends-engine-validation.json).
 
 Windows URI registration, cold start and running-instance routing are implemented
 and tested with actual ShellExecute dispatch, confirmation/cancel and redaction.
-Starter distribution integration, wider NAT coverage, existing TURN allocation,
+Starter 0.2.0 integrates registration and pins the tested 0.2.0-beta.1 engine.
+Wider NAT coverage, existing TURN allocation,
 sleep/network recovery and cross-city gameplay with the integrated engine remain
 pending. The text below records the earlier standalone-probe milestones.
 
