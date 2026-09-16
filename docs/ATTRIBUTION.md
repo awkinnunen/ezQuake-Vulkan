@@ -164,3 +164,13 @@ payload, separate update ZIP, tests and documentation. Engine code/binary unchan
 Crosshair size 2.5 and the original weapon aliases replace public built-in substitutes.
 User config/autoexec files are excluded; installation does not rewrite them.
 See provenance/crosshairs.json and docs/CONTROLS.md in the public tree.
+
+
+## DIST-003 - simplify the undistributed Starter release (2026-09-16)
+
+At the user's request, OpenAI Codex removed the separate crosshair update package
+and its packaging step, and simplified the current release notes and installation
+guides to direct players to Starter. Original crosshairs remain bundled. The old
+engine archive and matching source remain available because Starter pins that
+download; download hashes, engine code and installed configuration behavior are
+unchanged. Historical implementation/test records are retained as provenance.

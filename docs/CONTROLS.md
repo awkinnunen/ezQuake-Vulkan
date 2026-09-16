@@ -89,16 +89,12 @@ switches, timer aliases, graphics/input isolation and unrelated alias preservati
 The native Controls screen was inspected at 640x480. See the provenance record.
 
 
-## Original crosshair update (INPUT-005)
+## Original crosshairs (INPUT-005)
 
-Starter 0.1.1 includes these images and profiles. For an existing beta/Starter
-installation, download `ezQuake-Vulkan-Crosshairs-0.1.1.zip` from the
-[Starter release](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/starter-v0.1.1).
-Close the game, back up same-named files, and copy the archive's `qw` and `ezquake`
-directories beside `id1`. Retain `crosshairs.json` alongside them.
-Run `exec ezv-crosshairs.cfg` in the console and `cfg_save` to retain the settings.
-This changes only crosshairs and their weapon-change hook; it does not rebind keys.
-Reloading Quick WASD/ESDF loads the same module but also applies that keyboard layout.
+Starter includes these images and profiles. Quick WASD/ESDF loads the shared
+crosshair module automatically. To reload just crosshair settings, use
+`exec ezv-crosshairs.cfg` and `cfg_save` to retain them. The module does not rebind
+keys; selecting a Quick keyboard preset also applies that layout's bindings.
 
 `crosshairsize` controls PNG size; `crosshairscale` controls built-in texture size,
 so copying a size value between PNG and built-in crosshairs does not imply an
@@ -106,4 +102,4 @@ identical appearance. These PNGs retain the exact original bytes and transparenc
 Shotgun/super shotgun share `legacy_sg`; nailguns share `legacy_ng`; grenade,
 rocket and lightning use `legacy_gl`, `legacy_rl` and `legacy_lg`. Axe is hidden.
 The Quick lightning-fire alias hides the LG crosshair until release.
-User `config.cfg` and `autoexec.cfg` are not included or edited by the update.
+Setup preserves user `config.cfg` and `autoexec.cfg`.

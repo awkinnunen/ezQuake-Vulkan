@@ -73,7 +73,7 @@ The pinned nQuake default CFG refers to the unsupported `r_fx_geometry` cvar;
 its startup warning is inherited and does not invalidate the verified defaults.
 These checks are not an all-GPU qualification or a full campaign playthrough.
 
-Build the installer and the separate crosshair update archive:
+Build the Starter installer archive:
 
 ```text
 python tools/Package-Starter.py --output output

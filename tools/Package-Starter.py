@@ -1,6 +1,6 @@
 """DIST-002/INPUT-005. Package installer source and approved Quick crosshairs."""
 from pathlib import Path
-import argparse, hashlib, json, shutil, zipfile
+import argparse, hashlib, json, zipfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--output', type=Path, required=True)
@@ -45,35 +45,3 @@ with zipfile.ZipFile(zip_path) as archive:
 digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
 zip_path.with_suffix('.zip.sha256').write_text(digest + '  ' + zip_path.name + '\n')
 print(json.dumps({'file': str(zip_path), 'bytes': zip_path.stat().st_size, 'sha256': digest}))
-
-# An existing installation can update just these namespaced files, without reinstalling.
-update_name = 'ezQuake-Vulkan-Crosshairs-' + lock['version']
-update_path = args.output / (update_name + '.zip')
-assert not update_path.exists(), update_path
-update = dict(payload)
-update['crosshairs.json'] = notice
-update['README-CROSSHAIRS.txt'] = (
-    'Quick crosshair update ' + lock['version'] + '\n\n'
-    'Close the game. Back up any existing same-named files before copying.\n'
-    'Copy the qw and ezquake directories beside your installed id1 directory.\n'
-    'Copy crosshairs.json alongside them to retain attribution and hashes.\n'
-    'No config.cfg, autoexec.cfg or graphics presets are included.\n\n'
-    'In the game console, run: exec ezv-crosshairs.cfg\n'
-    'This restores only crosshair appearance and the weapon-change hook.\n'
-    'To retain it, run: cfg_save\n'
-    'Adjust size with crosshairsize (legacy default 2.5).\n'
-    'Reloading Quick WASD/ESDF also loads the original crosshairs.\n'
-    'Selecting a Quick layout intentionally replaces its keyboard bindings.\n'
-    'The LG crosshair hides while firing through Quick aliases; axe is hidden.\n\n'
-    'Images: user legacy installation; original authors not established.\n'
-    'Inclusion explicitly requested by the user. Integration: OpenAI Codex.\n'
-    'No new image license or authorship is asserted. See crosshairs.json.\n'
-).encode()
-update['manifest.json'] = (json.dumps({'version': lock['version'], 'files': {
-    n: hashlib.sha256(b).hexdigest() for n, b in update.items()}}, indent=2) + '\n').encode()
-with zipfile.ZipFile(update_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-    for filename, data in sorted(update.items()):
-        archive.writestr(update_name + '/' + filename, data)
-digest = hashlib.sha256(update_path.read_bytes()).hexdigest()
-update_path.with_suffix('.zip.sha256').write_text(digest + '  ' + update_path.name + '\n')
-print(json.dumps({'file': str(update_path), 'bytes': update_path.stat().st_size, 'sha256': digest}))

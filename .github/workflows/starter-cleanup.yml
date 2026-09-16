@@ -1,0 +1,50 @@
+name: Simplify undistributed Starter
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/starter-cleanup.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: starter-release
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove patch assets and update release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=starter-v0.1.1
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-before.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('release-before.json'))
+          assert r['prerelease'] and not r['draft'] and r['tag_name']=='starter-v0.1.1'
+          assert json.load(open('dist/windows/starter/downloads.lock.json'))['version']=='0.1.1'
+          allowed={'ezQuake-Vulkan-Crosshairs-0.1.1.zip','ezQuake-Vulkan-Crosshairs-0.1.1.zip.sha256'}
+          with open('remove-assets.txt','w') as out:
+              for a in r['assets']:
+                  if a['name'] in allowed: out.write(str(a['id'])+'\n')
+          PY
+          python3 tools/Package-Starter.py --output starter-output
+          test "$(find starter-output -name '*.zip' | wc -l)" -eq 1
+          gh release edit "$tag" --notes-file docs/STARTER-RELEASE.md
+          while read -r id; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+          done < remove-assets.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > release-after.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('release-after.json'))
+          assert {a['name'] for a in r['assets']} == {'ezQuake-Vulkan-Starter-0.1.1.zip','ezQuake-Vulkan-Starter-0.1.1.zip.sha256'}
+          assert 'Crosshairs-0.1.1.zip' not in r['body'] and '0.1.0' not in r['body']
+          PY

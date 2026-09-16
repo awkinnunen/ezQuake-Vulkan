@@ -177,3 +177,5 @@ the history archive and [DEVELOPMENT.md](DEVELOPMENT.md). Current performance:
 - [x] DIST-002: source-only Windows Starter with nQuake downloads, hash checking, isolated install, optional full-game PAK import and first-run presets.
 
 - [x] INPUT-005: include the original five legacy crosshairs in Quick profiles and Starter; provide a small update ZIP for existing installs.
+
+- [x] DIST-003: remove the unneeded crosshair patch download and old-release upgrade directions before sharing Starter.

@@ -44,11 +44,7 @@ nQuake resources and our Vulkan engine, installs Balanced / Quick WASD defaults,
 and optionally imports full-game PAKs from your own classic Quake installation.
 An existing nQuake installation is not required. See [Starter details](docs/STARTER.md).
 
-For testing without compiling, download the **[Windows x64 beta package](https://github.com/awkinnunen/ezQuake-Vulkan/releases/tag/v0.1.0-beta.1)**.
-Extract it separately, run `Start.cmd`, and select your existing nQuake directory.
-Game data is not bundled. First-run defaults precede your normal configs;
-setup preserves `config.cfg`, `autoexec.cfg` and existing preset files.
-Use `Diagnose.cmd` to collect a log for an issue report.
+Use the installed `Diagnose.cmd` to collect a log for an issue report.
 
 To build from source:
 
@@ -99,7 +95,7 @@ Options > Controls offers **Quick WASD (default)**, **nQuake**, and **Quick ESDF
 F right). `keyboard_preset sdfe` selects the alternative. Graphics selection never
 changes bindings. Quick controls include the five original weapon crosshair PNGs at legacy size 2.5.
 Base game resources and personal full configs are not bundled. See
-[Controls](docs/CONTROLS.md) for the small update package for existing installations.
+[Controls](docs/CONTROLS.md) for keyboard and crosshair settings.
 
 Copying profiles does not overwrite an existing user's full configuration or force
 a preset every launch. Run `exec ezv-wasd-defaults.cfg` once after startup to adopt
