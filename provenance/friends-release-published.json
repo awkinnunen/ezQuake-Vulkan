@@ -1,0 +1,76 @@
+{
+  "publicDownloads": [
+    {
+      "name": "ezQuake-Vulkan-0.2.0-beta.1-source.zip",
+      "sha256": "d397ebafe5cfa178ce2e6f20d5e6cd343e716bba128dd24e63b49b9ae556d09d",
+      "bytes": 58672823,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.2.0-beta.1/ezQuake-Vulkan-0.2.0-beta.1-source.zip"
+    },
+    {
+      "name": "ezQuake-Vulkan-0.2.0-beta.1-source.zip.sha256",
+      "sha256": "7667d26f195d7be42f2b496b0020468e154e3d09c41c1159984c9c07817ba71d",
+      "bytes": 106,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.2.0-beta.1/ezQuake-Vulkan-0.2.0-beta.1-source.zip.sha256"
+    },
+    {
+      "name": "ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip",
+      "sha256": "25221f716c25f95f2df7c5a5c6b5be4db99239dbbc5bbf945c1b376b472cc6dc",
+      "bytes": 7214567,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.2.0-beta.1/ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip"
+    },
+    {
+      "name": "ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip.sha256",
+      "sha256": "8abde9951187f79a1a2580a03f9b499d3c2445d9b900426963913e7cc82bc238",
+      "bytes": 111,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/v0.2.0-beta.1/ezQuake-Vulkan-0.2.0-beta.1-windows-x64.zip.sha256"
+    },
+    {
+      "name": "ezQuake-Vulkan-Starter-0.2.0.zip",
+      "sha256": "64318049443d11290e6545ba9ee28060bd34e058ca26c988ee607c9e6850a3b3",
+      "bytes": 33236,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/starter-v0.2.0/ezQuake-Vulkan-Starter-0.2.0.zip"
+    },
+    {
+      "name": "ezQuake-Vulkan-Starter-0.2.0.zip.sha256",
+      "sha256": "58247a470fd66df0585803d64b1ea9b6ae16bbab27a805173a74e7a6af2e903d",
+      "bytes": 99,
+      "url": "https://github.com/awkinnunen/ezQuake-Vulkan/releases/download/starter-v0.2.0/ezQuake-Vulkan-Starter-0.2.0.zip.sha256"
+    }
+  ],
+  "checksums": true,
+  "zipIntegrity": true,
+  "manifests": true,
+  "id": "FRIENDS-RELEASE-PUBLISHED",
+  "utc": "2026-09-16T19:14:27.832480+00:00",
+  "implementation": "OpenAI Codex",
+  "authorizedBy": "AWK",
+  "engineCommit": "4e70d587f3e8ba678b4fd1502bf1dd533bc3a3bc",
+  "starterCommit": "8bcd437f",
+  "starterWorkflow": {
+    "run": 35138988835,
+    "conclusion": "success"
+  },
+  "liveInstaller": {
+    "pass": true,
+    "freshDestination": true,
+    "engineDownloadedFromPublicRelease": true,
+    "nquakeArchivesVerifiedFromCache": true,
+    "publicStarterFirstLaunchAndE1M1Save": true
+  },
+  "retiredInstallerReleases": [
+    "starter-v0.1.0",
+    "starter-v0.1.1"
+  ],
+  "historicalSourceTagsPreserved": true,
+  "developmentURIRegistrationRestored": true,
+  "ciLimitation": {
+    "platform": "Linux CI / general matrix",
+    "status": "Pre-existing failure also reproduced at baseline 81a9c150",
+    "reason": "src/menu.c declares for-loop variables under C90 compile flags",
+    "comparisonRuns": [
+      35138822272,
+      35116572038
+    ],
+    "windowsRelease": "Built locally from exact public commit and runtime-tested independently"
+  }
+}

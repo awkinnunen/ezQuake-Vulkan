@@ -1236,3 +1236,12 @@ values, Quick crosshairs, bot arena and installer integrity checks. The packaged
 KTX QVM also passed host/two-guest Friends gameplay, rejoin, DM6 -> DM2, URI
 cold/warm start, confirmation and redaction. This remains local network-path
 evidence through the real broker, not cross-city engine gameplay evidence.
+
+Publication completed: engine v0.2.0-beta.1 and Starter v0.2.0 are public.
+OpenAI Codex downloaded all six published assets, verified GitHub digests, ZIP
+checksums and manifests, and installed the public Starter into a fresh directory
+with an actual engine download. At AWK's request, obsolete Starter 0.1.0/0.1.1
+release downloads were removed after verification; source tags and historical
+engine beta remain. The development URI registration was restored after fixtures.
+The general Linux CI failure also exists at the prior baseline and is recorded
+as BUILD-LINUX-001; it does not describe the separately tested Windows binaries.

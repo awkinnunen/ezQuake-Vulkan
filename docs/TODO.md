@@ -124,3 +124,7 @@ Prototype details and pending gates: [Friends hosting status](history/FRIENDS-HO
 
 Current player instructions: [Friends games](FRIENDS.md).
 - [ ] FRIENDS-VOICE: validate inherited ezQuake VoIP through Friends using two microphones; no new voice implementation is needed before this check.
+
+- [ ] BUILD-LINUX-001: fix the pre-existing C90/C99 loop-declaration mismatch in
+  Linux CI (`src/menu.c`), then revalidate the full platform matrix. Windows
+  Friends beta packages have independent successful build/runtime validation.

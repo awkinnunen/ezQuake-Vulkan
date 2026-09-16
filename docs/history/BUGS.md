@@ -32,6 +32,7 @@ Those initial checks closed no existing issue. SHADOW-002 later fixes MULTIVIEW-
 
 | ID | Classification | Observed impact | Current reproduction / next action |
 |---|---|---|---|
+| BUILD-LINUX-001 | Confirmed, pre-existing CI failure | General build matrix fails on Linux and cancels other jobs | C90 flags reject `for (int i = ...)` in `src/menu.c`; reproduced at baseline 81a9c150 and Friends 4e70d587. Windows release built and tested separately; align C language mode or declarations |
 | SHADOW-003 | Fixed; user-reported DM6 lighting instability | Baked with shadows could darken whole rooms while moving; larger Map light radius magnified it | Exclude already baked world occluders in mode 1; retain entity shadows. E1M1/DM6 image regression in shadow3 validation |
 | MULTIVIEW-001 | Fixed by SHADOW-002 | Per-frame sky descriptor update and isolated per-view buffers/uniforms; actual viewports and full multiview captures | 0/2/4/0 MVD sequence, HDR/MSAA/SSAO/bloom/shadows, no VUIDs; see shadow2 validation |
 | RT-STARTUP-001 | User-reported RT blocker; paused | RT test stops after GPU detection, before a usable log/image | Await supported development GPU; capture initialization failure |
