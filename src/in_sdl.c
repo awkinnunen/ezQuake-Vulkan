@@ -30,9 +30,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <sys/time.h>
 #endif
 
-#ifdef __APPLE__
-#include "in_osx.h"
-#endif
 
 static void in_joystick_callback(cvar_t *var, char *value, qbool *cancel);
 
@@ -636,9 +633,6 @@ void IN_Shutdown(void)
 	IN_DeactivateMouse(); // btw we trying de init this in video shutdown too...
 	IN_DeactivateJoystick();
 
-#ifdef __APPLE__
-	OSX_Mouse_Shutdown(); // Safe to call, will just return if it's not running
-#endif
 
 	mouseinitialized = false;
 }

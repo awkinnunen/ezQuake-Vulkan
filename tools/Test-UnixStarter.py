@@ -16,6 +16,10 @@ for p in lock['packages']:
   for n in z.namelist():
    if Path(n).name.lower()=='autoexec.cfg':original[n]=z.read(n);assert (dest/n).read_bytes()==z.read(n)
 assert original,'No upstream autoexec fixture'
+# Exercise the relocated engine and its bundled runtime without opening a window.
+installed_engine=dest/('engine/ezQuake.app/Contents/MacOS/ezQuake' if (dest/'engine/ezQuake.app').exists() else 'engine/ezquake')
+startup=subprocess.run([str(installed_engine),'-friends-invite','invalid'],capture_output=True,timeout=20)
+assert startup.returncode==2,'Relocated engine or its native dependencies failed to start' 
 assert b'exec ezv-crosshairs.cfg' in (dest/'ezquake/configs/preset.cfg').read_bytes()
 assert len(list((dest/'ezquake/crosshairs').glob('legacy_*.png')))==5
 before={f.relative_to(dest).as_posix():digest(f) for f in dest.rglob('*') if f.is_file()};again=invoke();assert again.returncode!=0
@@ -35,5 +39,5 @@ for case in ['traversal','symlink','duplicate','corrupt-cache']:
  if case=='corrupt-cache':(local/(record['sha256'][:12]+'-'+record['name'])).write_bytes(b'broken')
  (fixture/'downloads.lock.json').write_text(json.dumps(broken));r=invoke(fixture,fixture/'install',local);assert r.returncode!=0,case;assert not (fixture/'install').exists();assert not (out/'escaped.txt').exists()
  (fixture/'result.log').write_text(r.stdout+r.stderr)
-summary={'pass':True,'freshNativeInstall':True,'pathsWithSpaces':True,'nquakeAutoexecPreserved':True,'quickCrosshairs':5,'repeatInstallUnchanged':True,'archiveTraversalRejected':True,'archiveSymlinksRejected':True,'duplicateEntriesRejected':True,'corruptCacheRejected':True,'commercialDataBundled':False}
+summary={'pass':True,'freshNativeInstall':True,'relocatedEngineStarts':True,'pathsWithSpaces':True,'nquakeAutoexecPreserved':True,'quickCrosshairs':5,'repeatInstallUnchanged':True,'archiveTraversalRejected':True,'archiveSymlinksRejected':True,'duplicateEntriesRejected':True,'corruptCacheRejected':True,'commercialDataBundled':False}
 (out/'result.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary))

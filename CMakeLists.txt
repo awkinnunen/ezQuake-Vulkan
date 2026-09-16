@@ -893,11 +893,7 @@ else()
     )
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    list(APPEND sys_headers
-            ${SOURCE_DIR}/in_osx.h
-    )
     list(APPEND sys
-            ${SOURCE_DIR}/in_osx.m
             ${SOURCE_DIR}/sys_osx.m
     )
 endif()

@@ -1,6 +1,6 @@
 """OpenAI Codex: isolated real-engine Friends gameplay integration (Windows/Linux/macOS)."""
 import argparse, pathlib, subprocess, time, os, json, re, socket, ctypes, zipfile
-p=argparse.ArgumentParser();p.add_argument('executable',type=pathlib.Path);p.add_argument('gamedata',type=pathlib.Path);p.add_argument('output',type=pathlib.Path);p.add_argument('--arena',action='store_true');p.add_argument('--links',action='store_true',help='Test Windows URI registration; leave the supplied engine/gamedata registered afterward');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('executable',type=pathlib.Path);p.add_argument('gamedata',type=pathlib.Path);p.add_argument('output',type=pathlib.Path);p.add_argument('--arena',action='store_true');p.add_argument('--software',action='store_true',help='Small viewport and internal world textures for CPU Vulkan networking tests');p.add_argument('--links',action='store_true',help='Test Windows URI registration; leave the supplied engine/gamedata registered afterward');a=p.parse_args()
 exe=a.executable.resolve();assets=a.gamedata.resolve();out=a.output.resolve();out.mkdir(parents=True,exist_ok=False)
 children=[];handles=[];serial=0
 def text(path,s):path.write_text(s,encoding='ascii')
@@ -19,6 +19,7 @@ def profile(name,host=False,invite=None):
  text(d/'qw/control.cfg','')
  text(d/'qw/poll.cfg','alias f_spawn "exec poll.cfg"\ndev_friends poll\n')
  common='cfg_save_onquit 0\ncl_confirmquit 0\ncl_onload console\ncl_maxfps 60\ncl_physfps 60\nvid_vsync 0\ndeveloper 1\ntp_triggers 1\nset friends_test_serial 0\nname '+name+'\n'
+ if a.software:common+='gl_externalTextures_world 0\ngl_externalTextures_bmodels 0\n'
  if host:
   text(d/'qw/online.cfg','alias f_spawn "exec poll.cfg"\nexec poll.cfg\n')
   run=common+'sv_progtype 1\nsv_progsname qwprogs\nmaxclients 16\ndeathmatch 3\ncoop 0\nalias f_spawn "exec online.cfg"\nmap dm6\n'
@@ -30,7 +31,7 @@ def profile(name,host=False,invite=None):
  deferred=run[len(common):] if host else ''
  text(d/'qw/run.cfg',common+'dev_friends poll\n' if host else run)
  err=(d/'stderr.log').open('w');handles.append(err)
- args=[str(exe),'-allowmultiple','-condebug','-nohome','-basedir',str(d),'-window','-width','640','-height','480','+set','vid_renderer','2','+exec','run.cfg']
+ args=[str(exe),'-allowmultiple','-condebug','-nohome','-basedir',str(d),'-window','-width','320' if a.software else '640','-height','240' if a.software else '480','+set','vid_renderer','2','+exec','run.cfg']
  if not host and a.links and name=='guest1':args+=['-friends-invite',invite.read_text()]
  child=subprocess.Popen(args,cwd=d,stdout=err,stderr=err,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
  children.append(child)
@@ -62,7 +63,7 @@ def profile(name,host=False,invite=None):
  return d,child
 def log(d):
  f=d/'qw/qconsole.log';return ''.join(chr(b & 127) for b in f.read_bytes()) if f.exists() else ''
-def wait(fn,timeout=50):
+def wait(fn,timeout=120):
  end=time.monotonic()+timeout
  while time.monotonic()<end:
   if fn():return
@@ -81,7 +82,10 @@ try:
   command(host,'friends_host')
  wait(lambda:'Ready. Copy invitation' in log(host));invite=out/'invitation.txt'
  if a.arena:
-  command(host,'dev_local_menu inspect');assert re.search(r'LOCAL_MENU .*bots=1',log(host)), 'Arena bot did not start'
+  def bot_ready():
+   command(host,'dev_local_menu inspect')
+   return bool(re.search(r'LOCAL_MENU .*bots=1',log(host)))
+  wait(bot_ready,45)
  with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as udp:
   udp.settimeout(1);udp.sendto(b'\xff\xff\xff\xffgetchallenge\n',('127.0.0.1',27500))
   try:udp.recv(2048);raise AssertionError('Plain UDP bypassed invitation gate')
@@ -123,7 +127,7 @@ try:
   tmp=d/'qw/control.tmp';text(tmp,'if $friends_test_serial != %d then exec job%d.cfg\n'%(serial,serial));os.replace(tmp,d/'qw/control.cfg')
   c.wait(timeout=20);assert c.returncode==0,'Engine did not exit cleanly'
  result={'pass':True,'map':'dm6','mapTransition':'dm2','spawnedPlayers':3,'friendsGuests':2,'sameProcessRejoin':True,'chatReplicated':True,'closeInvitesKeepsGuests':True,'ordinaryUDPWorks':not a.arena,'arenaAutoInvitesAndBot':a.arena,'invitationGateBlocksPlainUDP':True,'cleanExit':True,'scope':'local processes through existing Frag-Net broker, native Vulkan engine'}
- result.update(uriColdStart=a.links,uriWindowsShellAndExistingProcess=a.links and os.name=='nt',uriUnixIPC=a.links and os.name!='nt',uriConfirmationAndCancel=a.links,uriSecretRedacted=a.links,uriInjectionRejected=a.links)
+ result.update(softwareRendererFixture=a.software,uriColdStart=a.links,uriWindowsShellAndExistingProcess=a.links and os.name=='nt',uriUnixIPC=a.links and os.name!='nt',uriConfirmationAndCancel=a.links,uriSecretRedacted=a.links,uriInjectionRejected=a.links)
  (out/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 finally:
  for c in children:

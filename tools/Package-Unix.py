@@ -6,6 +6,8 @@ repo=Path(__file__).resolve().parent.parent
 run=lambda *args:subprocess.check_output([str(x) for x in args],text=True).strip()
 sha=lambda f:hashlib.sha256(f.read_bytes()).hexdigest()
 commit=run('git','-C',repo,'rev-parse','HEAD')
+binary_file=a.binary/'Contents/MacOS/ezQuake' if a.platform=='macos' else a.binary
+assert commit[:8].encode() in binary_file.read_bytes(),'Engine was not built from this source revision'
 name=f'ezQuake-Vulkan-{a.version}-{a.platform}-{a.arch}'
 folder=a.output/name;folder.mkdir(parents=True,exist_ok=False);engine=folder/'engine';engine.mkdir()
 for n in ['Install.command','Start.command','README.txt']:

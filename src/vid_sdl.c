@@ -32,9 +32,6 @@
 void Sys_ActiveAppChanged (void);
 #endif
 
-#ifdef __APPLE__
-#include "in_osx.h"
-#endif
 
 #if defined(RENDERER_OPTION_CLASSIC_OPENGL) || defined(RENDERER_OPTION_MODERN_OPENGL)
 #ifdef __APPLE__
@@ -405,12 +402,6 @@ void IN_StartupMouse(void)
 #ifdef __APPLE__
 	Cvar_Register(&in_ignore_deadkeys);
 
-	if (in_raw.integer > 0) {
-		if (OSX_Mouse_Init() != 0) {
-			Com_Printf("warning: failed to initialize raw input mouse thread...\n");
-			Cvar_SetValue(&in_raw, 0);
-		}
-	}
 #endif
 
 	mouseinitialized = true;
@@ -448,9 +439,6 @@ static void IN_Frame(void)
 	}
 
 	if (mouse_active && SDL_GetWindowRelativeMouseMode(sdl_window)) {
-#ifdef __APPLE__
-		OSX_Mouse_GetMouseMovement(&mx, &my);
-#else
 		// SDL3 reports relative motion as float; carry the sub-pixel remainder
 		// across frames instead of truncating it away each time, or slow/low
 		// sensitivity movement (often under 1px/frame) never registers at all.
@@ -463,7 +451,6 @@ static void IN_Frame(void)
 		my = (int)fmy;
 		rem_x = fmx - mx;
 		rem_y = fmy - my;
-#endif
 	}
 	
 }
